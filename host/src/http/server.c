@@ -66,11 +66,11 @@ static void handle(int fd,yag_config *c) {
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!authorized(c,auth)){error(fd,401,"Invalid API key");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
-    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0);
+    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0,NULL);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
-        else upstream_request(fd,c,"/chat/completions",body,length);
+        else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) responses_handle(fd,c,body,length);
     else if(!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Protocol adapter not implemented; use Chat Completions");
