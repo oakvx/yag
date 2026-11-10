@@ -52,6 +52,12 @@ class Responses(unittest.TestCase):
             status,_,data=self.post(payload);self.assertEqual(status,400,(payload,data));self.assertIn('error',json.loads(data))
         self.assertEqual(request(self.port,'POST','/v1/responses','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{'model':'x','input':'x'},key=None)[0],401)
+    def test_empty_include_is_safe(self):
+        status,_,data=self.post({'model':'response-echo','input':'x','include':[]})
+        self.assertEqual(status,200,data)
+        status,_,data=self.post({'model':'response-echo','input':'x','include':['reasoning.encrypted_content']})
+        self.assertEqual(status,400,data)
+        self.assertIn('include',json.loads(data)['error']['message'])
     def test_response_stream_is_incremental(self):
         conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=4)
         body=json.dumps({'model':'response-stream-slow','input':'x','stream':True})
