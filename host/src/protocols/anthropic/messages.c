@@ -212,11 +212,17 @@ static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_va
 }
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences","tools","tool_choice",NULL};
+        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
     yyjson_val *top=yyjson_obj_get(root,"top_p"),*stops=yyjson_obj_get(root,"stop_sequences");
+    yyjson_val *metadata=yyjson_obj_get(root,"metadata");
+    const char *const meta_fields[]={"user_id",NULL};
+    yyjson_val *user_id=yyjson_obj_get(metadata,"user_id");
+    if(metadata && (!permitted(metadata,meta_fields)
+        || (user_id && (!string_value(user_id) || yyjson_get_len(user_id)>256))))return NULL;
+    /* Metadata is client annotation only: do not forward/store user IDs. */
     if(!permitted(root,allowed) || !string_value(model) || !yyjson_get_len(model)
         || !yyjson_is_arr(items) || !yyjson_arr_size(items)
         || !yyjson_is_int(max) || yyjson_get_sint(max)<=0
