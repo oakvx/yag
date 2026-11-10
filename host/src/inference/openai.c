@@ -89,6 +89,21 @@ int upstream_perform(const yag_config *c, const char *path, const char *body, si
 done:
     free(auth); curl_slist_free_all(list); if(curl) curl_easy_cleanup(curl); free(url); return result;
 }
+/* Only transport-level connection setup failures are retryable. Never retry
+ * after an upstream replied or when completion is ambiguous (timeouts, 5xx). */
+int upstream_for_model(const yag_config *c,const char *model,const char *path,
+        const char *body,size_t len,yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
+    yag_config selected={0};
+    const yag_config *target=config_for_model(c,model,&selected);
+    int rc=upstream_perform(target,path,body,len,cb,ctx,status,cancel_fd);
+    if(c->fallback_to_default && target!=c
+        && (!status || !*status)
+        && (rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)) {
+        if(status)*status=0;
+        return upstream_perform(c,path,body,len,cb,ctx,status,cancel_fd);
+    }
+    return rc;
+}
 static size_t proxy_write(void *ctx,long status,const char *type,const char *data,size_t n) {
     transfer *t=ctx; t->status=status;
     snprintf(t->content_type,sizeof t->content_type,"%s",type); start(t);
@@ -96,9 +111,7 @@ static size_t proxy_write(void *ctx,long status,const char *type,const char *dat
 }
 void upstream_request(int fd, const yag_config *c, const char *path, const char *body, size_t len, const char *model) {
     transfer t={.fd=fd}; long status=0;
-    yag_config selected={0};
-    const yag_config *target=config_for_model(c,model,&selected);
-    int res=upstream_perform(target,path,body,len,proxy_write,&t,&status,fd);
+    int res=upstream_for_model(c,model,path,body,len,proxy_write,&t,&status,fd);
     if(res!=CURLE_OK && !t.sent) reply(fd,res==CURLE_OPERATION_TIMEDOUT?504:502,"application/json","{\"error\":{\"message\":\"Inference backend unavailable or timed out\",\"type\":\"upstream_error\"}}");
     else if(!t.sent) { t.status=status; start(&t); }
 }

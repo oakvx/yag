@@ -376,16 +376,15 @@ void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,siz
     char *json=yyjson_mut_write(translated,0,NULL);
     yyjson_mut_doc_free(translated);
     if(!json){anthropic_error(fd,502);yyjson_doc_free(request);return;}
-    yag_config selected={0};
-    const yag_config *target=config_for_model(cfg,yyjson_get_str(yyjson_obj_get(root,"model")),&selected);
+    const char *model=yyjson_get_str(yyjson_obj_get(root,"model"));
     yyjson_val *requested_stream=yyjson_obj_get(root,"stream");
     if(requested_stream && yyjson_get_bool(requested_stream)) {
-        anthropic_stream_handle(fd,target,yyjson_get_str(yyjson_obj_get(root,"model")),json);
+        anthropic_stream_handle(fd,cfg,model,json);
         free(json);yyjson_doc_free(request);return;
     }
     response_buffer data={0};
     long status=0;
-    int rc=upstream_perform(target,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
+    int rc=upstream_for_model(cfg,model,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
     if(rc!=CURLE_OK || status<200 || status>=300)
         anthropic_error(fd,rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502);
     else {
