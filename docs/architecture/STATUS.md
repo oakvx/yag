@@ -26,10 +26,14 @@ Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB 
 
 **Codex: not yet compatible.** An actual Codex CLI 0.167.0 run against the deterministic mock backend failed with HTTP 400 on `include`. The observed request also contained `client_metadata`, `reasoning.summary`, namespace tools and `web_search`; these are outside the implemented subset. The test did not reach inference. No actual Codex tool cycle or real model has been verified. See [Codex probe](../integrations/codex.md).
 
+## Anthropic Messages (limited)
+
+The `POST /v1/messages` adapter accepts a non-streaming request with text-only messages, optional text system prompt, `max_tokens`, temperature, `top_p` and stop sequences. It requires complete upstream token counts, translates through Chat Completions, and returns a native Anthropic text Messages response. It does **not** support streaming, tool use, token counting, image inputs or Claude Code. Clients use YAG bearer authentication, not native Anthropic API authentication.
+
 ## Not implemented
 
 - A comprehensive cross-protocol canonical representation; explicit model capability descriptions; multiple providers and configuration management; provider health checks.
-- Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic Messages/count_tokens, Claude Code headers, events and tool semantics; those paths return 501.
+- Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic streaming, `count_tokens`, Claude Code headers, events and tool semantics. The basic Messages adapter handles non-streaming text only and rejects unsupported content.
 - Per-client keys/scopes/revocation, administrative authorization, rate limiting, configured CORS, native TLS, encrypted secret storage, structured/audit logs, and access controls beyond one bearer key.
 - Request history and usage aggregation, CPU/RAM/GPU monitoring, full backend settings, model capability management, and provider editing in the Console.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.

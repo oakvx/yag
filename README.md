@@ -4,13 +4,14 @@
 
 YAG is an early-stage, self-hosted inference gateway. This repository currently contains a native C17 host and a React/TypeScript Console. It forwards OpenAI Chat Completions and model discovery to **one** configured OpenAI-compatible inference server, and includes a limited Responses-to-Chat adapter. It does not run inference or execute tools.
 
-> **Status: foundation / experimental, not a production-ready multi-protocol gateway.** The Responses adapter supports a documented subset, but current Codex CLI requests do not yet work. Anthropic Messages, Claude Code support, and most administrative controls are not implemented; Anthropic routes return 501. Do not deploy this version on an untrusted network. See [scope and architecture](docs/architecture/STATUS.md).
+> **Status: foundation / experimental, not a production-ready multi-protocol gateway.** The Responses adapter supports a documented subset, but current Codex CLI requests do not yet work. A limited non-streaming text-only Anthropic Messages adapter is available. Anthropic streaming, tool calling, token counting, Claude Code and most administrative controls are still unsupported. Do not deploy this version on an untrusted network. See [scope and architecture](docs/architecture/STATUS.md).
 
 ## What works today
 
 - Localhost HTTP server, public `/health`, and a single bearer key protecting `/v1/*` and `/api/*`.
 - Model discovery (`GET /v1/models`) and Chat Completions (`POST /v1/chat/completions`), including transparent upstream SSE streaming and tool call structures. The upstream decides what it supports; YAG does not independently validate capabilities or implement OpenAI semantics.
 - A stateless Responses API subset with text, function calls and tool results, semantic SSE events, and explicit rejection of unsupported features. This does not yet support current Codex requests; see [Responses support](docs/architecture/STATUS.md).
+- Text-only, non-streaming `POST /v1/messages` translation for basic Anthropic Messages clients. Requires upstream token usage and rejects unsupported tools or content types.
 - A Console served by the Host, with session-only key entry, real host status/model discovery, text chat with cancellation, and copyable HTTP instructions. The playground does not handle tools; API clients can handle them themselves.
 - Bounded incoming request size, connection count and socket/upstream timeouts; upstream credentials stay on the Host.
 - Automated mock-upstream tests for authentication, framing, discovery, tool data, streaming, errors, timeout, disconnection and concurrency.
