@@ -104,6 +104,15 @@ static void handle(int fd,yag_config *c) {
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
+    /* Claude Code sends POST /v1/messages?beta=true.
+     * Match the API path separately and support only the known query marker;
+     * other query semantics must not be ignored silently. */
+    char *question=strchr(uri,'?');
+    if(question && (!strncmp(uri,"/v1/messages?",13)
+        || !strncmp(uri,"/v1/messages/count_tokens?",26))) {
+        if(strcmp(question,"?beta=true")){error(fd,400,"Unsupported Messages query parameters");goto done;}
+        *question=0;
+    }
     const char *trace=getenv("YAG_TRACE_ROUTES");
     if(trace && !strcmp(trace,"1")) {
         const char *kind=trace_route(uri);
