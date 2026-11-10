@@ -21,16 +21,16 @@ The Console's Integrations page generates a cURL example using the current brows
 
 ## Anthropic Messages — text only
 
-YAG supports non-streaming text requests to \`POST /v1/messages\` with YAG's bearer authentication. This is **not** a drop-in replacement for the Anthropic SDK or Claude Code: it does not implement the native \`x-api-key\` header, streaming events, tool use, system content blocks, or token counting.
+YAG supports non-streaming requests to `POST /v1/messages` with either `Authorization: Bearer <YAG_API_KEY>` or `x-api-key: <YAG_API_KEY>`. The key authenticates to YAG, not the inference provider. Both headers together are rejected. The adapter supports text and basic function/tool exchanges, but is **not** a drop-in replacement for Claude Code: streaming events, system content blocks, error-marked tool results and token counting are unsupported.
 
 For example, when a supported upstream model is running:
 
-\`\`\`sh
+```sh
 curl http://127.0.0.1:8080/v1/messages \
   -H "Authorization: Bearer $YAG_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{"model":"YOUR_MODEL_ID","max_tokens":128,"messages":[{"role":"user","content":"Hello"}]}'
-\`\`\`
+```
 
 The backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
 
