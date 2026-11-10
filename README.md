@@ -79,6 +79,7 @@ Environment variables are read on startup. Restart to apply changes.
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base URL; no trailing slash, query or fragment. |
 | `YAG_UPSTREAM_KEY` | empty | Optional bearer key for upstream only. |
 | `YAG_MODEL_ROUTES` | empty | Optional JSON array of up to 16 `{model,url,key_env?}` routes, checked at startup. A matched model uses the specified upstream; other models use the default. |
+| `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in route fallback to the default backend on DNS resolution or connection-refused errors only, before any upstream HTTP response (set `1` to enable). Never retries ambiguous timeouts or HTTP 4xx/5xx. |
 | `YAG_TIMEOUT` | `120` | Total upstream transfer timeout in seconds (1–3600); connect timeout is 10 seconds. |
 | `YAG_ASSETS` | `console/dist` | Filesystem path to compiled Console assets. |
 

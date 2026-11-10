@@ -261,7 +261,7 @@ static void streaming_error(stream *s,const char *message) {
     yyjson_mut_obj_add_strcpy(d,error,"message",message);
     emit(s,"error",d,o);
 }
-void anthropic_stream_handle(int fd,const yag_config *target,const char *model,const char *request) {
+void anthropic_stream_handle(int fd,const yag_config *cfg,const char *model,const char *request) {
     stream *s=calloc(1,sizeof *s);
     if(!s){reply(fd,500,"application/json","{\"error\":{\"message\":\"Out of memory\"}}");return;}
     s->fd=fd;s->model=model;
@@ -272,7 +272,7 @@ void anthropic_stream_handle(int fd,const yag_config *target,const char *model,c
     memcpy(s->message_id,"msg_",4);
     for(int i=0;i<16;i++)snprintf(s->message_id+4+i*2,3,"%02x",entropy[i]);
     long status=0;
-    int rc=upstream_perform(target,"/chat/completions",request,strlen(request),
+    int rc=upstream_for_model(cfg,model,"/chat/completions",request,strlen(request),
         receive,s,&status,fd);
     if(rc!=CURLE_OK || status<200 || status>=300 || !s->done
         || s->line.n || s->data.n || s->failed) {
