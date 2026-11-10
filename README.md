@@ -72,6 +72,7 @@ Environment variables are read on startup. Restart to apply changes.
 | --- | --- | --- |
 | `YAG_API_KEY` | required | Primary gateway bearer key, at least 16 characters. Use a strong randomly generated key. |
 | `YAG_EXTRA_API_KEYS` | empty | Optional comma-separated list of up to 16 additional bearer keys (each at least 16 characters); no commas inside keys. |
+| `YAG_RATE_LIMIT_PER_MINUTE` | `0` | Per-key, fixed 60-second limit for authenticated `/api/*` and `/v1/*` requests (0 disables, maximum 60000). Excess requests receive HTTP 429. |
 | `YAG_BIND` | `127.0.0.1` | Listen address; use `0.0.0.0` only deliberately. |
 | `YAG_PORT` | `8080` | Listen port. |
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base URL; no trailing slash, query or fragment. |
@@ -89,7 +90,7 @@ export YAG_MODEL_ROUTES='[{"model":"my-other-model","url":"http://127.0.0.1:9000
 
 The authenticated `GET /api/routes` endpoint lists configured model IDs without backend credentials or addresses. Currently `GET /v1/models` still lists only the default upstream. Configured routes can be called by ID; aggregate discovery is not yet implemented. There is no fallback after a matched backend fails.
 
-Keys are supplied through the process environment; use your service manager's restricted secret provisioning and account permissions. Environment variables may be visible to privileged users or through process inspection. Additional keys allow distinct clients to authenticate, but there is no per-key identity, scope, revocation without restart, or usage attribution. There is no encrypted secret store, rate limiting, TLS server, CORS configuration, audit logging, request history, or administrative API. Rotating the single key requires restarting the Host. `/health` and Console assets are public; `/api/status` and `/v1/*` require the key. HTTP requests are limited to 1 MiB, headers to 16 KiB and concurrent connections to 32; chunked request bodies are not supported. Connections use HTTP/1.x and close after each request.
+Keys are supplied through the process environment; use your service manager's restricted secret provisioning and account permissions. Environment variables may be visible to privileged users or through process inspection. Additional keys allow distinct clients to authenticate, but there is no per-key identity, scope, revocation without restart, or usage attribution. There is no encrypted secret store, *unauthenticated* connection-level rate limiting, TLS server, CORS configuration, audit logging, request history, or administrative API. Rotating the single key requires restarting the Host. `/health` and Console assets are public; `/api/status` and `/v1/*` require the key. HTTP requests are limited to 1 MiB, headers to 16 KiB and concurrent connections to 32; chunked request bodies are not supported. Connections use HTTP/1.x and close after each request.
 
 **Networking:** the default listener is localhost only. LAN binding is explicit and emits a warning. Plain HTTP exposes API keys and inference traffic to the network. For any remote use, terminate TLS at a trusted reverse proxy, restrict access with a firewall and independently assess this experimental server. Do not regard Wi-Fi membership as authentication. Native TLS and hardened network-facing operation are not implemented.
 
