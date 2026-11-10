@@ -185,9 +185,9 @@ class Messages(unittest.TestCase):
         self.assertEqual(status,200,body)
         converted=json.loads(json.loads(body)['content'][0]['text'])
         messages=converted['messages']
-        self.assertEqual(messages[1]['content'],'first\\nsecond')
+        self.assertEqual(messages[1]['content'],'first\nsecond')
         self.assertEqual(messages[1]['tool_call_id'],'t1')
-        self.assertEqual(messages[2]['content'],'[Tool execution error]\\npermission denied')
+        self.assertEqual(messages[2]['content'],'[Tool execution error]\npermission denied')
         self.assertEqual(messages[2]['tool_call_id'],'t2')
         self.assertEqual(messages[3],{'role':'user','content':[{'type':'text','text':'Please retry'}]})
         invalid=dict(payload,messages=[payload['messages'][0],{'role':'user','content':[
