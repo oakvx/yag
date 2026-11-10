@@ -13,6 +13,18 @@ class Messages(unittest.TestCase):
     def post(self, payload):
         return base.request(self.port, 'POST', '/v1/messages', payload)
 
+    def test_claude_code_beta_query_is_routed_without_losing_auth(self):
+        payload={'model':'response-echo','max_tokens':32,
+                 'messages':[{'role':'user','content':'hello'}]}
+        status,_,body=base.request(self.port,'POST','/v1/messages?beta=true',
+            payload,key=None,headers={'X-API-Key':base.KEY})
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['type'],'message')
+        self.assertEqual(base.request(self.port,'POST','/v1/messages?unknown=true',
+            payload,key=None,headers={'X-API-Key':base.KEY})[0],400)
+        self.assertEqual(base.request(self.port,'POST','/v1/messages?beta=true',
+            payload,key=None)[0],401)
+
     def test_native_anthropic_header_uses_gateway_key(self):
         payload={'model':'response-echo','max_tokens':16,
                  'messages':[{'role':'user','content':'hello'}]}
