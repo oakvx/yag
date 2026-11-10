@@ -70,7 +70,7 @@ class ToolBackend(ProbeBackend):
             print('Unknown shell tool input properties:',list(props),flush=True)
             return self.send(400,{'error':{'message':'Unknown shell input schema'}})
         if 'workdir' in props:
-            arguments['workdir']=os.getcwd()
+            arguments['workdir']=work
         for required in params.get('required',[]):
             if required in arguments:continue
             if required=='timeout':
