@@ -149,6 +149,18 @@ class Integration(unittest.TestCase):
         s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
         self.assertIn(b'200',s.recv(1024)); s.close()
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
+    def test_chat_cancels_quiet_upstream(self):
+        s=socket.create_connection(('127.0.0.1',self.port))
+        body=b'{"model":"slow","messages":[]}'
+        s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
+        time.sleep(.1); s.close()
+        deadline=time.monotonic()+.85
+        count=None
+        while time.monotonic()<deadline:
+            count=json.loads(request(self.port,'GET','/api/status')[2])['active_connections']
+            if count==1: break
+            time.sleep(.05)
+        self.assertEqual(count,1,'Chat upstream transfer did not cancel after disconnect')
     def test_disconnect(self):
         s=socket.create_connection(('127.0.0.1',self.port));s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\n{');s.close();self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
 if __name__=='__main__':
