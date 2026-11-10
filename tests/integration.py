@@ -219,8 +219,8 @@ class Integration(unittest.TestCase):
     def test_auth_rejects_unfinished_request_body_immediately(self):
         s=socket.create_connection(('127.0.0.1',self.port),timeout=1)
         try:
-            s.sendall(b'POST /v1/chat/completions HTTP/1.1\\r\\n'
-                      b'Host: localhost\\r\\nContent-Length: 800000\\r\\n\\r\\n')
+            s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\n'
+                      b'Host: localhost\r\nContent-Length: 800000\r\n\r\n')
             answer=s.recv(1024)
             self.assertIn(b'401',answer)
         finally:
