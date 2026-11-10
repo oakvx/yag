@@ -69,8 +69,17 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
             print('Claude Code stdout:',proc.stdout[-6000:],flush=True)
             print('Claude Code stderr:',proc.stderr[-6000:],flush=True)
             result=proc.returncode
-        except subprocess.TimeoutExpired:
-            print('Claude Code probe timed out',flush=True)
+        except subprocess.TimeoutExpired as exc:
+            print('Claude Code probe timed out; diagnosing gateway activity',flush=True)
+            for name,partial in [('stdout',exc.stdout),('stderr',exc.stderr)]:
+                if partial:
+                    output=partial.decode(errors='replace') if isinstance(partial,bytes) else partial
+                    print('Partial '+name+':',output[-4000:],flush=True)
+            try:
+                metrics=request(port,'GET','/api/metrics')[2]
+                print('Gateway metadata-only counters:',metrics.decode(),flush=True)
+            except Exception as err:
+                print('Could not retrieve gateway counters:',type(err).__name__,flush=True)
             result=124
     finally:
         host.terminate()
