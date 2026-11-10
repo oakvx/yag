@@ -83,6 +83,19 @@ static void asset(int fd,const yag_config *c,const char *uri) {
     char h[512]; n=snprintf(h,sizeof h,"HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'\r\nConnection: close\r\n\r\n",type,len);
     if(n>0 && (size_t)n<sizeof h && !send_all(fd,h,(size_t)n)) {char b[8192]; size_t got; while((got=fread(b,1,sizeof b,f))) if(send_all(fd,b,got)) break; } fclose(f);
 }
+/* Diagnostics expose route categories only; never log prompt contents,
+ * authentication headers, URL query strings or arbitrary path segments. */
+static const char *trace_route(const char *uri) {
+    if(!strcmp(uri,"/health"))return "health";
+    if(!strcmp(uri,"/v1/models"))return "models-list";
+    if(!strncmp(uri,"/v1/models/",11))return "models-detail";
+    if(!strcmp(uri,"/v1/messages"))return "messages";
+    if(!strcmp(uri,"/v1/messages/count_tokens"))return "messages-count";
+    if(!strcmp(uri,"/v1/responses"))return "responses";
+    if(!strcmp(uri,"/v1/chat/completions"))return "chat";
+    if(!strncmp(uri,"/api/",5))return "admin";
+    return "other";
+}
 static void handle(int fd,yag_config *c) {
     char *buf=malloc(MAX_HEADER+MAX_BODY+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     while(used<MAX_HEADER){ ssize_t n=recv(fd,buf+used,MAX_HEADER-used,0); if(n<=0) goto done; used+=(size_t)n; buf[used]=0; char *p=strstr(buf,"\r\n\r\n"); if(p){header_len=(size_t)(p-buf)+4;break;} }
@@ -91,6 +104,8 @@ static void handle(int fd,yag_config *c) {
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
+    const char *trace=getenv("YAG_TRACE_ROUTES");
+    if(trace && !strcmp(trace,"1"))fprintf(stderr,"YAG request method=%s route=%s\n",method,trace_route(uri));
     size_t length=0; int have_length=0,have_auth=0,have_native_key=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0; char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
