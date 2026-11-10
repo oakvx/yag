@@ -79,6 +79,22 @@ class Messages(unittest.TestCase):
                'content':None},
             {'role':'tool','tool_call_id':'call_1','content':'hello world'}])
 
+    def test_tool_choice_maps_to_chat_selection(self):
+        payload={'model':'response-echo','max_tokens':64,
+                 'messages':[{'role':'user','content':'Do it'}],
+                 'tools':[{'name':'read_file','input_schema':{'type':'object'}}],
+                 'tool_choice':{'type':'tool','name':'read_file','disable_parallel_tool_use':True}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertEqual(chat['tool_choice'],{'type':'function','function':{'name':'read_file'}})
+        self.assertFalse(chat['parallel_tool_calls'])
+        payload['tool_choice']={'type':'any'}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertEqual(chat['tool_choice'],'required')
+
     def test_chat_tool_calls_become_anthropic_tool_use(self):
         status,_,body=self.post({'model':'anthropic-tools','max_tokens':64,
             'messages':[{'role':'user','content':'Read a file'}]})

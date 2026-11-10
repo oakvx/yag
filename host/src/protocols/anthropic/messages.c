@@ -113,7 +113,7 @@ static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_va
 }
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences","tools",NULL};
+        "stream","temperature","top_p","stop_sequences","tools","tool_choice",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
@@ -181,6 +181,32 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
                 || !yyjson_mut_arr_add_val(out,converted))goto fail;
         }
         if(yyjson_arr_size(tools) && !yyjson_mut_obj_add_val(doc,chat,"tools",out))goto fail;
+    }
+    yyjson_val *choice=yyjson_obj_get(root,"tool_choice");
+    if(choice) {
+        const char *const choice_fields[]={"type","name","disable_parallel_tool_use",NULL};
+        yyjson_val *kind=yyjson_obj_get(choice,"type"),*name=yyjson_obj_get(choice,"name");
+        yyjson_val *disable=yyjson_obj_get(choice,"disable_parallel_tool_use");
+        if(!permitted(choice,choice_fields)
+            || (disable && !yyjson_is_bool(disable))
+            || (yyjson_equals_str(kind,"tool")
+                ? (!string_value(name) || !yyjson_get_len(name))
+                : name!=NULL)
+            || (!yyjson_equals_str(kind,"auto") && !yyjson_equals_str(kind,"none")
+                && !yyjson_equals_str(kind,"any") && !yyjson_equals_str(kind,"tool"))
+            || (!yyjson_arr_size(tools) && !yyjson_equals_str(kind,"none")))goto fail;
+        if(disable && !yyjson_mut_obj_add_bool(doc,chat,"parallel_tool_calls",!yyjson_get_bool(disable)))goto fail;
+        if(yyjson_equals_str(kind,"tool")) {
+            yyjson_mut_val *selector=yyjson_mut_obj(doc),*fn=yyjson_mut_obj(doc);
+            if(!selector || !fn || !yyjson_mut_obj_add_str(doc,selector,"type","function")
+                || !yyjson_mut_obj_add_val(doc,fn,"name",yyjson_val_mut_copy(doc,name))
+                || !yyjson_mut_obj_add_val(doc,selector,"function",fn)
+                || !yyjson_mut_obj_add_val(doc,chat,"tool_choice",selector))goto fail;
+        } else {
+            const char *mapped=yyjson_equals_str(kind,"any")?"required":
+                yyjson_equals_str(kind,"none")?"none":"auto";
+            if(!yyjson_mut_obj_add_str(doc,chat,"tool_choice",mapped))goto fail;
+        }
     }
     if(stops) {
         size_t j,count; yyjson_val *stop;
