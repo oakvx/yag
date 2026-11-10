@@ -33,7 +33,7 @@ class Messages(unittest.TestCase):
         self.assertEqual(status,200,body)
         self.assertIn('text/event-stream',headers['Content-Type'])
         events=[]
-        for frame in body.decode().split('\\n\\n'):
+        for frame in body.decode().split('\n\n'):
             if not frame.strip(): continue
             name=next((s[7:] for s in frame.splitlines() if s.startswith('event: ')),None)
             item=next((s[6:] for s in frame.splitlines() if s.startswith('data: ')),None)
