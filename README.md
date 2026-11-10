@@ -1,26 +1,139 @@
-# YAG — Yet Another Gateway
+<div align="center">
+
+```
+██╗   ██╗ █████╗  ██████╗
+╚██╗ ██╔╝██╔══██╗██╔════╝
+ ╚████╔╝ ███████║██║  ███╗
+  ╚██╔╝  ██╔══██║██║   ██║
+   ██║   ██║  ██║╚██████╔╝
+   ╚═╝   ╚═╝  ╚═╝ ╚═════╝
+```
+
+# Yet Another Gateway
 
 **One host. Multiple models. Every interface.**
 
-YAG is an early-stage, self-hosted inference gateway. This repository currently contains a native C17 host and a React/TypeScript Console. It forwards OpenAI Chat Completions to a default OpenAI-compatible inference server and supports up to 16 exact-model upstream routes. Model discovery still uses the default upstream, and a limited Responses-to-Chat adapter is included. It does not run inference or execute tools.
+One native binary. One bearer key. A default upstream + up to 16 per-model routes.
+Your upstream does the inference — YAG owns everything around it:
+**auth, routing, protocol translation, limits.**
 
-> **Status: foundation / experimental, not a production-ready multi-protocol gateway.** The Responses adapter supports a documented subset, but current Codex CLI requests do not yet work. A limited non-streaming text-only Anthropic Messages adapter is available. Anthropic streaming, tool calling, token counting, Claude Code and most administrative controls are still unsupported. Do not deploy this version on an untrusted network. See [scope and architecture](docs/architecture/STATUS.md).
+[![status](https://img.shields.io/badge/status-experimental-orange?style=flat-square)](docs/architecture/STATUS.md)
+[![language](https://img.shields.io/badge/C-17-blue?style=flat-square)](#build)
+[![build](https://img.shields.io/badge/CMake-3.16%2B-066DA5?style=flat-square)](#build)
+[![deps](https://img.shields.io/badge/deps-libcurl%20·%20pthreads%20·%20yyjson-lightgrey?style=flat-square)](#build)
+[![console](https://img.shields.io/badge/console-React%20·%20TypeScript-3178C6?style=flat-square)](console)
+[![bind](https://img.shields.io/badge/default%20bind-127.0.0.1-success?style=flat-square)](#configuration)
+[![tls](https://img.shields.io/badge/TLS-none-red?style=flat-square)](#security--threat-model)
+![tests](https://img.shields.io/badge/tests-mock%20upstream%20suite-success?style=flat-square)
 
-## What works today
+```sh
+export YAG_API_KEY="$(openssl rand -hex 32)"  # one key — that's the whole config
+cmake -S . -B build && cmake --build build -j && ./build/yag
+```
 
-- Localhost HTTP server, public `/health`, and a primary bearer key plus optional additional keys protecting `/v1/*` and `/api/*`.
-- Model discovery (`GET /v1/models`) and Chat Completions (`POST /v1/chat/completions`), including transparent upstream SSE streaming and tool call structures. The upstream decides what it supports; YAG does not independently validate capabilities or implement OpenAI semantics.
-- A stateless Responses API subset with text, function calls and tool results, semantic SSE events, and explicit rejection of unsupported features. This does not yet support current Codex requests; see [Responses support](docs/architecture/STATUS.md).
-- Non-streaming Anthropic `POST /v1/messages` for text and function tools. Supports tool definitions, selection, `tool_use` and string `tool_result` replay, using `Authorization: Bearer` or `x-api-key` authentication with the YAG secret. Streaming, multimodal input, mixed text/tool-result blocks, and full Claude Code integration remain unsupported.
-- A Console served by the Host, with session-only key entry, real host status/model discovery, text chat with cancellation, and copyable HTTP instructions. The playground does not handle tools; API clients can handle them themselves.
-- Bounded incoming request size, connection count and socket/upstream timeouts; upstream credentials stay on the Host.
-- Automated mock-upstream tests for authentication, framing, discovery, tool data, streaming, errors, timeout, disconnection and concurrency.
+<!-- Screenshot slot — drop a PNG at docs/assets/console.png and uncomment:
+<p>
+  <img src="docs/assets/console.png" alt="YAG Console" width="820">
+</p>
+-->
 
-No actual model, Claude Code or live provider was tested. A Codex CLI 0.167.0 probe against the mock upstream was attempted and **failed** on an unsupported Responses request field; compatibility remains unachieved. The model listing is not a model health or capability guarantee.
+</div>
 
-## Build on Linux
+> [!WARNING]
+> **This is a foundation, not a fortress.** The Responses adapter covers a documented
+> subset — current Codex CLI requests do **not** work yet (a 0.167.0 probe against the
+> mock upstream fails on an unsupported field). Anthropic support is non-streaming and
+> limited. No TLS, no CORS, no audit log, no admin API. No real model, live provider or
+> Claude Code has been tested. **Do not deploy this on an untrusted network.**
+> Full scope: [architecture & status](docs/architecture/STATUS.md).
 
-Dependencies: CMake 3.16+, a C17 compiler, libcurl development headers/library, pthreads, Python 3 for tests, Node.js 18+ and npm for the Console. For example, on Debian/Ubuntu:
+---
+
+## The idea
+
+You run OpenAI-compatible servers. Clients speak OpenAI, Responses, or Anthropic.
+YAG sits in the middle and makes the two ends meet.
+
+It never runs a model and never executes a tool — and never will.
+That's not a limitation. That's the scope. YAG is a router, a translator
+and a gatekeeper. Boring on purpose: C17, libcurl, pthreads, vendored yyjson.
+
+- **One key in front of many backends** — a default upstream plus up to 16 exact-model routes, each with its own secret read from the environment.
+- **Credentials never leave the host.** The browser sees your gateway key; the upstream key stays server-side. Always.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph clients["Clients"]
+        ui["Console<br/>browser, session key"]
+        api["curl · SDKs · agents*"]
+    end
+
+    subgraph host["YAG Host — one C17 binary, :8080"]
+        auth["Auth<br/>primary key + ≤16 extra keys"]
+        proto["Protocols<br/>Chat passthrough · Responses→Chat · Anthropic→Chat"]
+        routes["Routing<br/>default upstream + ≤16 exact-model routes"]
+        limits["Limits<br/>1 MiB body · 16 KiB headers · 32 connections"]
+    end
+
+    subgraph upstreams["Upstreams"]
+        def["Default<br/>OpenAI-compatible /v1"]
+        alt["Route backends<br/>secrets via env, never exposed"]
+    end
+
+    clients --> auth
+    auth --> proto
+    proto --> routes
+    routes --> def
+    routes --> alt
+```
+
+\* Codex CLI is a *future* client — not compatible yet. See the warning above.
+
+## ✅ What works today
+
+- **Host.** Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys guarding `/v1/*` and `/api/*`.
+- **Chat Completions.** `GET /v1/models` and `POST /v1/chat/completions`, including transparent upstream SSE streaming and tool-call structures. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
+- **Responses subset (stateless).** Text, function calls and tool results, semantic SSE events, explicit rejection of unsupported features. Not yet Codex-compatible — see [Responses support](docs/architecture/STATUS.md).
+- **Anthropic Messages (non-streaming).** `POST /v1/messages` for text and function tools: tool definitions, selection, `tool_use` and string `tool_result` replay. Accepts `Authorization: Bearer` or `x-api-key` with the YAG secret.
+- **Console.** Served by the Host itself: session-only key entry, real status and model discovery, text chat with cancellation, copyable HTTP instructions. The playground doesn't do tools — API clients handle those themselves.
+- **Hard limits, enforced.** Bounded request size, connection count, socket and upstream timeouts.
+- **Tests.** Automated mock-upstream suite: auth, framing, discovery, tool data, streaming, errors, timeout, disconnection, concurrency.
+
+## ❌ What doesn't
+
+- Codex CLI compatibility — the 0.167.0 probe **failed** on an unsupported Responses field.
+- Anthropic streaming, multimodal input, mixed text/tool-result blocks, token counting, Claude Code.
+- Aggregate discovery across route backends. No failover once a matched backend fails — matched means **committed**.
+- TLS, CORS configuration, audit logging, request history, admin API, per-key identity, revocation without restart, usage attribution, encrypted secret store, unauthenticated rate limiting.
+- Model inference. Tool execution. Not YAG's job.
+
+The model list is **not** a health or capability guarantee. Static route entries
+don't guarantee their backends are reachable or support the requested operations.
+
+## Endpoints
+
+| Method | Path | Auth | What it does |
+| --- | --- | --- | --- |
+| `GET` | `/health` | — | Liveness probe. Public. |
+| `GET` | `/api/status` | key | Host status. |
+| `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
+| `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
+| `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
+| `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
+| `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
+| `POST` | `/v1/responses` | key | Responses subset, translated to Chat. |
+| `POST` | `/v1/messages` | key | Anthropic Messages (non-streaming), translated to Chat. |
+
+`/api/*` and `/v1/*` are rate-limited per key when `YAG_RATE_LIMIT_PER_MINUTE > 0` —
+fixed 60-second windows, `429` on excess. Metrics count **request attempts**
+(invalid ones included), not successful generations.
+
+## Build
+
+Linux. CMake 3.16+, a C17 compiler, libcurl dev headers, pthreads, Python 3 (tests),
+Node 18+ and npm (Console only).
 
 ```sh
 sudo apt install build-essential cmake libcurl4-openssl-dev python3 nodejs npm
@@ -30,32 +143,40 @@ cd console && npm ci && npm run build && cd ..
 ctest --test-dir build --output-on-failure
 ```
 
-yyjson 0.12.0 is vendored under `third_party/yyjson` with its license. The Console build is optional for API-only use; its generated assets are not committed. `YAG_ASSETS` defaults to `console/dist` relative to the Host's working directory.
+yyjson 0.12.0 is vendored under `third_party/yyjson` with its license.
+The Console build is optional — API-only users can skip it. Generated assets are not
+committed; `YAG_ASSETS` defaults to `console/dist` relative to the Host's working directory.
 
 ## Run
 
-Start an OpenAI-compatible inference server separately. For example, if its base API URL is `http://127.0.0.1:8000/v1`:
+Start an OpenAI-compatible server first. Say it lives at `http://127.0.0.1:8000/v1`:
 
 ```sh
-# Set secrets using a private service manager/environment, not in a public file.
+# Secrets go in your service manager / private environment — not in public files.
 export YAG_API_KEY='REPLACE_WITH_A_LONG_RANDOM_SECRET'
 export YAG_UPSTREAM_URL='http://127.0.0.1:8000/v1'
-# Only if required by your inference server:
+# Only if your upstream demands it:
 # export YAG_UPSTREAM_KEY='YOUR_UPSTREAM_SECRET'
+
 ./build/yag
 ```
 
-Open `http://127.0.0.1:8080`, select **API key**, and enter the YAG key. The Console uses session storage for the current tab. Keep the key private and clear it when finished. The upstream key is never exposed to the Console. API access works without a browser.
+Open `http://127.0.0.1:8080`, pick **API key**, paste the YAG key. It lives in session
+storage for the current tab — keep it private, clear it when done.
+Or skip the browser entirely:
 
 ```sh
 curl http://127.0.0.1:8080/health
-curl http://127.0.0.1:8080/v1/models -H "Authorization: Bearer $YAG_API_KEY"
+
+curl http://127.0.0.1:8080/v1/models \
+  -H "Authorization: Bearer $YAG_API_KEY"
+
 curl http://127.0.0.1:8080/v1/chat/completions \
   -H "Authorization: Bearer $YAG_API_KEY" -H 'Content-Type: application/json' \
   -d '{"model":"YOUR_MODEL_ID","messages":[{"role":"user","content":"Hello"}],"stream":false}'
 ```
 
-The supported Responses subset can also be exercised without Codex:
+The Responses subset works without Codex too:
 
 ```sh
 curl http://127.0.0.1:8080/v1/responses \
@@ -63,36 +184,72 @@ curl http://127.0.0.1:8080/v1/responses \
   -d '{"model":"YOUR_MODEL_ID","input":"Hello","store":false,"stream":false}'
 ```
 
-Use `"stream":true` for SSE if the upstream supports it. Chat Completions request and response bodies are passed through; errors and status codes from the upstream are forwarded. Responses requests are translated and validated as documented in the [implementation status](docs/architecture/STATUS.md). If a stream fails after headers are sent, the connection closes and its HTTP status cannot be changed; clients must detect incomplete streams.
+Set `"stream":true` for SSE if the upstream supports it. Translation and validation
+rules for Responses live in the [status doc](docs/architecture/STATUS.md).
+
+> [!CAUTION]
+> If a stream dies after the headers are sent, the connection just closes — the HTTP
+> status cannot be changed retroactively. Clients must detect incomplete streams.
 
 ## Configuration
 
-Environment variables are read on startup. Restart to apply changes.
+Read once at startup. Restart to apply.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `YAG_API_KEY` | required | Primary gateway bearer key, at least 16 characters. Use a strong randomly generated key. |
-| `YAG_EXTRA_API_KEYS` | empty | Optional comma-separated list of up to 16 additional bearer keys (each at least 16 characters); no commas inside keys. |
-| `YAG_RATE_LIMIT_PER_MINUTE` | `0` | Per-key, fixed 60-second limit for authenticated `/api/*` and `/v1/*` requests (0 disables, maximum 60000). Excess requests receive HTTP 429. |
-| `YAG_BIND` | `127.0.0.1` | Listen address; use `0.0.0.0` only deliberately. |
+| `YAG_API_KEY` | *required* | Primary gateway bearer key, ≥16 chars. Generate something long and random. |
+| `YAG_EXTRA_API_KEYS` | empty | Up to 16 extra keys, comma-separated, each ≥16 chars. No commas inside keys. |
+| `YAG_RATE_LIMIT_PER_MINUTE` | `0` | Per-key limit on authenticated `/api/*` + `/v1/*`, fixed 60 s window. `0` = off, max `60000`. |
+| `YAG_BIND` | `127.0.0.1` | Listen address. `0.0.0.0` only if you mean it. |
 | `YAG_PORT` | `8080` | Listen port. |
-| `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base URL; no trailing slash, query or fragment. |
-| `YAG_UPSTREAM_KEY` | empty | Optional bearer key for upstream only. |
-| `YAG_MODEL_ROUTES` | empty | Optional JSON array of up to 16 `{model,url,key_env?}` routes, checked at startup. A matched model uses the specified upstream; other models use the default. |
-| `YAG_TIMEOUT` | `120` | Total upstream transfer timeout in seconds (1–3600); connect timeout is 10 seconds. |
-| `YAG_ASSETS` | `console/dist` | Filesystem path to compiled Console assets. |
+| `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base. No trailing slash, query or fragment. |
+| `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
+| `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
+| `YAG_TIMEOUT` | `120` | Total upstream timeout, 1–3600 s. Connect timeout: 10 s. |
+| `YAG_ASSETS` | `console/dist` | Path to the compiled Console assets. |
 
-Example route configuration (secrets are read from a named environment variable, not embedded in JSON):
+Multi-backend routing — secrets by reference, never inline:
 
 ```sh
 export YAG_ROUTE_KEY='YOUR_SECOND_BACKEND_SECRET'
 export YAG_MODEL_ROUTES='[{"model":"my-other-model","url":"http://127.0.0.1:9000/v1","key_env":"YAG_ROUTE_KEY"}]'
 ```
 
-The authenticated `GET /api/routes` endpoint lists configured model IDs without backend credentials or addresses. `GET /api/metrics` returns in-memory counts of accepted inference requests by protocol plus model-discovery and provider-check requests; it contains no prompt text or history. These are request attempts (including invalid requests), not successful generations, and reset on restart. `POST /api/provider/check` accepts `{}` for the default provider or `{"model":"configured-id"}` to probe one configured route's `/models` endpoint with a three-second timeout. The result indicates HTTP reachability only, not inference capability, and never returns upstream credentials or URLs. `GET /v1/models` combines the default upstream's discovered models with configured static route IDs. Static route entries do **not** guarantee that their backends are reachable or support the requested operations. Configured routes can be called by ID; aggregate discovery is not yet implemented. There is no fallback after a matched backend fails.
+Routes are called by model ID. `GET /api/routes` lists them without leaking addresses
+or secrets. `GET /v1/models` merges default-upstream discovery with the static route IDs.
 
-Keys are supplied through the process environment; use your service manager's restricted secret provisioning and account permissions. Environment variables may be visible to privileged users or through process inspection. Additional keys allow distinct clients to authenticate, but there is no per-key identity, scope, revocation without restart, or usage attribution. There is no encrypted secret store, *unauthenticated* connection-level rate limiting, TLS server, CORS configuration, audit logging, request history, or administrative API. Rotating the single key requires restarting the Host. `/health` and Console assets are public; `/api/status` and `/v1/*` require the key. HTTP requests are limited to 1 MiB, headers to 16 KiB and concurrent connections to 32; chunked request bodies are not supported. Connections use HTTP/1.x and close after each request.
+## Security & threat model
 
-**Networking:** the default listener is localhost only. LAN binding is explicit and emits a warning. Plain HTTP exposes API keys and inference traffic to the network. For any remote use, terminate TLS at a trusted reverse proxy, restrict access with a firewall and independently assess this experimental server. Do not regard Wi-Fi membership as authentication. Native TLS and hardened network-facing operation are not implemented.
+Read this before exposing anything to a network you don't fully control.
 
-See [integration notes](docs/integrations/README.md), [Codex configuration and probe](docs/integrations/codex.md), and [architecture and limitations](docs/architecture/STATUS.md).
+- **Keys live in the environment.** Use your service manager's restricted secret
+  provisioning and account permissions. Environment variables can be visible to
+  privileged users or via process inspection. Rotating the primary key = restart.
+- **Extra keys ≠ accounts.** They authenticate distinct clients, but there is no
+  per-key identity, scope, usage attribution, or revocation without a restart.
+- **What doesn't exist:** encrypted secret store, unauthenticated connection-level
+  rate limiting, TLS server, CORS configuration, audit logging, request history,
+  administrative API.
+- **Public surface:** `/health` and Console assets only. Everything under `/v1/*`
+  and `/api/*` requires the key.
+- **Hard caps:** 1 MiB request bodies, 16 KiB headers, 32 concurrent connections,
+  HTTP/1.x with connection close after each request, no chunked request bodies.
+- **Networking:** localhost by default; LAN binding is explicit and emits a warning.
+  Plain HTTP exposes your keys and your traffic. For anything remote: terminate TLS
+  at a trusted reverse proxy, firewall the host, and independently assess this
+  experimental server. **Wi-Fi membership is not authentication.** Native TLS and
+  hardened network-facing operation are not implemented.
+
+## Docs
+
+- [Integration notes](docs/integrations/README.md)
+- [Codex configuration & probe](docs/integrations/codex.md)
+- [Architecture, scope & status](docs/architecture/STATUS.md)
+
+---
+
+<div align="center">
+
+**YAG doesn't think. It decides who gets to ask.**
+
+</div>
