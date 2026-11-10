@@ -23,6 +23,13 @@ void reply(int fd,int status,const char *type,const char *body) {
 }
 static void error(int fd,int status,const char *msg) { char b[512]; snprintf(b,sizeof b,"{\"error\":{\"message\":\"%s\"}}",msg); reply(fd,status,"application/json",b); }
 static int key_equal(const char *a,const char *b) { size_t na=strlen(a),nb=strlen(b),n=na>nb?na:nb; unsigned diff=(unsigned)(na^nb); for(size_t i=0;i<n;i++) diff|=(unsigned char)(i<na?a[i]:0)^(unsigned char)(i<nb?b[i]:0); return diff==0; }
+static int authorized(const yag_config *c,const char *authorization) {
+    if(!authorization || strncmp(authorization,"Bearer ",7))return 0;
+    const char *candidate=authorization+7;
+    int ok=key_equal(candidate,c->api_key);
+    for(size_t i=0;i<c->extra_key_count;i++) ok |= key_equal(candidate,c->extra_keys[i]);
+    return ok;
+}
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
     if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512) { error(fd,404,"Not found"); return; }
@@ -57,7 +64,7 @@ static void handle(int fd,yag_config *c) {
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
-    if(!auth || strncmp(auth,"Bearer ",7) || !key_equal(auth+7,c->api_key)){error(fd,401,"Invalid API key");goto done;}
+    if(!authorized(c,auth)){error(fd,401,"Invalid API key");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {

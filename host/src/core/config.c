@@ -13,6 +13,23 @@ int config_load(yag_config *c) {
     if (*end || c->timeout < 1 || c->timeout > 3600) { fprintf(stderr,"YAG_TIMEOUT must be 1..3600 seconds\n"); return -1; }
     if (strlen(c->api_key)<16 || strpbrk(c->api_key,"\r\n") || strpbrk(c->upstream_key,"\r\n")) { fprintf(stderr,"YAG_API_KEY is required (at least 16 characters); keys must not contain newlines\n"); return -1; }
     if ((strncmp(c->upstream,"http://",7) && strncmp(c->upstream,"https://",8)) || strpbrk(c->upstream,"\r\n?#") || c->upstream[strlen(c->upstream)-1]=='/') { fprintf(stderr,"YAG_UPSTREAM_URL must be an HTTP(S) base URL without a trailing slash, query, or fragment\n"); return -1; }
+    const char *extra=env("YAG_EXTRA_API_KEYS", "");
+    if (*extra) {
+        c->extra_keys_storage=strdup(extra);
+        if (!c->extra_keys_storage) return -1;
+        char *start=c->extra_keys_storage;
+        for (;;) {
+            char *comma=strchr(start, ',');
+            if (comma) *comma=0;
+            if (!*start || strlen(start)<16 || strpbrk(start,"\\r\\n") || c->extra_key_count>=16) {
+                fprintf(stderr,"YAG_EXTRA_API_KEYS requires 1..16 comma-separated keys of at least 16 characters, without empty entries or newlines\\n");
+                return -1;
+            }
+            c->extra_keys[c->extra_key_count++]=start;
+            if (!comma) break;
+            start=comma+1;
+        }
+    }
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     return pthread_mutex_init(&c->lock,NULL);
 }
