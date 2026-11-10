@@ -189,7 +189,7 @@ class Messages(unittest.TestCase):
         basic={'model':'response-echo','max_tokens':15,'messages':[{'role':'user','content':'hi'}]}
         for payload in [
             {'model':'response-echo','messages':[{'role':'user','content':'hi'}]},
-            dict(basic,stream=True),
+            dict(basic,stream='not-a-boolean'),
             dict(basic,tools=[{'name':'read'}]),
             dict(basic,messages=[{'role':'user','content':[{'type':'tool_result','tool_use_id':'id','content':{'unsupported':1}}]}]),
             dict(basic,max_tokens=0),
