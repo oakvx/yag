@@ -104,6 +104,21 @@ class Messages(unittest.TestCase):
         self.assertEqual(upstream['max_tokens'],20)
         self.assertFalse(upstream['stream'])
 
+    def test_system_text_blocks_and_cache_hints(self):
+        cache={'type':'ephemeral'}
+        payload={'model':'response-echo','max_tokens':64,
+            'system':[{'type':'text','text':'System one','cache_control':cache},
+                      {'type':'text','text':'System two'}],
+            'messages':[{'role':'user','content':[{'type':'text','text':'Hi',
+                'cache_control':cache}]}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        messages=json.loads(json.loads(body)['content'][0]['text'])['messages']
+        self.assertEqual(messages[0]['content'],'System one\\n\\nSystem two')
+        self.assertEqual(messages[1]['content'],[{'type':'text','text':'Hi'}])
+        broken=dict(payload,system=[{'type':'image','source':'no'}])
+        self.assertEqual(self.post(broken)[0],400)
+
     def test_text_blocks_and_generation_settings(self):
         payload={'model':'response-echo','max_tokens':50,
                  'messages':[{'role':'user','content':[{'type':'text','text':'one'},
