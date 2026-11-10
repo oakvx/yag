@@ -107,7 +107,17 @@ int responses_parse(const char *body,size_t len,response_request *r,const char *
     yyjson_val *model=yyjson_obj_get(r->root,"model"),*input=yyjson_obj_get(r->root,"input"),*inst=yyjson_obj_get(r->root,"instructions"),*stream=yyjson_obj_get(r->root,"stream"),*store=yyjson_obj_get(r->root,"store"),*meta=yyjson_obj_get(r->root,"metadata");
     if(!isstr(model) || !*yyjson_get_str(model) || !input || (inst && !isstr(inst) && !yyjson_is_null(inst)) || (stream && !yyjson_is_bool(stream)) || (store && (!yyjson_is_bool(store) || yyjson_get_bool(store))) || (meta && !yyjson_is_obj(meta) && !yyjson_is_null(meta))) { *err="Invalid model, input, instructions, stream, metadata or store (only store=false is supported)"; return 0; }
     yyjson_val *include=yyjson_obj_get(r->root,"include");
-    if(include && (!yyjson_is_arr(include) || yyjson_arr_size(include)!=0)) { *err="Only an empty include array is supported; requested output fields cannot be synthesized";return 0; }
+    if(include) {
+        if(!yyjson_is_arr(include)){*err="include must be an array";return 0;}
+        size_t i,max;yyjson_val *included;
+        yyjson_arr_foreach(include,i,max,included) {
+            if(!eq(included,"reasoning.encrypted_content")){
+                *err="Unsupported include field: only reasoning.encrypted_content is accepted as a projection";return 0;
+            }
+        }
+        /* Chat Completions produces no reasoning output items. Accepting the
+         * optional projection does not synthesize or claim encrypted state. */
+    }
     yyjson_val *client_metadata=yyjson_obj_get(r->root,"client_metadata");
     if(client_metadata && !yyjson_is_obj(client_metadata) && !yyjson_is_null(client_metadata)) { *err="client_metadata must be an object or null";return 0; }
     r->stream=stream && yyjson_get_bool(stream);
