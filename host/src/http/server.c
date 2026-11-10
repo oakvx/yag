@@ -47,6 +47,24 @@ static int rate_permit(yag_config *c,int key_index) {
     pthread_mutex_unlock(&c->lock);
     return permit;
 }
+static void increment(yag_config *cfg,unsigned long *counter) {
+    pthread_mutex_lock(&cfg->lock);
+    (*counter)++;
+    pthread_mutex_unlock(&cfg->lock);
+}
+static void metrics(int fd,yag_config *cfg) {
+    char out[512];
+    pthread_mutex_lock(&cfg->lock);
+    int n=snprintf(out,sizeof out,
+        "{\"object\":\"gateway.metrics\",\"chat_requests\":%lu,"
+        "\"responses_requests\":%lu,\"anthropic_requests\":%lu,"
+        "\"model_list_requests\":%lu,\"provider_check_requests\":%lu}",
+        cfg->chat_requests,cfg->responses_requests,cfg->anthropic_requests,
+        cfg->model_list_requests,cfg->provider_check_requests);
+    pthread_mutex_unlock(&cfg->lock);
+    if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
+    else reply(fd,200,"application/json",out);
+}
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
     if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512) { error(fd,404,"Not found"); return; }
@@ -89,6 +107,7 @@ static void handle(int fd,yag_config *c) {
     if(key_index<0){error(fd,401,"Invalid API key");goto done;}
     if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
+    else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
         yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
         if(!d){error(fd,500,"Out of memory");goto done;}
@@ -106,15 +125,28 @@ static void handle(int fd,yag_config *c) {
         else error(fd,500,"Could not serialize routes");
         free(serialized);yyjson_mut_doc_free(d);
     }
-    else if(!strcmp(uri,"/api/provider/check") && !strcmp(method,"POST")) provider_check_handle(fd,c,body,length);
-    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) models_handle(fd,c);
+    else if(!strcmp(uri,"/api/provider/check") && !strcmp(method,"POST")) {
+        increment(c,&c->provider_check_requests);
+        provider_check_handle(fd,c,body,length);
+    }
+    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) {
+        increment(c,&c->model_list_requests);
+        models_handle(fd,c);
+    }
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
+        increment(c,&c->chat_requests);
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
         else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
-    } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) responses_handle(fd,c,body,length);
-    else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) anthropic_messages_handle(fd,c,body,length);
+    } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) {
+        increment(c,&c->responses_requests);
+        responses_handle(fd,c,body,length);
+    }
+    else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) {
+        increment(c,&c->anthropic_requests);
+        anthropic_messages_handle(fd,c,body,length);
+    }
     else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
     else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
     else error(fd,404,"Not found");
