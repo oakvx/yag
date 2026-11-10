@@ -72,7 +72,7 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
         YAG_BIND='127.0.0.1',
         YAG_PORT=str(port),
         YAG_UPSTREAM_URL=f'http://127.0.0.1:{backend.server_port}/v1',
-        YAG_TIMEOUT='10',
+        YAG_TIMEOUT='10',YAG_TRACE_ROUTES='1',
         NO_PROXY='127.0.0.1,localhost')
     for name in ('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy'):
         env.pop(name,None)
@@ -119,6 +119,8 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
     finally:
         host.terminate()
         host.wait(timeout=5)
+        output=host.stderr.read().decode(errors='replace')
+        print('Gateway route-only trace:',output[-4000:],flush=True)
         host.stderr.close()
         backend.shutdown()
         backend.server_close()
