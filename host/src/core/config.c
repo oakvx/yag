@@ -21,8 +21,8 @@ int config_load(yag_config *c) {
         for (;;) {
             char *comma=strchr(start, ',');
             if (comma) *comma=0;
-            if (!*start || strlen(start)<16 || strpbrk(start,"\\r\\n") || c->extra_key_count>=16) {
-                fprintf(stderr,"YAG_EXTRA_API_KEYS requires 1..16 comma-separated keys of at least 16 characters, without empty entries or newlines\\n");
+            if (!*start || strlen(start)<16 || strpbrk(start,"\r\n") || c->extra_key_count>=16) {
+                fprintf(stderr,"YAG_EXTRA_API_KEYS requires 1..16 comma-separated keys of at least 16 characters, without empty entries or newlines\n");
                 return -1;
             }
             c->extra_keys[c->extra_key_count++]=start;
