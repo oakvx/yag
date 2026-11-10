@@ -6,6 +6,7 @@ import './styles.css'
 
 type Page = 'Overview' | 'Playground' | 'Models' | 'Integrations' | 'Requests' | 'Settings'
 type Model = { id: string; owned_by?: string }
+type Route = { model: string }
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
@@ -24,18 +25,22 @@ function App() {
   const [keyDraft, setKeyDraft] = useState(key)
   const [status, setStatus] = useState<Status | null>(null)
   const [models, setModels] = useState<Model[]>([])
+  const [routes, setRoutes] = useState<Route[]>([])
+  const [routeError, setRouteError] = useState('')
   const [error, setError] = useState('')
   const [modelError, setModelError] = useState('')
   const [model, setModel] = useState('')
   const [mobile, setMobile] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const refresh = useCallback(async () => {
-    if (!key) { setStatus(null); setModels([]); setError(''); setModelError(''); return }
+    if (!key) { setStatus(null); setModels([]); setRoutes([]); setError(''); setModelError(''); setRouteError(''); return }
     try { const response = await api('/api/status', key); setStatus(await response.json()); setError(''); setLastUpdated(new Date()) } catch (e) { setStatus(null); setError((e as Error).message) }
     try { const response = await api('/v1/models', key); const data = await response.json(); if (!Array.isArray(data.data)) throw new Error('Backend returned an invalid model list'); setModels(data.data.filter((m: Model) => typeof m.id === 'string')); setModelError('') } catch (e) { setModels([]); setModelError((e as Error).message) }
+    try { const response = await api('/api/routes', key); const data = await response.json(); if (!Array.isArray(data.data)) throw new Error('Invalid route registry'); setRoutes(data.data.filter((route: Route) => typeof route.model === 'string')); setRouteError('') } catch (e) { setRoutes([]); setRouteError((e as Error).message) }
   }, [key])
   useEffect(() => { void refresh(); const timer = setInterval(() => void refresh(), 30000); return () => clearInterval(timer) }, [refresh])
-  useEffect(() => { if (models.length && !models.some(m => m.id === model)) setModel(models[0].id); if (!models.length) setModel('') }, [models, model])
+  const selectableModels: Model[] = [...models, ...routes.filter(r => !models.some(m => m.id === r.model)).map(r => ({ id: r.model, owned_by: 'Configured route' }))]
+  useEffect(() => { if (selectableModels.length && !selectableModels.some(m => m.id === model)) setModel(selectableModels[0].id); if (!selectableModels.length) setModel('') }, [models, routes, model])
   const saveKey = (event: React.FormEvent) => { event.preventDefault(); const trimmed = keyDraft.trim(); if (trimmed) sessionStorage.setItem('yag_key', trimmed); else sessionStorage.removeItem('yag_key'); setKey(trimmed) }
   const go = (p: Page) => { setPage(p); setMobile(false) }
   return <div className="app-shell">
@@ -50,8 +55,8 @@ function App() {
         {!key && <div className="notice"><LockKeyhole size={17}/><div><b>Connect to your gateway</b><span>Add your YAG API key to load host status and models. It stays in this browser session.</span></div><button onClick={() => go('Settings')}>Add API key <ArrowUpRight size={14}/></button></div>}
         {error && key && <div className="notice error"><CircleHelp size={17}/><div><b>Could not connect</b><span>{error}</span></div><button onClick={() => go('Settings')}>Check API key <ArrowUpRight size={14}/></button></div>}
         {page === 'Overview' && <Overview status={status} models={models} modelError={modelError} lastUpdated={lastUpdated} go={go} refresh={refresh}/>}
-        {page === 'Playground' && <Playground apiKey={key} models={models} model={model} setModel={setModel}/>}
-        {page === 'Models' && <Models models={models} modelError={modelError} refresh={refresh} go={go}/>}
+        {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
+        {page === 'Models' && <Models models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
         {page === 'Requests' && <Requests/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
@@ -69,7 +74,7 @@ function Overview({status, models, modelError, lastUpdated, go, refresh}: {statu
     <div className="section-heading lower"><div><span className="section-number">02</span><h2>System resources</h2></div><span className="updated">HOST METRICS</span></div><div className="resource-line"><Cpu size={17}/><div><b>Resource metrics not available</b><span>CPU, memory and GPU monitoring are not supported in this version.</span></div><span className="tag">NOT REPORTED</span></div>
   </>
 }
-function Models({models,modelError,refresh,go}: {models: Model[]; modelError: string; refresh: () => Promise<void>; go: (p: Page) => void}) { return <><PageHead eyebrow="INFERENCE" title="Models" description="Model identifiers discovered from the configured upstream backend." action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/><section className="panel"><div className="panel-head"><div><h2>Model registry</h2><p>Live response from the upstream /models endpoint.</p></div><span className="tag">{models.length} LISTED</span></div><div className="table-head"><span>MODEL ID</span><span>PROVIDER</span><span>STATUS</span></div>{models.length ? models.map(m => <div className="model-row" key={m.id}><span className="model-name"><span className="model-icon"><Box size={15}/></span>{m.id}</span><span className="secondary">{m.owned_by || 'Not reported'}</span><span className="model-status"><span className="status-dot on"/> Listed</span></div>) : <div className="empty-table"><Box size={20}/><b>No models to display</b><span>{modelError || 'Add an API key and configure an inference backend.'}</span><button className="text-link" onClick={() => go('Settings')}>Connection settings <ArrowUpRight size={14}/></button></div>}</section><div className="info-block"><CircleHelp size={16}/><span>Provider configuration is managed on the host through environment variables. Model capabilities and per-model health checks are not yet available.</span></div></> }
+function Models({models,routes,routeError,modelError,refresh,go}: {models: Model[]; routes: Route[]; routeError: string; modelError: string; refresh: () => Promise<void>; go: (p: Page) => void}) { return <><PageHead eyebrow="INFERENCE" title="Models" description="Model identifiers discovered from the configured upstream backend." action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/><section className="panel"><div className="panel-head"><div><h2>Model registry</h2><p>Live response from the upstream /models endpoint.</p></div><span className="tag">{models.length} LISTED</span></div><div className="table-head"><span>MODEL ID</span><span>PROVIDER</span><span>STATUS</span></div>{models.length ? models.map(m => <div className="model-row" key={m.id}><span className="model-name"><span className="model-icon"><Box size={15}/></span>{m.id}</span><span className="secondary">{m.owned_by || 'Not reported'}</span><span className="model-status"><span className="status-dot on"/> Listed</span></div>) : <div className="empty-table"><Box size={20}/><b>No models to display</b><span>{modelError || 'Add an API key and configure an inference backend.'}</span><button className="text-link" onClick={() => go('Settings')}>Connection settings <ArrowUpRight size={14}/></button></div>}</section><section className="panel"><div className="panel-head"><div><h2>Configured routes</h2><p>Model IDs mapped to separate backends. These are configuration entries, not health checks.</p></div><span className="tag">{routes.length} CONFIGURED</span></div><div className="table-head"><span>MODEL ID</span><span>TYPE</span><span>STATUS</span></div>{routes.length ? routes.map(r => <div className="model-row" key={r.model}><span className="model-name"><span className="model-icon"><Layers3 size={15}/></span>{r.model}</span><span className="secondary">Model route</span><span className="tag">CONFIGURED</span></div>) : <div className="empty-table"><Layers3 size={20}/><b>No configured routes</b><span>{routeError || 'Define YAG_MODEL_ROUTES on the Host to add routed models.'}</span></div>}</section><div className="info-block"><CircleHelp size={16}/><span>Provider configuration is managed on the host through environment variables. Model capabilities and per-model health checks are not yet available.</span></div></> }
 function Playground({apiKey,models,model,setModel}: {apiKey: string; models: Model[]; model: string; setModel: (m: string) => void}) {
   const [messages,setMessages] = useState<Message[]>([]), [input,setInput] = useState(''), [busy,setBusy] = useState(false), [err,setErr] = useState(''), [temperature,setTemperature] = useState('0.7')
   const controller = useRef<AbortController | null>(null)
