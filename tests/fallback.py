@@ -72,7 +72,7 @@ class Fallback(unittest.TestCase):
         payload={'model':'response-echo','messages':[{'role':'user','content':'hello'}]}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload)
         self.assertEqual(status,200,body)
-        self.assertEqual(json.loads(body)['request'],payload)
+        self.assertEqual(json.loads(json.loads(body)['choices'][0]['message']['content']),payload)
 
     def test_responses_fallback_after_connect_refused(self):
         status,_,body=request(self.port,'POST','/v1/responses',
