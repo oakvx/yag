@@ -132,7 +132,25 @@ int responses_parse(const char *body,size_t len,response_request *r,const char *
     v=yyjson_obj_get(r->root,"parallel_tool_calls");if(v && (!yyjson_is_bool(v) || !copy(d,chat,"parallel_tool_calls",v))){*err="parallel_tool_calls must be boolean";goto done;}
     v=yyjson_obj_get(r->root,"max_output_tokens");if(v && (!yyjson_is_int(v) || yyjson_get_sint(v)<=0 || !copy(d,chat,"max_tokens",v))){*err="max_output_tokens must be a positive integer";goto done;}
     const char *numbers[]={"temperature","top_p",NULL}; for(int i=0;numbers[i];i++){v=yyjson_obj_get(r->root,numbers[i]);if(v && (!yyjson_is_num(v) || !copy(d,chat,numbers[i],v))){*err="Invalid generation parameter";goto done;}}
-    v=yyjson_obj_get(r->root,"reasoning"); if(v && !yyjson_is_null(v)){ const char *const a[]={"effort",NULL}; yyjson_val *eff=yyjson_obj_get(v,"effort"); if(!keys(v,a) || (eff && !yyjson_is_null(eff) && !(eq(eff,"none") || eq(eff,"minimal") || eq(eff,"low") || eq(eff,"medium") || eq(eff,"high") || eq(eff,"xhigh") || eq(eff,"max")))){*err="Only reasoning.effort is supported";goto done;} if(eff && !yyjson_is_null(eff) && !copy(d,chat,"reasoning_effort",eff))goto done; }
+    v=yyjson_obj_get(r->root,"reasoning");
+    if(v && !yyjson_is_null(v)) {
+        const char *const allowed[]={"effort","summary","generate_summary",NULL};
+        yyjson_val *eff=yyjson_obj_get(v,"effort");
+        yyjson_val *summary=yyjson_obj_get(v,"summary");
+        yyjson_val *legacy=yyjson_obj_get(v,"generate_summary");
+        if(!keys(v,allowed) || (eff && !yyjson_is_null(eff)
+            && !(eq(eff,"none") || eq(eff,"minimal") || eq(eff,"low")
+                || eq(eff,"medium") || eq(eff,"high") || eq(eff,"xhigh") || eq(eff,"max")))
+            || (summary && !yyjson_is_null(summary)
+                && !(eq(summary,"auto") || eq(summary,"concise") || eq(summary,"detailed")))
+            || (legacy && !yyjson_is_null(legacy)
+                && !(eq(legacy,"auto") || eq(legacy,"concise") || eq(legacy,"detailed")))) {
+            *err="Invalid reasoning effort or summary selector";goto done;
+        }
+        /* A Chat upstream cannot supply Responses reasoning summaries.
+         * These selectors only request an optional projection; never invent it. */
+        if(eff && !yyjson_is_null(eff) && !copy(d,chat,"reasoning_effort",eff))goto done;
+    }
     v=yyjson_obj_get(r->root,"prompt_cache_key"); if(v && !yyjson_is_null(v) && (!isstr(v) || !copy(d,chat,"prompt_cache_key",v))){*err="Invalid prompt_cache_key";goto done;}
     v=yyjson_obj_get(r->root,"text"); if(v && !yyjson_is_null(v)){
         const char *const a[]={"format","verbosity",NULL}; yyjson_val *f=yyjson_obj_get(v,"format"),*verbosity=yyjson_obj_get(v,"verbosity");

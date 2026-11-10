@@ -53,7 +53,7 @@ class Responses(unittest.TestCase):
         status,_,data=self.post({'model':'bad','input':'x','stream':True});self.assertEqual(status,429);self.assertEqual(json.loads(data)['error']['message'],'backend limit')
     def test_response_errors(self):
         self.assertEqual(self.post({'model':'bad','input':'x'})[0],429)
-        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['web_search_call.action.sources']}, {'model':'x','input':'a','client_metadata':'invalid'}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'auto'}} ]:
+        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['web_search_call.action.sources']}, {'model':'x','input':'a','client_metadata':'invalid'}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'invalid'}} ]:
             status,_,data=self.post(payload);self.assertEqual(status,400,(payload,data));self.assertIn('error',json.loads(data))
         self.assertEqual(request(self.port,'POST','/v1/responses','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{'model':'x','input':'x'},key=None)[0],401)
@@ -66,6 +66,19 @@ class Responses(unittest.TestCase):
         status,_,data=self.post({'model':'response-echo','input':'x','include':['web_search_call.action.sources']})
         self.assertEqual(status,400,data)
         self.assertIn('include',json.loads(data)['error']['message'])
+    def test_optional_reasoning_summary_selector_does_not_fabricate_content(self):
+        status,_,body=self.post({'model':'response-echo','input':'hello',
+                                'reasoning':{'effort':'medium','summary':'auto'}})
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertTrue(all(item['type']!='reasoning' for item in response['output']))
+        translated=json.loads(response['output'][0]['content'][0]['text'])
+        self.assertEqual(translated['reasoning_effort'],'medium')
+        self.assertNotIn('summary',translated)
+        status,_,body=self.post({'model':'response-echo','input':'hello',
+                                'reasoning':{'generate_summary':'concise'}})
+        self.assertEqual(status,200,body)
+
     def test_client_metadata_is_not_forwarded(self):
         status,_,data=self.post({'model':'response-echo','input':'hello','client_metadata':{'client':'codex','trace':'test'}})
         self.assertEqual(status,200,data)
