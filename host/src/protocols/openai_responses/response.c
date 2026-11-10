@@ -35,14 +35,44 @@ static int identifier(state *s) {
 static yyjson_mut_val *part(yyjson_mut_doc *d,const char *text) {
     yyjson_mut_val *p=yyjson_mut_obj(d); yyjson_mut_obj_add_str(d,p,"type","output_text");yyjson_mut_obj_add_strcpy(d,p,"text",text);yyjson_mut_obj_add_arr(d,p,"annotations"); return p;
 }
-static yyjson_mut_val *item_json(yyjson_mut_doc *d,item *it,int complete,int incomplete) {
+/* Reverse only names that appear in an explicitly declared namespace.
+ * An ordinary function containing "__" must keep its original name. */
+static const char *visible_name(state *s,const char *flat,const char **namespace) {
+    *namespace=NULL;
+    yyjson_val *tools=yyjson_obj_get(s->request->root,"tools");
+    if(!yyjson_is_arr(tools))return flat;
+    size_t i,n;yyjson_val *tool;
+    yyjson_arr_foreach(tools,i,n,tool) {
+        if(!yyjson_equals_str(yyjson_obj_get(tool,"type"),"namespace"))continue;
+        yyjson_val *ns=yyjson_obj_get(tool,"name"),*members=yyjson_obj_get(tool,"tools");
+        if(!yyjson_is_str(ns) || !yyjson_is_arr(members))continue;
+        size_t j,count;yyjson_val *member;
+        yyjson_arr_foreach(members,j,count,member) {
+            yyjson_val *name=yyjson_obj_get(member,"name");
+            if(!yyjson_is_str(name))continue;
+            char combined[128];
+            int length=snprintf(combined,sizeof combined,"%s__%s",
+                yyjson_get_str(ns),yyjson_get_str(name));
+            if(length>0 && (size_t)length<sizeof combined && !strcmp(flat,combined)) {
+                *namespace=yyjson_get_str(ns);
+                return yyjson_get_str(name);
+            }
+        }
+    }
+    return flat;
+}
+static yyjson_mut_val *item_json(yyjson_mut_doc *d,state *s,item *it,int complete,int incomplete) {
     yyjson_mut_val *o=yyjson_mut_obj(d); yyjson_mut_obj_add_strcpy(d,o,"id",it->id);
     yyjson_mut_obj_add_str(d,o,"status",!complete?"in_progress":incomplete?"incomplete":"completed");
     if(it->kind==1) {
         yyjson_mut_obj_add_str(d,o,"type","message"); yyjson_mut_obj_add_str(d,o,"role","assistant");
         yyjson_mut_val *content=yyjson_mut_obj_add_arr(d,o,"content"); if(complete)yyjson_mut_arr_add_val(content,part(d,str(&it->value)));
     } else {
-        yyjson_mut_obj_add_str(d,o,"type","function_call"); yyjson_mut_obj_add_strcpy(d,o,"call_id",str(&it->call)); yyjson_mut_obj_add_strcpy(d,o,"name",str(&it->name)); yyjson_mut_obj_add_strcpy(d,o,"arguments",complete?str(&it->value):"");
+        const char *ns=NULL,*name=visible_name(s,str(&it->name),&ns);
+        yyjson_mut_obj_add_str(d,o,"type","function_call"); yyjson_mut_obj_add_strcpy(d,o,"call_id",str(&it->call));
+        yyjson_mut_obj_add_strcpy(d,o,"name",name);
+        if(ns)yyjson_mut_obj_add_strcpy(d,o,"namespace",ns);
+        yyjson_mut_obj_add_strcpy(d,o,"arguments",complete?str(&it->value):"");
     }
     return o;
 }
@@ -50,7 +80,7 @@ static yyjson_mut_val *response_json(yyjson_mut_doc *d,state *s,int final) {
     yyjson_mut_val *o=yyjson_mut_obj(d); yyjson_mut_obj_add_strcpy(d,o,"id",s->response_id); yyjson_mut_obj_add_str(d,o,"object","response"); yyjson_mut_obj_add_sint(d,o,"created_at",s->created);
     yyjson_mut_obj_add_str(d,o,"status",!final?"in_progress":s->finish==2 || s->finish==3?"incomplete":"completed");
     yyjson_mut_obj_add_val(d,o,"model",yyjson_val_mut_copy(d,yyjson_obj_get(s->request->root,"model")));
-    yyjson_mut_val *out=yyjson_mut_obj_add_arr(d,o,"output"); if(final)for(size_t i=0;i<s->count;i++) yyjson_mut_arr_add_val(out,item_json(d,&s->items[i],1,s->finish==2 || s->finish==3));
+    yyjson_mut_val *out=yyjson_mut_obj_add_arr(d,o,"output"); if(final)for(size_t i=0;i<s->count;i++) yyjson_mut_arr_add_val(out,item_json(d,s,&s->items[i],1,s->finish==2 || s->finish==3));
     yyjson_mut_obj_add_null(d,o,"error");
     if(final && (s->finish==2 || s->finish==3)) { yyjson_mut_val *detail=yyjson_mut_obj_add_obj(d,o,"incomplete_details"); yyjson_mut_obj_add_str(d,detail,"reason",s->finish==2?"max_output_tokens":"content_filter"); } else yyjson_mut_obj_add_null(d,o,"incomplete_details");
     if(final && s->has_usage) { yyjson_mut_val *u=yyjson_mut_obj_add_obj(d,o,"usage"); yyjson_mut_obj_add_sint(d,u,"input_tokens",s->input_tokens);yyjson_mut_obj_add_sint(d,u,"output_tokens",s->output_tokens);yyjson_mut_obj_add_sint(d,u,"total_tokens",s->total_tokens); }
@@ -66,13 +96,17 @@ static int event_send(state *s,const char *type,yyjson_mut_doc *d,yyjson_mut_val
     int ok=!send_all(s->fd,"event: ",7) && !send_all(s->fd,type,strlen(type)) && !send_all(s->fd,"\ndata: ",7) && !send_all(s->fd,json,strlen(json)) && !send_all(s->fd,"\n\n",2);free(json);return ok;
 }
 static int response_event(state *s,const char *type,int final) { yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);if(!d)return 0; yyjson_mut_val *e=yyjson_mut_obj(d);yyjson_mut_obj_add_val(d,e,"response",response_json(d,s,final));return event_send(s,type,d,e); }
-static int item_event(state *s,const char *type,size_t idx,int complete) { yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);if(!d)return 0;yyjson_mut_val *e=yyjson_mut_obj(d);yyjson_mut_obj_add_uint(d,e,"output_index",idx);yyjson_mut_obj_add_val(d,e,"item",item_json(d,&s->items[idx],complete,s->finish==2 || s->finish==3));return event_send(s,type,d,e); }
+static int item_event(state *s,const char *type,size_t idx,int complete) { yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);if(!d)return 0;yyjson_mut_val *e=yyjson_mut_obj(d);yyjson_mut_obj_add_uint(d,e,"output_index",idx);yyjson_mut_obj_add_val(d,e,"item",item_json(d,s,&s->items[idx],complete,s->finish==2 || s->finish==3));return event_send(s,type,d,e); }
 static int content_event(state *s,const char *type,size_t idx,const char *field,const char *value) {
     yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);if(!d)return 0;yyjson_mut_val *e=yyjson_mut_obj(d);yyjson_mut_obj_add_strcpy(d,e,"item_id",s->items[idx].id);yyjson_mut_obj_add_uint(d,e,"output_index",idx);
     if(s->items[idx].kind==1)yyjson_mut_obj_add_int(d,e,"content_index",0);
     if(!strcmp(field,"part"))yyjson_mut_obj_add_val(d,e,"part",part(d,value));else yyjson_mut_obj_add_strcpy(d,e,field,value);
     if(!strcmp(type,"response.output_text.delta") || !strcmp(type,"response.output_text.done"))yyjson_mut_obj_add_arr(d,e,"logprobs");
-    if(!strcmp(type,"response.function_call_arguments.done"))yyjson_mut_obj_add_strcpy(d,e,"name",str(&s->items[idx].name));
+    if(!strcmp(type,"response.function_call_arguments.done")) {
+        const char *ns=NULL;
+        const char *name=visible_name(s,str(&s->items[idx].name),&ns);
+        yyjson_mut_obj_add_strcpy(d,e,"name",name);
+    }
     return event_send(s,type,d,e);
 }
 static int begin(state *s) { return s->seq || !s->streaming || (response_event(s,"response.created",0) && response_event(s,"response.in_progress",0)); }
