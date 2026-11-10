@@ -67,6 +67,20 @@ class Backend(BaseHTTPRequestHandler):
             return self.send(200, b'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":"{}"}}]}}]}\n\ndata: [DONE]\n\n', 'text/event-stream')
         self.send(200, {'object':'chat.completion','request':data,'choices':[{'message':{'role':'assistant','content':None,'tool_calls':[{'id':'call_1','type':'function','function':{'name':'read','arguments':'{}'}}]},'finish_reason':'tool_calls'}]})
 
+class RoutedBackend(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+    def log_message(self, *_): pass
+    def do_POST(self):
+        content=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        is_auth=self.headers.get('Authorization')=='Bearer route-secret'
+        payload={'routed':True,'received':content,'choices':[{'message':{'role':'assistant','content':'routed response'},'finish_reason':'stop'}]}
+        encoded=json.dumps(payload if is_auth else {'error':{'message':'bad route secret'}}).encode()
+        self.send_response(200 if is_auth else 401)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
 def request(port, method, path, body=None, key=KEY, headers=None):
     c=http.client.HTTPConnection('127.0.0.1',port,timeout=6)
     h=dict(headers or {})
@@ -79,13 +93,15 @@ class Integration(unittest.TestCase):
     def setUpClass(cls):
         cls.backend=MockServer(('127.0.0.1',0),Backend)
         threading.Thread(target=cls.backend.serve_forever,daemon=True).start()
+        cls.route_backend=MockServer(('127.0.0.1',0),RoutedBackend)
+        threading.Thread(target=cls.route_backend.serve_forever,daemon=True).start()
         sock=socket.socket();sock.bind(('127.0.0.1',0));cls.port=sock.getsockname()[1];sock.close()
         cls.tmp=tempfile.TemporaryDirectory()
         with open(os.path.join(cls.tmp.name,'index.html'),'w') as f: f.write('console works')
         built_console=os.path.join(os.path.dirname(os.path.dirname(__file__)),'console','dist')
         cls.has_console=os.path.exists(os.path.join(built_console,'index.html'))
         assets=built_console if cls.has_console else cls.tmp.name
-        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_UPSTREAM_KEY=UPKEY,YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
+        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_EXTRA_API_KEYS='additional-key-for-testing',YAG_UPSTREAM_KEY=UPKEY,YAG_ROUTE_SECRET='route-secret',YAG_MODEL_ROUTES=json.dumps([{'model':'routed-model','url':f'http://127.0.0.1:{cls.route_backend.server_port}/v1','key_env':'YAG_ROUTE_SECRET'}]),YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([sys.argv[1]],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
         for _ in range(100):
             if cls.proc.poll() is not None: raise RuntimeError(cls.proc.stderr.read().decode())
@@ -95,7 +111,7 @@ class Integration(unittest.TestCase):
         else: raise RuntimeError('Host did not start')
     @classmethod
     def tearDownClass(cls):
-        cls.proc.terminate();cls.proc.wait(timeout=5);cls.proc.stderr.close();cls.backend.shutdown();cls.backend.server_close();cls.tmp.cleanup()
+        cls.proc.terminate();cls.proc.wait(timeout=5);cls.proc.stderr.close();cls.backend.shutdown();cls.backend.server_close();cls.route_backend.shutdown();cls.route_backend.server_close();cls.tmp.cleanup()
     def test_health_and_console(self):
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
         page=request(self.port,'GET','/',key=None)[2]
@@ -110,8 +126,24 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)
         status,_,body=request(self.port,'GET','/api/status');self.assertEqual(status,200);self.assertGreaterEqual(json.loads(body)['active_connections'],1)
+    def test_additional_api_key(self):
+        self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing')[0],200)
+        self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing-invalid')[0],401)
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
+    def test_route_inventory_does_not_leak_secrets(self):
+        status,_,data=request(self.port,'GET','/api/routes')
+        self.assertEqual(status,200,data)
+        self.assertEqual(json.loads(data)['data'],[{'model':'routed-model'}])
+        self.assertNotIn(b'route-secret',data)
+        self.assertEqual(request(self.port,'GET','/api/routes',key=None)[0],401)
+    def test_model_routes_to_separate_backend(self):
+        payload={'model':'routed-model','messages':[{'role':'user','content':'hello'}]}
+        status,_,data=request(self.port,'POST','/v1/chat/completions',payload)
+        self.assertEqual(status,200,data)
+        result=json.loads(data)
+        self.assertTrue(result['routed'])
+        self.assertEqual(result['received'],payload)
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload); self.assertEqual(status,200); obj=json.loads(body);self.assertEqual(obj['request'],payload);self.assertEqual(obj['choices'][0]['message']['tool_calls'][0]['id'],'call_1')
@@ -128,7 +160,7 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'POST','/v1/chat/completions','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/chat/completions',{'model':'x'})[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{})[0],400)
-        self.assertEqual(request(self.port,'POST','/v1/messages',{})[0],501)
+        self.assertEqual(request(self.port,'POST','/v1/messages',{})[0],400)
     def test_upstream_error_and_timeout(self):
         status,_,body=request(self.port,'POST','/v1/chat/completions',{'model':'bad','messages':[]});self.assertEqual(status,429);self.assertEqual(json.loads(body)['error']['message'],'backend limit')
         status,_,_=request(self.port,'POST','/v1/chat/completions',{'model':'slow','messages':[]});self.assertEqual(status,504)
@@ -149,6 +181,18 @@ class Integration(unittest.TestCase):
         s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
         self.assertIn(b'200',s.recv(1024)); s.close()
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
+    def test_chat_cancels_quiet_upstream(self):
+        s=socket.create_connection(('127.0.0.1',self.port))
+        body=b'{"model":"slow","messages":[]}'
+        s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
+        time.sleep(.1); s.close()
+        deadline=time.monotonic()+.85
+        count=None
+        while time.monotonic()<deadline:
+            count=json.loads(request(self.port,'GET','/api/status')[2])['active_connections']
+            if count==1: break
+            time.sleep(.05)
+        self.assertEqual(count,1,'Chat upstream transfer did not cancel after disconnect')
     def test_disconnect(self):
         s=socket.create_connection(('127.0.0.1',self.port));s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\n{');s.close();self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
 if __name__=='__main__':

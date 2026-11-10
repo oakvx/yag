@@ -19,6 +19,21 @@ print(result.choices[0].message.content)
 
 The Console's Integrations page generates a cURL example using the current browser origin and discovered model. Never put a real key into a committed example.
 
+## Anthropic Messages — text only
+
+YAG supports non-streaming text requests to \`POST /v1/messages\` with YAG's bearer authentication. This is **not** a drop-in replacement for the Anthropic SDK or Claude Code: it does not implement the native \`x-api-key\` header, streaming events, tool use, system content blocks, or token counting.
+
+For example, when a supported upstream model is running:
+
+\`\`\`sh
+curl http://127.0.0.1:8080/v1/messages \
+  -H "Authorization: Bearer $YAG_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"YOUR_MODEL_ID","max_tokens":128,"messages":[{"role":"user","content":"Hello"}]}'
+\`\`\`
+
+The backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
+
 ## Codex and Claude Code — not supported yet
 
-YAG implements a subset of Responses, but a real Codex CLI probe failed on unsupported request fields, so Codex is not yet compatible. See [Codex configuration and probe](codex.md). Claude Code expects the unimplemented Anthropic Messages API; `/v1/messages` and `/v1/messages/count_tokens` return 501. No Claude Code compatibility tests have been run.
+Codex still needs additional Responses features and verified tool cycles; see [Codex configuration and probe](codex.md). Claude Code requires Anthropic streaming and tool semantics that are not implemented in YAG. No Claude Code compatibility tests have been run.
