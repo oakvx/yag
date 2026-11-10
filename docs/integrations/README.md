@@ -32,7 +32,7 @@ curl http://127.0.0.1:8080/v1/messages \
   -d '{"model":"YOUR_MODEL_ID","max_tokens":128,"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
+Claude Code may authenticate with `ANTHROPIC_AUTH_TOKEN` (sent as `Authorization: Bearer`) or `ANTHROPIC_API_KEY` (`x-api-key`); both values must be YAG gateway keys. The non-streaming backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
 
 ## Codex and Claude Code — not supported yet
 
