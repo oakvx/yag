@@ -55,6 +55,8 @@ jobs:
         run: npm install --global @openai/codex@0.167.0
       - name: Probe a real Codex CLI against the deterministic mock
         run: python3 tests/codex_probe.py --host ./build/yag
+      - name: Probe a real Codex CLI shell tool cycle
+        run: python3 tests/codex_probe.py --host ./build/yag --tool-cycle
 
   claude-mock-probe:
     name: Claude Code CLI mock qualification (informational)
