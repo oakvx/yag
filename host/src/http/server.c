@@ -106,7 +106,9 @@ static void handle(int fd,yag_config *c) {
         else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) responses_handle(fd,c,body,length);
-    else if(!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Protocol adapter not implemented; use Chat Completions");
+    else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) anthropic_messages_handle(fd,c,body,length);
+    else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
+    else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
     else error(fd,404,"Not found");
 done: free(buf);
 }
