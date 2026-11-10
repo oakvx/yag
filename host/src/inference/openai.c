@@ -67,7 +67,7 @@ static size_t proxy_write(void *ctx,long status,const char *type,const char *dat
 }
 void upstream_request(int fd, const yag_config *c, const char *path, const char *body, size_t len) {
     transfer t={.fd=fd}; long status=0;
-    int res=upstream_perform(c,path,body,len,proxy_write,&t,&status,-1);
+    int res=upstream_perform(c,path,body,len,proxy_write,&t,&status,fd);
     if(res!=CURLE_OK && !t.sent) reply(fd,res==CURLE_OPERATION_TIMEDOUT?504:502,"application/json","{\"error\":{\"message\":\"Inference backend unavailable or timed out\",\"type\":\"upstream_error\"}}");
     else if(!t.sent) { t.status=status; start(&t); }
 }
