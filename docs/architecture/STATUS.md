@@ -28,7 +28,7 @@ Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB 
 
 ## Anthropic Messages (limited)
 
-The `POST /v1/messages` adapter accepts a non-streaming request with text-only messages, optional text system prompt, `max_tokens`, temperature, `top_p` and stop sequences. It requires complete upstream token counts, translates through Chat Completions, and returns a native Anthropic text Messages response. It does **not** support streaming, tool use, token counting, image inputs or Claude Code. Clients use YAG bearer authentication, not native Anthropic API authentication.
+The `POST /v1/messages` adapter accepts a non-streaming request with text-only messages, optional text system prompt, `max_tokens`, temperature, `top_p` and stop sequences. It requires complete upstream token counts, translates through Chat Completions, and returns a native Anthropic text Messages response. It accepts tool declarations and maps their JSON input schemas to Chat function tools, but does not yet translate tool calls/results. It does **not** support streaming, tool exchanges, token counting, image inputs or Claude Code. Clients use YAG bearer authentication, not native Anthropic API authentication.
 
 ## Not implemented
 

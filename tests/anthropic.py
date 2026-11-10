@@ -39,12 +39,22 @@ class Messages(unittest.TestCase):
         self.assertEqual(upstream['top_p'],0.8)
         self.assertEqual(upstream['stop'],['DONE'])
 
+    def test_tool_definitions_translate_to_chat_functions(self):
+        payload={'model':'response-echo','max_tokens':128,'messages':[{'role':'user','content':'test'}],
+                 'tools':[{'name':'read_file','description':'Read a file',
+                           'input_schema':{'type':'object','properties':{'path':{'type':'string'}},'required':['path']}}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        request=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertEqual(request['tools'],[{'type':'function','function':{
+            'name':'read_file','description':'Read a file','parameters':payload['tools'][0]['input_schema']}}])
+
     def test_errors_are_not_misrepresented(self):
         basic={'model':'response-echo','max_tokens':15,'messages':[{'role':'user','content':'hi'}]}
         for payload in [
             {'model':'response-echo','messages':[{'role':'user','content':'hi'}]},
             dict(basic,stream=True),
-            dict(basic,tools=[{'name':'read','input_schema':{'type':'object'}}]),
+            dict(basic,tools=[{'name':'read'}]),
             dict(basic,messages=[{'role':'user','content':[{'type':'tool_result','tool_use_id':'id','content':'x'}]}]),
             dict(basic,max_tokens=0),
         ]:
