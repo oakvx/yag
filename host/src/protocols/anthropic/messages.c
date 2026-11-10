@@ -88,26 +88,86 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
     }
     return yyjson_mut_obj_add_val(doc,message,"content",parts);
 }
-/* Result-only user messages become Chat role=tool messages. Mixed text/result
- * arrays are rejected because flattening them would reorder conversation turns. */
+/* Anthropic tool results must precede optional trailing user text. Preserve
+ * their order as Chat tool messages, followed by a normal user message. */
+static char *tool_result_text(yyjson_val *value) {
+    if(!value)return strdup("");
+    if(string_value(value))return strdup(yyjson_get_str(value));
+    if(!yyjson_is_arr(value))return NULL;
+    size_t total=0;const char *const keys[]={"type","text",NULL};
+    size_t i,n;yyjson_val *block;
+    yyjson_arr_foreach(value,i,n,block) {
+        yyjson_val *text=yyjson_obj_get(block,"text");
+        if(!permitted(block,keys)
+            || !yyjson_equals_str(yyjson_obj_get(block,"type"),"text")
+            || !string_value(text))return NULL;
+        if(yyjson_get_len(text)>1024*1024-total)return NULL;
+        total+=yyjson_get_len(text);
+        if(i && ++total>1024*1024)return NULL;
+    }
+    char *joined=malloc(total+1);if(!joined)return NULL;
+    size_t pos=0;
+    yyjson_arr_foreach(value,i,n,block) {
+        yyjson_val *text=yyjson_obj_get(block,"text");
+        if(i)joined[pos++]='\n';
+        size_t length=yyjson_get_len(text);
+        memcpy(joined+pos,yyjson_get_str(text),length);pos+=length;
+    }
+    joined[pos]=0;
+    return joined;
+}
 static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val *content) {
     if(!yyjson_is_arr(content) || !yyjson_arr_size(content))return 1;
     yyjson_val *first=yyjson_arr_get(content,0);
     if(!yyjson_equals_str(yyjson_obj_get(first,"type"),"tool_result"))return 1;
     const char *const allowed[]={"type","tool_use_id","content","is_error",NULL};
+    const char *const text_fields[]={"type","text",NULL};
+    yyjson_mut_val *user_parts=yyjson_mut_arr(d);
+    if(!user_parts)return 0;
+    int seen_text=0;
     size_t i,n;yyjson_val *item;
     yyjson_arr_foreach(content,i,n,item) {
+        yyjson_val *type=yyjson_obj_get(item,"type");
+        if(yyjson_equals_str(type,"text")) {
+            yyjson_val *text=yyjson_obj_get(item,"text");
+            if(!permitted(item,text_fields) || !string_value(text))return 0;
+            seen_text=1;
+            yyjson_mut_val *part=yyjson_mut_obj(d);
+            if(!part || !yyjson_mut_obj_add_str(d,part,"type","text")
+                || !yyjson_mut_obj_add_val(d,part,"text",yyjson_val_mut_copy(d,text))
+                || !yyjson_mut_arr_add_val(user_parts,part))return 0;
+            continue;
+        }
+        if(seen_text || !yyjson_equals_str(type,"tool_result"))return 0;
         yyjson_val *id=yyjson_obj_get(item,"tool_use_id");
-        yyjson_val *result=yyjson_obj_get(item,"content");
+        yyjson_val *value=yyjson_obj_get(item,"content");
         yyjson_val *is_error=yyjson_obj_get(item,"is_error");
-        if(!permitted(item,allowed) || !yyjson_equals_str(yyjson_obj_get(item,"type"),"tool_result")
-            || !string_value(id) || !yyjson_get_len(id) || !string_value(result)
-            || (is_error && (!yyjson_is_bool(is_error) || yyjson_get_bool(is_error))))return 0;
+        if(!permitted(item,allowed) || !string_value(id) || !yyjson_get_len(id)
+            || (is_error && !yyjson_is_bool(is_error)))return 0;
+        char *text=tool_result_text(value);
+        if(!text)return 0;
+        if(is_error && yyjson_get_bool(is_error)) {
+            const char *prefix="[Tool execution error]\n";
+            size_t p=strlen(prefix),length=strlen(text);
+            char *marked=malloc(p+length+1);
+            if(!marked){free(text);return 0;}
+            memcpy(marked,prefix,p);
+            memcpy(marked+p,text,length+1);
+            free(text);text=marked;
+        }
         yyjson_mut_val *message=yyjson_mut_obj(d);
-        if(!message || !yyjson_mut_obj_add_str(d,message,"role","tool")
-            || !yyjson_mut_obj_add_val(d,message,"tool_call_id",yyjson_val_mut_copy(d,id))
-            || !yyjson_mut_obj_add_val(d,message,"content",yyjson_val_mut_copy(d,result))
-            || !yyjson_mut_arr_add_val(messages,message))return 0;
+        int ok=message && yyjson_mut_obj_add_str(d,message,"role","tool")
+            && yyjson_mut_obj_add_val(d,message,"tool_call_id",yyjson_val_mut_copy(d,id))
+            && yyjson_mut_obj_add_strcpy(d,message,"content",text)
+            && yyjson_mut_arr_add_val(messages,message);
+        free(text);
+        if(!ok)return 0;
+    }
+    if(yyjson_mut_arr_size(user_parts)) {
+        yyjson_mut_val *user=yyjson_mut_obj(d);
+        if(!user || !yyjson_mut_obj_add_str(d,user,"role","user")
+            || !yyjson_mut_obj_add_val(d,user,"content",user_parts)
+            || !yyjson_mut_arr_add_val(messages,user))return 0;
     }
     return 2;
 }
