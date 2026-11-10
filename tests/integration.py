@@ -151,6 +151,16 @@ class Integration(unittest.TestCase):
         result=json.loads(data)
         self.assertTrue(result['routed'])
         self.assertEqual(result['received'],payload)
+    def test_aggregate_model_list_includes_static_routes(self):
+        status,_,body=request(self.port,'GET','/v1/models')
+        self.assertEqual(status,200,body)
+        models={item['id']:item for item in json.loads(body)['data']}
+        self.assertIn('glm-test',models)
+        self.assertEqual(models['glm-test']['owned_by'],'local')
+        self.assertIn('routed-model',models)
+        self.assertEqual(models['routed-model']['owned_by'],'yag-configured-route')
+        self.assertNotIn('route-secret',body.decode())
+
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload); self.assertEqual(status,200); obj=json.loads(body);self.assertEqual(obj['request'],payload);self.assertEqual(obj['choices'][0]['message']['tool_calls'][0]['id'],'call_1')

@@ -99,7 +99,7 @@ static void handle(int fd,yag_config *c) {
         else error(fd,500,"Could not serialize routes");
         free(serialized);yyjson_mut_doc_free(d);
     }
-    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0,NULL);
+    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) models_handle(fd,c);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
