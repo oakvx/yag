@@ -140,14 +140,17 @@ static void convert_response(int fd,yyjson_val *root,yyjson_val *model) {
     yyjson_val *choices=yyjson_obj_get(root,"choices"),*usage=yyjson_obj_get(root,"usage");
     yyjson_val *choice=yyjson_arr_get(choices,0),*message=yyjson_obj_get(choice,"message");
     yyjson_val *content=yyjson_obj_get(message,"content"),*finish=yyjson_obj_get(choice,"finish_reason");
+    yyjson_val *calls=yyjson_obj_get(message,"tool_calls");
+    int has_calls=yyjson_is_arr(calls) && yyjson_arr_size(calls)>0;
     yyjson_val *input_tokens=yyjson_obj_get(usage,"prompt_tokens"),*output_tokens=yyjson_obj_get(usage,"completion_tokens");
     if(!yyjson_is_arr(choices) || yyjson_arr_size(choices)!=1
         || !yyjson_equals_str(yyjson_obj_get(message,"role"),"assistant")
-        || !string_value(content)
-        || (!yyjson_equals_str(finish,"stop") && !yyjson_equals_str(finish,"length"))
+        || (!string_value(content) && !(has_calls && yyjson_is_null(content)))
+        || (has_calls ? !yyjson_equals_str(finish,"tool_calls")
+            : (!yyjson_equals_str(finish,"stop") && !yyjson_equals_str(finish,"length")))
+        || (calls && !yyjson_is_null(calls) && !has_calls)
         || !yyjson_is_int(input_tokens) || yyjson_get_sint(input_tokens)<0
-        || !yyjson_is_int(output_tokens) || yyjson_get_sint(output_tokens)<0
-        || (yyjson_obj_get(message,"tool_calls") && !yyjson_is_null(yyjson_obj_get(message,"tool_calls")))) {
+        || !yyjson_is_int(output_tokens) || yyjson_get_sint(output_tokens)<0) {
         anthropic_error(fd,502);return;
     }
     unsigned char entropy[16];
@@ -166,11 +169,42 @@ static void convert_response(int fd,yyjson_val *root,yyjson_val *model) {
     yyjson_mut_obj_add_str(doc,result,"role","assistant");
     yyjson_mut_obj_add_val(doc,result,"model",yyjson_val_mut_copy(doc,model));
     yyjson_mut_val *blocks=yyjson_mut_obj_add_arr(doc,result,"content");
-    yyjson_mut_val *block=yyjson_mut_obj(doc);
-    yyjson_mut_obj_add_str(doc,block,"type","text");
-    yyjson_mut_obj_add_val(doc,block,"text",yyjson_val_mut_copy(doc,content));
-    yyjson_mut_arr_add_val(blocks,block);
-    yyjson_mut_obj_add_str(doc,result,"stop_reason",yyjson_equals_str(finish,"length")?"max_tokens":"end_turn");
+    if(string_value(content) && yyjson_get_len(content)) {
+        yyjson_mut_val *block=yyjson_mut_obj(doc);
+        if(!block || !yyjson_mut_obj_add_str(doc,block,"type","text")
+            || !yyjson_mut_obj_add_val(doc,block,"text",yyjson_val_mut_copy(doc,content))
+            || !yyjson_mut_arr_add_val(blocks,block)) {
+            yyjson_mut_doc_free(doc);anthropic_error(fd,502);return;
+        }
+    }
+    if(has_calls) {
+        size_t i,n;yyjson_val *call;
+        yyjson_arr_foreach(calls,i,n,call) {
+            yyjson_val *id=yyjson_obj_get(call,"id"),*fn=yyjson_obj_get(call,"function");
+            yyjson_val *name=yyjson_obj_get(fn,"name"),*arguments=yyjson_obj_get(fn,"arguments");
+            if(!yyjson_equals_str(yyjson_obj_get(call,"type"),"function")
+                || !string_value(id) || !yyjson_get_len(id)
+                || !string_value(name) || !yyjson_get_len(name)
+                || !string_value(arguments)) {
+                yyjson_mut_doc_free(doc);anthropic_error(fd,502);return;
+            }
+            yyjson_doc *parsed=yyjson_read(yyjson_get_str(arguments),yyjson_get_len(arguments),0);
+            yyjson_val *input=parsed?yyjson_doc_get_root(parsed):NULL;
+            if(!yyjson_is_obj(input)) {
+                yyjson_doc_free(parsed);yyjson_mut_doc_free(doc);anthropic_error(fd,502);return;
+            }
+            yyjson_mut_val *block=yyjson_mut_obj(doc);
+            int valid=block && yyjson_mut_obj_add_str(doc,block,"type","tool_use")
+                && yyjson_mut_obj_add_val(doc,block,"id",yyjson_val_mut_copy(doc,id))
+                && yyjson_mut_obj_add_val(doc,block,"name",yyjson_val_mut_copy(doc,name))
+                && yyjson_mut_obj_add_val(doc,block,"input",yyjson_val_mut_copy(doc,input))
+                && yyjson_mut_arr_add_val(blocks,block);
+            yyjson_doc_free(parsed);
+            if(!valid){yyjson_mut_doc_free(doc);anthropic_error(fd,502);return;}
+        }
+    }
+    yyjson_mut_obj_add_str(doc,result,"stop_reason",has_calls?"tool_use":
+        yyjson_equals_str(finish,"length")?"max_tokens":"end_turn");
     yyjson_mut_obj_add_null(doc,result,"stop_sequence");
     yyjson_mut_val *usage_result=yyjson_mut_obj_add_obj(doc,result,"usage");
     yyjson_mut_obj_add_sint(doc,usage_result,"input_tokens",yyjson_get_sint(input_tokens));

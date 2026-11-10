@@ -35,6 +35,13 @@ class Backend(BaseHTTPRequestHandler):
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if data['model']=='slow': time.sleep(2); return self.send(200, {})
         if data['model']=='bad': return self.send(429, {'error':{'message':'backend limit'}})
+        if data['model']=='anthropic-tools':
+            return self.send(200, {'object':'chat.completion','choices':[{'message':{
+                'role':'assistant','content':'I need the file',
+                'tool_calls':[{'id':'call_read','type':'function',
+                    'function':{'name':'read_file','arguments':'{"path":"src/main.c"}'}}]
+                },'finish_reason':'tool_calls'}],
+                'usage':{'prompt_tokens':15,'completion_tokens':7,'total_tokens':22}})
         if data['model']=='response-echo':
             return self.send(200, {'object':'chat.completion','choices':[{'message':{'role':'assistant','content':json.dumps(data)},'finish_reason':'stop'}], 'usage': {'prompt_tokens':10,'completion_tokens':3,'total_tokens':13}})
         if data['model']=='response-tools':
