@@ -196,7 +196,24 @@ int responses_parse(const char *body,size_t len,response_request *r,const char *
     if(!copy(d,chat,"model",model) || !yyjson_mut_obj_add_bool(d,chat,"stream",r->stream))goto done;
     if(inst && !yyjson_is_null(inst) && !add_message(d,messages,"system",inst))goto done;
     if(!translate_input(d,messages,input) || !yyjson_mut_obj_add_val(d,chat,"messages",messages)) { *err="Unsupported input item or content; only text messages and function calls/results are supported";goto done; }
-    yyjson_val *v=yyjson_obj_get(r->root,"tools"); if(v && !translate_tools(d,chat,v)){*err="Only plain or namespace function tools can be translated";goto done;}
+    yyjson_val *v=yyjson_obj_get(r->root,"tools");
+    if(v && !translate_tools(d,chat,v)) {
+        *err="Invalid or unsupported function/namespace tool schema";
+        if(yyjson_is_arr(v)) {
+            size_t i,n;yyjson_val *tool;
+            yyjson_arr_foreach(v,i,n,tool) {
+                yyjson_val *type=yyjson_obj_get(tool,"type");
+                if(!eq(type,"function") && !eq(type,"namespace")) {
+                    snprintf(r->diagnostic,sizeof r->diagnostic,
+                        "Unsupported tool type: %.100s",
+                        isstr(type)?yyjson_get_str(type):"(invalid)");
+                    *err=r->diagnostic;
+                    break;
+                }
+            }
+        }
+        goto done;
+    }
     v=yyjson_obj_get(r->root,"tool_choice");if(v && !yyjson_is_null(v) && !translate_choice(d,chat,v)){*err="Unsupported tool_choice";goto done;}
     v=yyjson_obj_get(r->root,"parallel_tool_calls");if(v && (!yyjson_is_bool(v) || !copy(d,chat,"parallel_tool_calls",v))){*err="parallel_tool_calls must be boolean";goto done;}
     v=yyjson_obj_get(r->root,"max_output_tokens");if(v && (!yyjson_is_int(v) || yyjson_get_sint(v)<=0 || !copy(d,chat,"max_tokens",v))){*err="max_output_tokens must be a positive integer";goto done;}

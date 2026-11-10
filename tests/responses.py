@@ -88,6 +88,12 @@ class Responses(unittest.TestCase):
             status,_,data=self.post(payload);self.assertEqual(status,400,(payload,data));self.assertIn('error',json.loads(data))
         self.assertEqual(request(self.port,'POST','/v1/responses','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{'model':'x','input':'x'},key=None)[0],401)
+    def test_unsupported_tool_type_is_diagnosed(self):
+        status,_,body=self.post({'model':'response-echo','input':'hi',
+                                 'tools':[{'type':'web_search'}]})
+        self.assertEqual(status,400,body)
+        self.assertIn('web_search',json.loads(body)['error']['message'])
+
     def test_empty_include_is_safe(self):
         status,_,data=self.post({'model':'response-echo','input':'x','include':[]})
         self.assertEqual(status,200,data)
