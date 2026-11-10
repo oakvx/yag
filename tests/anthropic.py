@@ -173,6 +173,28 @@ class Messages(unittest.TestCase):
         chat=json.loads(json.loads(body)['content'][0]['text'])
         self.assertEqual(chat['tool_choice'],'required')
 
+    def test_mixed_tool_results_text_blocks_and_errors(self):
+        payload={'model':'response-echo','max_tokens':96,'messages':[
+            {'role':'assistant','content':[{'type':'tool_use','id':'t1','name':'read','input':{}},
+                                           {'type':'tool_use','id':'t2','name':'write','input':{}}]},
+            {'role':'user','content':[
+                {'type':'tool_result','tool_use_id':'t1','content':[{'type':'text','text':'first'}, {'type':'text','text':'second'}]},
+                {'type':'tool_result','tool_use_id':'t2','is_error':True,'content':'permission denied'},
+                {'type':'text','text':'Please retry'}]}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        converted=json.loads(json.loads(body)['content'][0]['text'])
+        messages=converted['messages']
+        self.assertEqual(messages[1]['content'],'first\\nsecond')
+        self.assertEqual(messages[1]['tool_call_id'],'t1')
+        self.assertEqual(messages[2]['content'],'[Tool execution error]\\npermission denied')
+        self.assertEqual(messages[2]['tool_call_id'],'t2')
+        self.assertEqual(messages[3],{'role':'user','content':[{'type':'text','text':'Please retry'}]})
+        invalid=dict(payload,messages=[payload['messages'][0],{'role':'user','content':[
+            {'type':'text','text':'wrong order'},
+            {'type':'tool_result','tool_use_id':'t1','content':'ignored'}]}])
+        self.assertEqual(self.post(invalid)[0],400)
+
     def test_chat_tool_calls_become_anthropic_tool_use(self):
         status,_,body=self.post({'model':'anthropic-tools','max_tokens':64,
             'messages':[{'role':'user','content':'Read a file'}]})
