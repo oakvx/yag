@@ -95,7 +95,7 @@ static int translate_choice(yyjson_mut_doc *d,yyjson_mut_val *chat,yyjson_val *v
 int responses_parse(const char *body,size_t len,response_request *r,const char **err) {
     memset(r,0,sizeof *r); *err="Invalid Responses request";
     r->input_doc=yyjson_read(body,len,0); r->root=r->input_doc?yyjson_doc_get_root(r->input_doc):NULL;
-    const char *const top[]={"model","input","instructions","tools","tool_choice","parallel_tool_calls","max_output_tokens","temperature","top_p","stream","text","reasoning","metadata","store","prompt_cache_key","include",NULL};
+    const char *const top[]={"model","input","instructions","tools","tool_choice","parallel_tool_calls","max_output_tokens","temperature","top_p","stream","text","reasoning","metadata","store","prompt_cache_key","include","client_metadata",NULL};
     if(!yyjson_is_obj(r->root)) { *err="Request must be a JSON object";return 0; }
     if(!keys(r->root,top)) {
         yyjson_obj_iter iter=yyjson_obj_iter_with(r->root); yyjson_val *key;
@@ -108,6 +108,8 @@ int responses_parse(const char *body,size_t len,response_request *r,const char *
     if(!isstr(model) || !*yyjson_get_str(model) || !input || (inst && !isstr(inst) && !yyjson_is_null(inst)) || (stream && !yyjson_is_bool(stream)) || (store && (!yyjson_is_bool(store) || yyjson_get_bool(store))) || (meta && !yyjson_is_obj(meta) && !yyjson_is_null(meta))) { *err="Invalid model, input, instructions, stream, metadata or store (only store=false is supported)"; return 0; }
     yyjson_val *include=yyjson_obj_get(r->root,"include");
     if(include && (!yyjson_is_arr(include) || yyjson_arr_size(include)!=0)) { *err="Only an empty include array is supported; requested output fields cannot be synthesized";return 0; }
+    yyjson_val *client_metadata=yyjson_obj_get(r->root,"client_metadata");
+    if(client_metadata && !yyjson_is_obj(client_metadata) && !yyjson_is_null(client_metadata)) { *err="client_metadata must be an object or null";return 0; }
     r->stream=stream && yyjson_get_bool(stream);
     yyjson_mut_doc *d=yyjson_mut_doc_new(NULL); if(!d){*err="Out of memory";return 0;} yyjson_mut_val *chat=yyjson_mut_obj(d),*messages=yyjson_mut_arr(d); int ok=0;
     if(!chat || !messages)goto done;
