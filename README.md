@@ -11,7 +11,7 @@ YAG is an early-stage, self-hosted inference gateway. This repository currently 
 - Localhost HTTP server, public `/health`, and a primary bearer key plus optional additional keys protecting `/v1/*` and `/api/*`.
 - Model discovery (`GET /v1/models`) and Chat Completions (`POST /v1/chat/completions`), including transparent upstream SSE streaming and tool call structures. The upstream decides what it supports; YAG does not independently validate capabilities or implement OpenAI semantics.
 - A stateless Responses API subset with text, function calls and tool results, semantic SSE events, and explicit rejection of unsupported features. This does not yet support current Codex requests; see [Responses support](docs/architecture/STATUS.md).
-- Text-only, non-streaming `POST /v1/messages` translation for basic Anthropic Messages clients. Requires upstream token usage and rejects unsupported tools or content types.
+- Non-streaming Anthropic `POST /v1/messages` for text and function tools. Supports tool definitions, selection, `tool_use` and string `tool_result` replay, using `Authorization: Bearer` or `x-api-key` authentication with the YAG secret. Streaming, multimodal input, mixed text/tool-result blocks, and full Claude Code integration remain unsupported.
 - A Console served by the Host, with session-only key entry, real host status/model discovery, text chat with cancellation, and copyable HTTP instructions. The playground does not handle tools; API clients can handle them themselves.
 - Bounded incoming request size, connection count and socket/upstream timeouts; upstream credentials stay on the Host.
 - Automated mock-upstream tests for authentication, framing, discovery, tool data, streaming, errors, timeout, disconnection and concurrency.

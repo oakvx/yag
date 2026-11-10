@@ -32,10 +32,10 @@ The `POST /v1/messages` adapter accepts a non-streaming request with text-only m
 
 ## Not implemented
 
-- A comprehensive cross-protocol canonical representation; explicit model capability descriptions; runtime provider editing, multi-provider discovery and automatic fallback/health checks. Static per-model routing is implemented.
-- Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic streaming, `count_tokens`, Claude Code headers, events and tool semantics. The basic Messages adapter handles non-streaming text only and rejects unsupported content.
+- A comprehensive cross-protocol canonical representation; explicit model capability descriptions; runtime provider editing and automatic failover. Static per-model routing, merged `/v1/models` discovery and on-demand HTTP reachability probing are implemented, but do not imply model capability verification.
+- Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic streaming, `count_tokens`, Claude Code headers, events and tool semantics. The Messages adapter implements a bounded non-streaming text/function-call subset and rejects unsupported content.
 - Identity-aware API key administration (scopes, revocation without restart, issuance/rotation), network-level abuse protection, configured CORS, native TLS, encrypted secret storage and structured/audit logs. Additional static bearer keys and an optional per-key fixed-window limit are available, but are not a replacement for production access controls.
-- Request history and usage aggregation, CPU/RAM/GPU monitoring, full backend settings, model capability management, and provider editing in the Console.
+- Request history, token-usage aggregation, CPU/RAM/GPU monitoring, full backend settings, model capability management and provider editing in the Console. In-memory counts of incoming protocol requests are available, but do not represent successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
 ## Intended next increments
