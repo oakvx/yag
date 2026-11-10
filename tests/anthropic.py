@@ -11,6 +11,19 @@ class Messages(unittest.TestCase):
     def post(self, payload):
         return base.request(self.port, 'POST', '/v1/messages', payload)
 
+    def test_native_anthropic_header_uses_gateway_key(self):
+        payload={'model':'response-echo','max_tokens':16,
+                 'messages':[{'role':'user','content':'hello'}]}
+        status,_,body=base.request(self.port,'POST','/v1/messages',payload,
+                                   key=None,headers={'X-API-Key':base.KEY,'anthropic-version':'2023-06-01'})
+        self.assertEqual(status,200,body)
+        status,_,_=base.request(self.port,'POST','/v1/messages',payload,key=None,
+                                headers={'X-API-Key':'invalid'})
+        self.assertEqual(status,401)
+        status,_,_=base.request(self.port,'GET','/v1/models',key=None,
+                                headers={'X-API-Key':base.KEY})
+        self.assertEqual(status,401)
+
     def test_text_message_and_usage(self):
         status,_,data=self.post({'model':'response-echo','max_tokens':20,
                                  'system':'be brief','messages':[{'role':'user','content':'hello'}]})

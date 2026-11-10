@@ -23,13 +23,16 @@ void reply(int fd,int status,const char *type,const char *body) {
 }
 static void error(int fd,int status,const char *msg) { char b[512]; snprintf(b,sizeof b,"{\"error\":{\"message\":\"%s\"}}",msg); reply(fd,status,"application/json",b); }
 static int key_equal(const char *a,const char *b) { size_t na=strlen(a),nb=strlen(b),n=na>nb?na:nb; unsigned diff=(unsigned)(na^nb); for(size_t i=0;i<n;i++) diff|=(unsigned char)(i<na?a[i]:0)^(unsigned char)(i<nb?b[i]:0); return diff==0; }
-static int authenticated_key(const yag_config *c,const char *authorization) {
-    if(!authorization || strncmp(authorization,"Bearer ",7))return -1;
-    const char *candidate=authorization+7;
+static int authenticated_raw_key(const yag_config *c,const char *candidate) {
+    if(!candidate)return -1;
     int match=key_equal(candidate,c->api_key)?0:-1;
     for(size_t i=0;i<c->extra_key_count;i++)
         if(key_equal(candidate,c->extra_keys[i]))match=(int)i+1;
     return match;
+}
+static int authenticated_key(const yag_config *c,const char *authorization) {
+    if(!authorization || strncmp(authorization,"Bearer ",7))return -1;
+    return authenticated_raw_key(c,authorization+7);
 }
 static int rate_permit(yag_config *c,int key_index) {
     if(!c->rate_limit_per_minute)return 1;
@@ -64,11 +67,12 @@ static void handle(int fd,yag_config *c) {
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
-    size_t length=0; int have_length=0,have_auth=0,transfer_encoding=0; char *auth=NULL; char *line=line_end+2;
+    size_t length=0; int have_length=0,have_auth=0,have_native_key=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0; char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
         else if(!strcasecmp(line,"Transfer-Encoding")) transfer_encoding=1;
         else if(!strcasecmp(line,"Authorization")) { if(have_auth++){error(fd,400,"Duplicate authorization");goto done;} auth=v; }
+        else if(!strcasecmp(line,"X-API-Key")) { if(have_native_key++){error(fd,400,"Duplicate API key");goto done;} native_key=v; }
         line=end+2;
     }
     if(transfer_encoding){error(fd,400,"Transfer-Encoding is not supported");goto done;}
@@ -78,7 +82,10 @@ static void handle(int fd,yag_config *c) {
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
-    int key_index=authenticated_key(c,auth);
+    int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
+    if(is_messages && auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
+    int key_index=auth?authenticated_key(c,auth):
+        (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
     if(key_index<0){error(fd,401,"Invalid API key");goto done;}
     if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
