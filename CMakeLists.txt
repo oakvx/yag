@@ -17,3 +17,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME responses COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/responses.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME rate_limit COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/rate_limit.py $<TARGET_FILE:yag>)
+endif()
