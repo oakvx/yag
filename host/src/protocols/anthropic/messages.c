@@ -88,6 +88,29 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
     }
     return yyjson_mut_obj_add_val(doc,message,"content",parts);
 }
+/* Result-only user messages become Chat role=tool messages. Mixed text/result
+ * arrays are rejected because flattening them would reorder conversation turns. */
+static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val *content) {
+    if(!yyjson_is_arr(content) || !yyjson_arr_size(content))return 1;
+    yyjson_val *first=yyjson_arr_get(content,0);
+    if(!yyjson_equals_str(yyjson_obj_get(first,"type"),"tool_result"))return 1;
+    const char *const allowed[]={"type","tool_use_id","content","is_error",NULL};
+    size_t i,n;yyjson_val *item;
+    yyjson_arr_foreach(content,i,n,item) {
+        yyjson_val *id=yyjson_obj_get(item,"tool_use_id");
+        yyjson_val *result=yyjson_obj_get(item,"content");
+        yyjson_val *is_error=yyjson_obj_get(item,"is_error");
+        if(!permitted(item,allowed) || !yyjson_equals_str(yyjson_obj_get(item,"type"),"tool_result")
+            || !string_value(id) || !yyjson_get_len(id) || !string_value(result)
+            || (is_error && (!yyjson_is_bool(is_error) || yyjson_get_bool(is_error))))return 0;
+        yyjson_mut_val *message=yyjson_mut_obj(d);
+        if(!message || !yyjson_mut_obj_add_str(d,message,"role","tool")
+            || !yyjson_mut_obj_add_val(d,message,"tool_call_id",yyjson_val_mut_copy(d,id))
+            || !yyjson_mut_obj_add_val(d,message,"content",yyjson_val_mut_copy(d,result))
+            || !yyjson_mut_arr_add_val(messages,message))return 0;
+    }
+    return 2;
+}
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
         "stream","temperature","top_p","stop_sequences","tools",NULL};
@@ -122,6 +145,11 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
         yyjson_val *role=yyjson_obj_get(msg,"role"),*content=yyjson_obj_get(msg,"content");
         if(!permitted(msg,msg_keys)
             || (!yyjson_equals_str(role,"user") && !yyjson_equals_str(role,"assistant")))goto fail;
+        if(yyjson_equals_str(role,"user")) {
+            int results=add_tool_results(doc,messages,content);
+            if(!results)goto fail;
+            if(results==2)continue;
+        }
         yyjson_mut_val *entry=yyjson_mut_obj(doc);
         if(!entry || !yyjson_mut_obj_add_val(doc,entry,"role",yyjson_val_mut_copy(doc,role))
             || !add_text(doc,entry,content) || !yyjson_mut_arr_add_val(messages,entry))goto fail;
