@@ -160,7 +160,7 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'POST','/v1/chat/completions','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/chat/completions',{'model':'x'})[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{})[0],400)
-        self.assertEqual(request(self.port,'POST','/v1/messages',{})[0],501)
+        self.assertEqual(request(self.port,'POST','/v1/messages',{})[0],400)
     def test_upstream_error_and_timeout(self):
         status,_,body=request(self.port,'POST','/v1/chat/completions',{'model':'bad','messages':[]});self.assertEqual(status,429);self.assertEqual(json.loads(body)['error']['message'],'backend limit')
         status,_,_=request(self.port,'POST','/v1/chat/completions',{'model':'slow','messages':[]});self.assertEqual(status,504)
