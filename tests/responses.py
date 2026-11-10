@@ -24,6 +24,11 @@ class Responses(unittest.TestCase):
     def test_response_json_format(self):
         status,_,data=self.post({'model':'response-echo','input':'x','prompt_cache_key':'cache','text':{'verbosity':'low','format':{'type':'json_schema','name':'result','schema':{'type':'object'},'strict':True}}});self.assertEqual(status,200,data)
         chat=json.loads(json.loads(data)['output'][0]['content'][0]['text']);self.assertEqual(chat['verbosity'],'low');self.assertEqual(chat['prompt_cache_key'],'cache');self.assertEqual(chat['response_format'],{'type':'json_schema','json_schema':{'name':'result','schema':{'type':'object'},'strict':True}})
+    def test_responses_routes_to_configured_model(self):
+        status,_,data=self.post({'model':'routed-model','input':'hello'})
+        self.assertEqual(status,200,data)
+        response=json.loads(data)
+        self.assertEqual(response['output'][0]['content'][0]['text'],'routed response')
     def test_response_multiple_tool_outputs(self):
         status,_,data=self.post({'model':'response-tools','input':'go'});self.assertEqual(status,200,data);r=json.loads(data)
         self.assertEqual([i['type'] for i in r['output']],['message','function_call','function_call']);self.assertEqual([i['call_id'] for i in r['output'][1:]],['call_A','call_B']);self.assertEqual(r['output'][1]['arguments'],'{"path":"a"}');self.assertIsNone(r['usage'])
@@ -48,10 +53,24 @@ class Responses(unittest.TestCase):
         status,_,data=self.post({'model':'bad','input':'x','stream':True});self.assertEqual(status,429);self.assertEqual(json.loads(data)['error']['message'],'backend limit')
     def test_response_errors(self):
         self.assertEqual(self.post({'model':'bad','input':'x'})[0],429)
-        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['reasoning.encrypted_content']}, {'model':'x','input':'a','client_metadata':{}}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'auto'}} ]:
+        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['web_search_call.action.sources']}, {'model':'x','input':'a','client_metadata':'invalid'}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'auto'}} ]:
             status,_,data=self.post(payload);self.assertEqual(status,400,(payload,data));self.assertIn('error',json.loads(data))
         self.assertEqual(request(self.port,'POST','/v1/responses','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{'model':'x','input':'x'},key=None)[0],401)
+    def test_empty_include_is_safe(self):
+        status,_,data=self.post({'model':'response-echo','input':'x','include':[]})
+        self.assertEqual(status,200,data)
+        status,_,data=self.post({'model':'response-echo','input':'x','include':['reasoning.encrypted_content']})
+        self.assertEqual(status,200,data)
+        self.assertTrue(all(item['type']!='reasoning' for item in json.loads(data)['output']))
+        status,_,data=self.post({'model':'response-echo','input':'x','include':['web_search_call.action.sources']})
+        self.assertEqual(status,400,data)
+        self.assertIn('include',json.loads(data)['error']['message'])
+    def test_client_metadata_is_not_forwarded(self):
+        status,_,data=self.post({'model':'response-echo','input':'hello','client_metadata':{'client':'codex','trace':'test'}})
+        self.assertEqual(status,200,data)
+        translated=json.loads(json.loads(data)['output'][0]['content'][0]['text'])
+        self.assertNotIn('client_metadata',translated)
     def test_response_stream_is_incremental(self):
         conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=4)
         body=json.dumps({'model':'response-stream-slow','input':'x','stream':True})

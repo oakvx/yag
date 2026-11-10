@@ -240,7 +240,9 @@ void responses_handle(int fd,const yag_config *c,const char *body,size_t len) {
     if(!responses_parse(body,len,&request,&err)){http_error(fd,400,err?err:"Invalid request");responses_request_free(&request);return;}
     state s={.fd=fd,.streaming=request.stream,.request=&request,.created=time(NULL)};
     if(!identifier(&s)){http_error(fd,500,"Could not generate a response identifier");goto done;}
-    long status=0;int rc=upstream_perform(c,"/chat/completions",request.chat_json,strlen(request.chat_json),receive,&s,&status,fd);
+    yag_config selected={0};
+    const yag_config *target=config_for_model(c,yyjson_get_str(yyjson_obj_get(request.root,"model")),&selected);
+    long status=0;int rc=upstream_perform(target,"/chat/completions",request.chat_json,strlen(request.chat_json),receive,&s,&status,fd);
     if(status>=400 && status<=599 && rc==CURLE_OK) {reply(fd,(int)status,s.content_type[0]?s.content_type:"application/json",s.raw.p?s.raw.p:"");goto done;}
     if(rc!=CURLE_OK || status<200 || status>=300) {
         const char *msg=s.error?s.error:rc==CURLE_OPERATION_TIMEDOUT?"Inference backend timed out":"Inference backend failed or disconnected";

@@ -23,6 +23,27 @@ void reply(int fd,int status,const char *type,const char *body) {
 }
 static void error(int fd,int status,const char *msg) { char b[512]; snprintf(b,sizeof b,"{\"error\":{\"message\":\"%s\"}}",msg); reply(fd,status,"application/json",b); }
 static int key_equal(const char *a,const char *b) { size_t na=strlen(a),nb=strlen(b),n=na>nb?na:nb; unsigned diff=(unsigned)(na^nb); for(size_t i=0;i<n;i++) diff|=(unsigned char)(i<na?a[i]:0)^(unsigned char)(i<nb?b[i]:0); return diff==0; }
+static int authenticated_key(const yag_config *c,const char *authorization) {
+    if(!authorization || strncmp(authorization,"Bearer ",7))return -1;
+    const char *candidate=authorization+7;
+    int match=key_equal(candidate,c->api_key)?0:-1;
+    for(size_t i=0;i<c->extra_key_count;i++)
+        if(key_equal(candidate,c->extra_keys[i]))match=(int)i+1;
+    return match;
+}
+static int rate_permit(yag_config *c,int key_index) {
+    if(!c->rate_limit_per_minute)return 1;
+    time_t now=time(NULL);
+    pthread_mutex_lock(&c->lock);
+    if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
+        c->rate_windows[key_index]=now;
+        c->rate_counts[key_index]=0;
+    }
+    int permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
+    if(permit)c->rate_counts[key_index]++;
+    pthread_mutex_unlock(&c->lock);
+    return permit;
+}
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
     if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512) { error(fd,404,"Not found"); return; }
@@ -57,16 +78,37 @@ static void handle(int fd,yag_config *c) {
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
-    if(!auth || strncmp(auth,"Bearer ",7) || !key_equal(auth+7,c->api_key)){error(fd,401,"Invalid API key");goto done;}
+    int key_index=authenticated_key(c,auth);
+    if(key_index<0){error(fd,401,"Invalid API key");goto done;}
+    if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
-    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0);
+    else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
+        yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
+        if(!d){error(fd,500,"Out of memory");goto done;}
+        yyjson_mut_val *root=yyjson_mut_obj(d),*routes=yyjson_mut_obj_add_arr(d,root,"data");
+        if(!root || !routes){yyjson_mut_doc_free(d);error(fd,500,"Out of memory");goto done;}
+        yyjson_mut_obj_add_str(d,root,"object","list");
+        for(size_t i=0;i<c->route_count;i++) {
+            yyjson_mut_val *route=yyjson_mut_obj(d);
+            yyjson_mut_obj_add_strcpy(d,route,"model",c->routes[i].model);
+            yyjson_mut_arr_add_val(routes,route);
+        }
+        yyjson_mut_doc_set_root(d,root);
+        char *serialized=yyjson_mut_write(d,0,NULL);
+        if(serialized)reply(fd,200,"application/json",serialized);
+        else error(fd,500,"Could not serialize routes");
+        free(serialized);yyjson_mut_doc_free(d);
+    }
+    else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0,NULL);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
-        else upstream_request(fd,c,"/chat/completions",body,length);
+        else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) responses_handle(fd,c,body,length);
-    else if(!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Protocol adapter not implemented; use Chat Completions");
+    else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) anthropic_messages_handle(fd,c,body,length);
+    else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
+    else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
     else error(fd,404,"Not found");
 done: free(buf);
 }
