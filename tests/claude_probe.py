@@ -5,6 +5,7 @@ This is a compatibility diagnostic, not a test of model quality or real Claude A
 It does not use a production API key or access user data.
 """
 import argparse
+import json
 import os
 import shutil
 import socket
@@ -22,7 +23,34 @@ args=parser.parse_args()
 if not args.binary:
     parser.error('Claude Code CLI is not installed; pass --binary')
 
-backend=MockServer(('127.0.0.1',0),Backend)
+PROBE_MODEL='claude-sonnet-4-5-20250929'
+
+class ClaudeProbeBackend(Backend):
+    def do_POST(self):
+        if self.headers.get('Authorization') != 'Bearer '+UPKEY:
+            return self.send(401,{'error':{'message':'bad upstream key'}})
+        data=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
+        if data.get('model')!=PROBE_MODEL:
+            return self.send(400,{'error':{'message':'probe model mismatch'}})
+        if data.get('stream'):
+            self.send_response(200)
+            self.send_header('Content-Type','text/event-stream')
+            self.end_headers()
+            for choice in [
+                {'choices':[{'index':0,'delta':{'role':'assistant','content':'Hello from YAG'},
+                             'finish_reason':None}]},
+                {'choices':[{'index':0,'delta':{},'finish_reason':'stop'}]}]:
+                self.wfile.write(('data: '+json.dumps(choice)+'\n\n').encode())
+                self.wfile.flush()
+            self.wfile.write(b'data: [DONE]\n\n')
+            self.wfile.flush()
+            self.close_connection=True
+            return
+        return self.send(200,{'choices':[{'message':{'role':'assistant',
+            'content':'Hello from YAG'},'finish_reason':'stop'}],
+            'usage':{'prompt_tokens':10,'completion_tokens':4,'total_tokens':14}})
+
+backend=MockServer(('127.0.0.1',0),ClaudeProbeBackend)
 threading.Thread(target=backend.serve_forever,daemon=True).start()
 with socket.socket() as listener:
     listener.bind(('127.0.0.1',0))
@@ -32,10 +60,11 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
         HOME=work,
         ANTHROPIC_BASE_URL=f'http://127.0.0.1:{port}',
         ANTHROPIC_API_KEY=KEY,
-        ANTHROPIC_DEFAULT_SONNET_MODEL='response-stream',
-        ANTHROPIC_DEFAULT_OPUS_MODEL='response-stream',
-        ANTHROPIC_DEFAULT_HAIKU_MODEL='response-stream',
-        CLAUDE_CODE_SUBAGENT_MODEL='response-stream',
+        ANTHROPIC_DEFAULT_SONNET_MODEL=PROBE_MODEL,
+        ANTHROPIC_DEFAULT_OPUS_MODEL=PROBE_MODEL,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL=PROBE_MODEL,
+        CLAUDE_CODE_SUBAGENT_MODEL=PROBE_MODEL,
+        ANTHROPIC_MODEL=PROBE_MODEL,
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC='1',
         DISABLE_TELEMETRY='1',
         YAG_API_KEY=KEY,
@@ -60,12 +89,12 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
         else:
             raise RuntimeError('YAG did not start')
         command=[args.binary,'-p','Reply with a short greeting.',
-                 '--model','response-stream','--max-turns','1',
+                 '--model',PROBE_MODEL,'--max-turns','1',
                  '--output-format','json']
         try:
             proc=subprocess.run(command,cwd=work,env=env,
                                 stdin=subprocess.DEVNULL,
-                                capture_output=True,text=True,timeout=45,check=False)
+                                capture_output=True,text=True,timeout=30,check=False)
             print('Claude Code stdout:',proc.stdout[-6000:],flush=True)
             print('Claude Code stderr:',proc.stderr[-6000:],flush=True)
             result=proc.returncode
