@@ -9,6 +9,7 @@ The current official [Codex configuration reference](https://developers.openai.c
 ```toml
 model = "REPLACE_WITH_MODEL_ID_FROM_YAG"
 model_provider = "yag"
+web_search = "disabled" # YAG does not implement server-side web search
 
 [model_providers.yag]
 name = "YAG Local"
@@ -26,7 +27,7 @@ curl -sS http://127.0.0.1:8080/v1/models -H "Authorization: Bearer $YAG_API_KEY"
 codex exec --skip-git-repo-check --sandbox read-only 'Reply with a greeting.'
 ```
 
-**Currently expected:** a 400 describing an unsupported request field or tool, depending on Codex version and configuration. After request-shape support is implemented, qualification still requires a suitable tool-capable model and an actual multi-turn tool call/result test; a greeting alone is insufficient. Codex performs tool execution, not YAG. See OpenAI's [gateway compatibility requirements](https://developers.openai.com/codex/enterprise/gateway-compatibility).
+The isolated probe disables the built-in `web_search` tool because a local Chat Completions backend cannot implement server-hosted search implicitly. Codex compatibility remains unverified pending complete CLI tool-cycle tests. After request-shape support is implemented, qualification still requires a suitable tool-capable model and an actual multi-turn tool call/result test; a greeting alone is insufficient. Codex performs tool execution, not YAG. See OpenAI's [gateway compatibility requirements](https://developers.openai.com/codex/enterprise/gateway-compatibility).
 
 ## Repeat the isolated mock probe
 
