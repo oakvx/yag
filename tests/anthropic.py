@@ -119,6 +119,17 @@ class Messages(unittest.TestCase):
         broken=dict(payload,system=[{'type':'image','source':'no'}])
         self.assertEqual(self.post(broken)[0],400)
 
+    def test_metadata_annotation_is_validated_not_forwarded(self):
+        payload={'model':'response-echo','max_tokens':32,'metadata':{'user_id':'local-test'},
+                 'messages':[{'role':'user','content':'Hello'}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertNotIn('metadata',chat)
+        self.assertNotIn('local-test',body.decode())
+        payload['metadata']={'unexpected':'no'}
+        self.assertEqual(self.post(payload)[0],400)
+
     def test_text_blocks_and_generation_settings(self):
         payload={'model':'response-echo','max_tokens':50,
                  'messages':[{'role':'user','content':[{'type':'text','text':'one'},
