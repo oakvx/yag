@@ -33,13 +33,16 @@ static size_t write_data(char *ptr, size_t size, size_t nmemb, void *arg) {
 /* A peer EOF cancels work; this listener requires clients to keep their write side
  * open while awaiting a response. POLLHUP/error and EOF are checked by libcurl's
  * progress callback even when the inference runtime is not sending data. */
-static int cancelled(void *ctx,curl_off_t dt,curl_off_t dn,curl_off_t ut,curl_off_t un) {
-    (void)dt;(void)dn;(void)ut;(void)un;
-    int fd=*(int *)ctx; struct pollfd p={.fd=fd,.events=POLLIN};
+static int peer_closed(int fd) {
+    struct pollfd p={.fd=fd,.events=POLLIN};
     if(poll(&p,1,0)<=0)return 0;
     if(p.revents & (POLLHUP|POLLERR|POLLNVAL))return 1;
     if(p.revents & POLLIN) { char c; ssize_t n=recv(fd,&c,1,MSG_PEEK|MSG_DONTWAIT); if(n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK && errno!=EINTR))return 1; }
     return 0;
+}
+static int cancelled(void *ctx,curl_off_t dt,curl_off_t dn,curl_off_t ut,curl_off_t un) {
+    (void)dt;(void)dn;(void)ut;(void)un;
+    return peer_closed(*(int *)ctx);
 }
 int upstream_perform(const yag_config *c, const char *path, const char *body, size_t len, yag_upstream_write cb, void *context, long *status, int cancel_fd) {
     size_t sz=strlen(c->upstream)+strlen(path)+1; char *url=malloc(sz); CURL *curl=curl_easy_init(); struct curl_slist *list=NULL; char *auth=NULL;
@@ -56,7 +59,33 @@ int upstream_perform(const yag_config *c, const char *path, const char *body, si
     curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION,write_data); curl_easy_setopt(curl,CURLOPT_WRITEDATA,&t);
     if(cancel_fd>=0) { curl_easy_setopt(curl,CURLOPT_NOPROGRESS,0L); curl_easy_setopt(curl,CURLOPT_XFERINFOFUNCTION,cancelled); curl_easy_setopt(curl,CURLOPT_XFERINFODATA,&cancel_fd); }
     if(body) { curl_easy_setopt(curl,CURLOPT_POST,1L); curl_easy_setopt(curl,CURLOPT_POSTFIELDS,body); curl_easy_setopt(curl,CURLOPT_POSTFIELDSIZE_LARGE,(curl_off_t)len); }
-    result=(int)curl_easy_perform(curl); if(status) *status=t.status;
+    /* curl_easy_perform may sleep inside a quiet upstream transfer long enough
+     * that progress callbacks are not invoked promptly. Multi polling gives us
+     * a bounded opportunity to check the client socket every 100 ms. */
+    CURLM *multi=curl_multi_init();
+    if(!multi)goto done;
+    CURLMcode mc=curl_multi_add_handle(multi,curl);
+    if(mc==CURLM_OK) {
+        int running=1;
+        do {
+            mc=curl_multi_perform(multi,&running);
+            if(mc!=CURLM_OK)break;
+            if(!running)break;
+            int activity=0;
+            mc=curl_multi_poll(multi,NULL,0,100,&activity);
+            if(mc!=CURLM_OK)break;
+            if(cancel_fd>=0 && peer_closed(cancel_fd)) {result=(int)CURLE_ABORTED_BY_CALLBACK;break;}
+        } while(running);
+        if(mc==CURLM_OK && result!=(int)CURLE_ABORTED_BY_CALLBACK) {
+            int pending=0; CURLMsg *message;
+            result=(int)CURLE_RECV_ERROR;
+            while((message=curl_multi_info_read(multi,&pending)))
+                if(message->msg==CURLMSG_DONE && message->easy_handle==curl) {result=(int)message->data.result;break;}
+        }
+        curl_multi_remove_handle(multi,curl);
+    }
+    curl_multi_cleanup(multi);
+    if(status) *status=t.status;
 done:
     free(auth); curl_slist_free_all(list); if(curl) curl_easy_cleanup(curl); free(url); return result;
 }
