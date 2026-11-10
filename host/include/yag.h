@@ -34,6 +34,7 @@ typedef size_t (*yag_upstream_write)(void *ctx, long status, const char *content
 int upstream_perform(const yag_config *c, const char *path, const char *body, size_t len, yag_upstream_write write_cb, void *ctx, long *status, int cancel_fd);
 void responses_handle(int fd, const yag_config *c, const char *body, size_t len);
 void anthropic_messages_handle(int fd, const yag_config *c, const char *body, size_t len);
+void anthropic_stream_handle(int fd,const yag_config *target,const char *model,const char *chat_json);
 void models_handle(int fd, const yag_config *c);
 void provider_check_handle(int fd,const yag_config *cfg,const char *body,size_t len);
 int send_all(int fd, const void *data, size_t len);

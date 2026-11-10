@@ -122,7 +122,7 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
         || !yyjson_is_arr(items) || !yyjson_arr_size(items)
         || !yyjson_is_int(max) || yyjson_get_sint(max)<=0
         || (sys && !string_value(sys))
-        || (stream && (!yyjson_is_bool(stream) || yyjson_get_bool(stream)))
+        || (stream && !yyjson_is_bool(stream))
         || (temp && !yyjson_is_num(temp)) || (top && !yyjson_is_num(top))
         || (stops && !yyjson_is_arr(stops)))return NULL;
     yyjson_mut_doc *doc=yyjson_mut_doc_new(NULL);
@@ -132,7 +132,7 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
     yyjson_mut_doc_set_root(doc,chat);
     if(!yyjson_mut_obj_add_val(doc,chat,"model",yyjson_val_mut_copy(doc,model))
         || !yyjson_mut_obj_add_val(doc,chat,"max_tokens",yyjson_val_mut_copy(doc,max))
-        || !yyjson_mut_obj_add_bool(doc,chat,"stream",0))goto fail;
+        || !yyjson_mut_obj_add_bool(doc,chat,"stream",stream && yyjson_get_bool(stream)))goto fail;
     if(sys) {
         yyjson_mut_val *system=yyjson_mut_obj(doc);
         if(!system || !yyjson_mut_obj_add_str(doc,system,"role","system")
@@ -316,9 +316,14 @@ void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,siz
     char *json=yyjson_mut_write(translated,0,NULL);
     yyjson_mut_doc_free(translated);
     if(!json){anthropic_error(fd,502);yyjson_doc_free(request);return;}
-    response_buffer data={0};
     yag_config selected={0};
     const yag_config *target=config_for_model(cfg,yyjson_get_str(yyjson_obj_get(root,"model")),&selected);
+    yyjson_val *requested_stream=yyjson_obj_get(root,"stream");
+    if(requested_stream && yyjson_get_bool(requested_stream)) {
+        anthropic_stream_handle(fd,target,yyjson_get_str(yyjson_obj_get(root,"model")),json);
+        free(json);yyjson_doc_free(request);return;
+    }
+    response_buffer data={0};
     long status=0;
     int rc=upstream_perform(target,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
     if(rc!=CURLE_OK || status<200 || status>=300)
