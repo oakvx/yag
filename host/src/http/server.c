@@ -66,6 +66,23 @@ static void handle(int fd,yag_config *c) {
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!authorized(c,auth)){error(fd,401,"Invalid API key");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
+    else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
+        yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
+        if(!d){error(fd,500,"Out of memory");goto done;}
+        yyjson_mut_val *root=yyjson_mut_obj(d),*routes=yyjson_mut_obj_add_arr(d,root,"data");
+        if(!root || !routes){yyjson_mut_doc_free(d);error(fd,500,"Out of memory");goto done;}
+        yyjson_mut_obj_add_str(d,root,"object","list");
+        for(size_t i=0;i<c->route_count;i++) {
+            yyjson_mut_val *route=yyjson_mut_obj(d);
+            yyjson_mut_obj_add_strcpy(d,route,"model",c->routes[i].model);
+            yyjson_mut_arr_add_val(routes,route);
+        }
+        yyjson_mut_doc_set_root(d,root);
+        char *serialized=yyjson_mut_write(d,0,NULL);
+        if(serialized)reply(fd,200,"application/json",serialized);
+        else error(fd,500,"Could not serialize routes");
+        free(serialized);yyjson_mut_doc_free(d);
+    }
     else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) upstream_request(fd,c,"/models",NULL,0,NULL);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
