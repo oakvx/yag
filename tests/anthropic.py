@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Anthropic text-only Messages adapter contract tests against mock Chat upstream."""
 import json
+import http.client
+import time
 import unittest
 import integration as base
 
@@ -23,6 +25,69 @@ class Messages(unittest.TestCase):
         status,_,_=base.request(self.port,'GET','/v1/models',key=None,
                                 headers={'X-API-Key':base.KEY})
         self.assertEqual(status,401)
+
+    def sse(self, model):
+        payload={'model':model,'max_tokens':96,'stream':True,
+                 'messages':[{'role':'user','content':'Hello'}]}
+        status,headers,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        self.assertIn('text/event-stream',headers['Content-Type'])
+        events=[]
+        for frame in body.decode().split('\\n\\n'):
+            if not frame.strip(): continue
+            name=next((s[7:] for s in frame.splitlines() if s.startswith('event: ')),None)
+            item=next((s[6:] for s in frame.splitlines() if s.startswith('data: ')),None)
+            self.assertIsNotNone(name,frame)
+            self.assertIsNotNone(item,frame)
+            data=json.loads(item)
+            self.assertEqual(data['type'],name)
+            events.append(data)
+        return events
+
+    def test_streaming_text_event_order(self):
+        events=self.sse('response-stream')
+        types=[e['type'] for e in events]
+        self.assertEqual(types,['message_start','content_block_start',
+            'content_block_delta','content_block_delta','content_block_stop',
+            'message_delta','message_stop'])
+        self.assertEqual(events[0]['message']['content'],[])
+        self.assertEqual(events[1]['content_block'],{'type':'text','text':''})
+        self.assertEqual(''.join(e['delta']['text'] for e in events
+            if e['type']=='content_block_delta'),'Hello world')
+        self.assertEqual(events[-2]['delta']['stop_reason'],'end_turn')
+
+    def test_streaming_tool_blocks(self):
+        events=self.sse('response-stream-tools')
+        blocks=[e for e in events if e['type']=='content_block_start']
+        self.assertEqual([e['content_block']['name'] for e in blocks],['read','write'])
+        self.assertEqual([e['content_block']['id'] for e in blocks],['call_A','call_B'])
+        partial=[e for e in events if e['type']=='content_block_delta']
+        self.assertEqual([json.loads(e['delta']['partial_json']) for e in partial],
+                         [{'p':1},{}])
+        self.assertEqual(events[-2]['delta']['stop_reason'],'tool_use')
+        self.assertEqual(events[-1]['type'],'message_stop')
+
+    def test_streaming_incomplete_and_backend_errors(self):
+        self.assertEqual(self.sse('response-incomplete')[-2]['delta']['stop_reason'],'max_tokens')
+        self.assertEqual(self.sse('response-truncated')[-1]['type'],'error')
+        self.assertEqual(self.sse('response-stream-error')[-1]['type'],'error')
+        bad={'model':'bad','max_tokens':32,'stream':True,
+             'messages':[{'role':'user','content':'Hello'}]}
+        self.assertEqual(self.post(bad)[0],429)
+
+    def test_stream_is_incremental(self):
+        conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=5)
+        payload=json.dumps({'model':'response-stream-slow','max_tokens':64,'stream':True,
+            'messages':[{'role':'user','content':'test'}]})
+        started=time.monotonic()
+        conn.request('POST','/v1/messages',payload,
+            {'Authorization':'Bearer '+base.KEY,'Content-Type':'application/json'})
+        response=conn.getresponse()
+        first=response.readline()
+        self.assertIn(b'message_start',first)
+        self.assertLess(time.monotonic()-started,.4)
+        self.assertIn(b'message_stop',response.read())
+        conn.close()
 
     def test_text_message_and_usage(self):
         status,_,data=self.post({'model':'response-echo','max_tokens':20,
