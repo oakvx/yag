@@ -8,6 +8,7 @@ type Page = 'Overview' | 'Playground' | 'Models' | 'Integrations' | 'Requests' |
 type Model = { id: string; owned_by?: string }
 type Route = { model: string }
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
+type Metrics = { chat_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
@@ -24,6 +25,8 @@ function App() {
   const [key, setKey] = useState(() => sessionStorage.getItem('yag_key') || '')
   const [keyDraft, setKeyDraft] = useState(key)
   const [status, setStatus] = useState<Status | null>(null)
+  const [metrics,setMetrics]=useState<Metrics|null>(null)
+  const [metricsError,setMetricsError]=useState('')
   const [models, setModels] = useState<Model[]>([])
   const [routes, setRoutes] = useState<Route[]>([])
   const [routeError, setRouteError] = useState('')
@@ -33,10 +36,11 @@ function App() {
   const [mobile, setMobile] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const refresh = useCallback(async () => {
-    if (!key) { setStatus(null); setModels([]); setRoutes([]); setError(''); setModelError(''); setRouteError(''); return }
+    if (!key) { setStatus(null); setMetrics(null); setModels([]); setRoutes([]); setError(''); setModelError(''); setRouteError(''); setMetricsError(''); return }
     try { const response = await api('/api/status', key); setStatus(await response.json()); setError(''); setLastUpdated(new Date()) } catch (e) { setStatus(null); setError((e as Error).message) }
     try { const response = await api('/v1/models', key); const data = await response.json(); if (!Array.isArray(data.data)) throw new Error('Backend returned an invalid model list'); setModels(data.data.filter((m: Model) => typeof m.id === 'string')); setModelError('') } catch (e) { setModels([]); setModelError((e as Error).message) }
     try { const response = await api('/api/routes', key); const data = await response.json(); if (!Array.isArray(data.data)) throw new Error('Invalid route registry'); setRoutes(data.data.filter((route: Route) => typeof route.model === 'string')); setRouteError('') } catch (e) { setRoutes([]); setRouteError((e as Error).message) }
+    try { const response = await api('/api/metrics',key); setMetrics(await response.json()); setMetricsError('') } catch(e) {setMetrics(null);setMetricsError((e as Error).message)}
   }, [key])
   useEffect(() => { void refresh(); const timer = setInterval(() => void refresh(), 30000); return () => clearInterval(timer) }, [refresh])
   const selectableModels: Model[] = [...models, ...routes.filter(r => !models.some(m => m.id === r.model)).map(r => ({ id: r.model, owned_by: 'Configured route' }))]
@@ -58,7 +62,7 @@ function App() {
         {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
         {page === 'Models' && <Models apiKey={key} models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
-        {page === 'Requests' && <Requests status={status} lastUpdated={lastUpdated} refresh={refresh}/>}
+        {page === 'Requests' && <Requests status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
       </div><footer><span>YAG <span className="footer-sep">/</span> ONE HOST. MULTIPLE MODELS. EVERY INTERFACE.</span><span>SELF-HOSTED INFERENCE GATEWAY</span></footer>
     </main>
@@ -117,7 +121,23 @@ function Integrations({model}: {model: string}) {
   const curl=`export YAG_API_KEY='your-yag-api-key'\ncurl ${shell(base+'/v1/chat/completions')} \\\n  -H "Authorization: Bearer $YAG_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d ${shell(body)}`
   return <><PageHead eyebrow="CONNECT" title="Integrations" description="Connect your applications to your self-hosted inference gateway."/><div className="integration-grid"><section className="panel integration-main"><div className="panel-head"><div><h2>OpenAI-compatible clients</h2><p>Use Chat Completions with your own application or SDK.</p></div><span className="tag green">AVAILABLE</span></div><div className="integration-body"><div className="field-caption">BASE URL</div><div className="endpoint"><code>{base}/v1</code><span>CHAT COMPLETIONS</span></div><p>Set the base URL in your client and use your YAG API key. Your upstream credential is never sent to the browser.</p><div className="field-caption">EXAMPLE REQUEST</div><CopyBlock text={curl}/><p className="tiny-note">The model identifier is populated from the discovered model list when available.</p></div></section><section className="panel integration-side"><div className="panel-head"><div><h2>Protocol support</h2><p>Current gateway capabilities.</p></div></div><div className="protocol-row"><div><b>Chat Completions</b><small>OpenAI-compatible upstream</small></div><span className="tag green">AVAILABLE</span></div><div className="protocol-row"><div><b>Responses API</b><small>Partial adapter</small></div><span className="tag">PARTIAL</span></div><div className="protocol-row"><div><b>Messages API</b><small>Text-only, non-streaming; no tool use</small></div><span className="tag">PARTIAL</span></div><div className="integration-note">Codex compatibility is not yet achieved; Claude Code is not supported. The gateway does not execute client tools.</div></section></div></>
 }
-function Requests({status,lastUpdated,refresh}: {status:Status|null; lastUpdated:Date|null; refresh:() => Promise<void>}) { return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Live connection counters from the running gateway host." action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/><div className="metrics"><div className="metric"><div className="metric-label">ACTIVE CONNECTIONS <Activity size={15}/></div><div className="metric-value">{status ? status.active_connections.toLocaleString() : '—'}</div><div className="metric-detail">Includes the status request itself</div></div><div className="metric"><div className="metric-label">CONNECTIONS ACCEPTED <Layers3 size={15}/></div><div className="metric-value">{status ? status.total_connections.toLocaleString() : '—'}</div><div className="metric-detail">Since restart; includes health and console connections</div></div><div className="metric"><div className="metric-label">HOST UPTIME <Clock3 size={15}/></div><div className="metric-value">{status ? formatUptime(status.uptime_seconds) : '—'}</div><div className="metric-detail">{lastUpdated ? 'Refreshed '+lastUpdated.toLocaleTimeString() : 'Awaiting status'}</div></div></div><section className="panel"><div className="empty-table big-empty"><Activity size={22}/><b>No individual request history</b><span>Connection counters are live process metrics, not inference-request or token-usage totals. YAG does not store prompts, request bodies or a historical request log.</span></div></section></> }
+function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
+  return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Aggregate in-memory request counts without storing prompts or responses."
+    action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
+    <div className="metrics">
+      <div className="metric"><div className="metric-label">CHAT COMPLETIONS <MessageSquare size={15}/></div><div className="metric-value">{metrics?metrics.chat_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Chat requests</div></div>
+      <div className="metric"><div className="metric-label">RESPONSES API <Code2 size={15}/></div><div className="metric-value">{metrics?metrics.responses_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Responses requests</div></div>
+      <div className="metric"><div className="metric-label">ANTHROPIC MESSAGES <Braces size={15}/></div><div className="metric-value">{metrics?metrics.anthropic_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Messages requests</div></div>
+    </div>
+    <section className="panel"><div className="panel-head"><div><h2>Gateway operations</h2><p>Since the last Host restart; counts are not inference success rates.</p></div></div>
+      <div className="setting-row"><div><b>Model listing</b><small>GET /v1/models requests</small></div><b>{metrics?metrics.model_list_requests.toLocaleString():'—'}</b></div>
+      <div className="setting-row"><div><b>Provider probes</b><small>POST /api/provider/check requests</small></div><b>{metrics?metrics.provider_check_requests.toLocaleString():'—'}</b></div>
+      <div className="setting-row"><div><b>Active HTTP connections</b><small>Includes the status poll itself</small></div><b>{status?status.active_connections.toLocaleString():'—'}</b></div>
+    </section>
+    {metricsError && <div className="info-block"><CircleHelp size={16}/><span>{metricsError}</span></div>}
+    <div className="info-block"><LockKeyhole size={16}/><span>No prompt text, response bodies or request histories are persisted. Metrics are counts of accepted API requests, including ones that later fail. {lastUpdated ? 'Last refreshed '+lastUpdated.toLocaleTimeString() : ''}</span></div>
+  </>
+}
 function Settings({keyDraft,setKeyDraft,saveKey,connected}: {keyDraft:string;setKeyDraft:(s:string)=>void;saveKey:(e:React.FormEvent)=>void;connected:boolean}) { return <><PageHead eyebrow="CONFIGURATION" title="Settings" description="Manage your Console connection to the gateway."/><div className="settings-layout"><section className="panel"><div className="panel-head"><div><h2>API authentication</h2><p>Use the API key configured on your YAG Host.</p></div><KeyRound size={17} className="muted"/></div><form className="settings-form" onSubmit={saveKey}><label htmlFor="api-key">YAG API KEY</label><input id="api-key" type="password" autoComplete="off" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="Enter your gateway API key"/><p>The key is kept in session storage for this tab and sent only to this gateway. Clear it by saving an empty value.</p><button className="primary-button" type="submit">Save connection</button>{connected && <span className="saved-indicator"><Check size={14}/> Key saved for this session</span>}</form></section><section className="panel"><div className="panel-head"><div><h2>Host configuration</h2><p>Managed on the machine running YAG.</p></div></div><div className="settings-body"><div className="setting-row"><div><b>Network &amp; provider</b><small>Configure via host environment variables</small></div><span className="tag">HOST MANAGED</span></div><div className="setting-row"><div><b>Credentials &amp; access</b><small>Restart the host to rotate the API key</small></div><span className="tag">HOST MANAGED</span></div><div className="security-note"><ShieldCheck size={16}/><span>YAG binds to localhost by default. Use a trusted TLS reverse proxy and firewall before exposing it on your network.</span></div></div></section></div></> }
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>)
