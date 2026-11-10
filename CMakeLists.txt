@@ -25,3 +25,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME anthropic COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/anthropic.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME fallback COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/fallback.py $<TARGET_FILE:yag>)
+endif()
