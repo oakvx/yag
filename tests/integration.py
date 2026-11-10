@@ -158,6 +158,18 @@ class Integration(unittest.TestCase):
         result=json.loads(data)
         self.assertTrue(result['routed'])
         self.assertEqual(result['received'],payload)
+    def test_inference_counters_are_payload_free(self):
+        self.assertEqual(request(self.port,'POST','/v1/chat/completions',
+            {'model':'response-echo','messages':[{'role':'user','content':'secret-prompt'}]})[0],200)
+        status,_,body=request(self.port,'GET','/api/metrics')
+        self.assertEqual(status,200,body)
+        data=json.loads(body)
+        self.assertEqual(data['object'],'gateway.metrics')
+        self.assertGreaterEqual(data['chat_requests'],1)
+        self.assertEqual(data['responses_requests'],int(data['responses_requests']))
+        self.assertNotIn(b'secret-prompt',body)
+        self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
+
     def test_provider_reachability_checks_do_not_disclose_secrets(self):
         for payload in [{},{'model':'routed-model'}]:
             status,_,body=request(self.port,'POST','/api/provider/check',payload)

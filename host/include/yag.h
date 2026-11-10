@@ -20,6 +20,8 @@ typedef struct {
     pthread_mutex_t lock;
     unsigned active;
     unsigned long total;
+    unsigned long chat_requests, responses_requests, anthropic_requests;
+    unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     time_t rate_windows[17];
     unsigned rate_counts[17];
