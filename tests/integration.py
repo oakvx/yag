@@ -42,6 +42,13 @@ class Backend(BaseHTTPRequestHandler):
                     'function':{'name':'read_file','arguments':'{"path":"src/main.c"}'}}]
                 },'finish_reason':'tool_calls'}],
                 'usage':{'prompt_tokens':15,'completion_tokens':7,'total_tokens':22}})
+        if data['model']=='response-namespaced-tools':
+            return self.send(200, {'object':'chat.completion',
+                'choices':[{'message':{'role':'assistant','content':None,
+                  'tool_calls':[{'id':'call_namespaced','type':'function',
+                    'function':{'name':'workspace__read_file','arguments':'{"path":"README.md"}'}}]},
+                  'finish_reason':'tool_calls'}],
+                'usage':{'prompt_tokens':12,'completion_tokens':4,'total_tokens':16}})
         if data['model']=='response-echo':
             return self.send(200, {'object':'chat.completion','choices':[{'message':{'role':'assistant','content':json.dumps(data)},'finish_reason':'stop'}], 'usage': {'prompt_tokens':10,'completion_tokens':3,'total_tokens':13}})
         if data['model']=='response-tools':

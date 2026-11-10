@@ -29,6 +29,37 @@ class Responses(unittest.TestCase):
         self.assertEqual(status,200,data)
         response=json.loads(data)
         self.assertEqual(response['output'][0]['content'][0]['text'],'routed response')
+    def test_namespaced_function_tools_and_replay(self):
+        tool={'type':'namespace','name':'workspace','description':'File operations',
+              'tools':[{'type':'function','name':'read_file','parameters':{'type':'object'},
+                        'description':'Read a file'}]}
+        payload={'model':'response-echo',
+                 'input':[{'role':'user','content':'Read a file'},
+                          {'type':'function_call','call_id':'call_1','name':'read_file',
+                           'namespace':'workspace','arguments':'{"path":"notes.txt"}'},
+                          {'type':'function_call_output','call_id':'call_1','output':'hello'}],
+                 'tools':[tool],
+                 'tool_choice':{'type':'function','namespace':'workspace','name':'read_file'}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['output'][0]['content'][0]['text'])
+        self.assertEqual(chat['tools'][0]['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['tool_choice']['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['messages'][1]['tool_calls'][0]['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['messages'][2]['content'],'hello')
+
+    def test_namespaced_function_calls_decode_in_response(self):
+        tool={'type':'namespace','name':'workspace',
+              'tools':[{'type':'function','name':'read_file','parameters':{'type':'object'}}]}
+        status,_,body=self.post({'model':'response-namespaced-tools','input':'open README',
+                                  'tools':[tool]})
+        self.assertEqual(status,200,body)
+        answer=json.loads(body)
+        self.assertEqual(answer['output'][0]['type'],'function_call')
+        self.assertEqual(answer['output'][0]['namespace'],'workspace')
+        self.assertEqual(answer['output'][0]['name'],'read_file')
+        self.assertEqual(answer['output'][0]['call_id'],'call_namespaced')
+
     def test_response_multiple_tool_outputs(self):
         status,_,data=self.post({'model':'response-tools','input':'go'});self.assertEqual(status,200,data);r=json.loads(data)
         self.assertEqual([i['type'] for i in r['output']],['message','function_call','function_call']);self.assertEqual([i['call_id'] for i in r['output'][1:]],['call_A','call_B']);self.assertEqual(r['output'][1]['arguments'],'{"path":"a"}');self.assertIsNone(r['usage'])
