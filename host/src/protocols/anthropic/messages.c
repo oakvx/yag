@@ -52,7 +52,7 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
 }
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences",NULL};
+        "stream","temperature","top_p","stop_sequences","tools",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
@@ -91,6 +91,30 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
     if(!yyjson_mut_obj_add_val(doc,chat,"messages",messages))goto fail;
     if(temp && !yyjson_mut_obj_add_val(doc,chat,"temperature",yyjson_val_mut_copy(doc,temp)))goto fail;
     if(top && !yyjson_mut_obj_add_val(doc,chat,"top_p",yyjson_val_mut_copy(doc,top)))goto fail;
+    yyjson_val *tools=yyjson_obj_get(root,"tools");
+    if(tools) {
+        if(!yyjson_is_arr(tools))goto fail;
+        yyjson_mut_val *out=yyjson_mut_arr(doc);
+        if(!out)goto fail;
+        const char *const tool_fields[]={"name","description","input_schema",NULL};
+        size_t ti,tn;yyjson_val *tool;
+        yyjson_arr_foreach(tools,ti,tn,tool) {
+            yyjson_val *name=yyjson_obj_get(tool,"name");
+            yyjson_val *desc=yyjson_obj_get(tool,"description");
+            yyjson_val *schema=yyjson_obj_get(tool,"input_schema");
+            if(!permitted(tool,tool_fields) || !string_value(name) || !yyjson_get_len(name)
+                || !yyjson_is_obj(schema) || (desc && !string_value(desc)))goto fail;
+            yyjson_mut_val *converted=yyjson_mut_obj(doc),*function=yyjson_mut_obj(doc);
+            if(!converted || !function
+                || !yyjson_mut_obj_add_str(doc,converted,"type","function")
+                || !yyjson_mut_obj_add_val(doc,function,"name",yyjson_val_mut_copy(doc,name))
+                || !yyjson_mut_obj_add_val(doc,function,"parameters",yyjson_val_mut_copy(doc,schema))
+                || (desc && !yyjson_mut_obj_add_val(doc,function,"description",yyjson_val_mut_copy(doc,desc)))
+                || !yyjson_mut_obj_add_val(doc,converted,"function",function)
+                || !yyjson_mut_arr_add_val(out,converted))goto fail;
+        }
+        if(yyjson_arr_size(tools) && !yyjson_mut_obj_add_val(doc,chat,"tools",out))goto fail;
+    }
     if(stops) {
         size_t j,count; yyjson_val *stop;
         yyjson_arr_foreach(stops,j,count,stop)if(!string_value(stop))goto fail;
