@@ -85,7 +85,7 @@ class Integration(unittest.TestCase):
         built_console=os.path.join(os.path.dirname(os.path.dirname(__file__)),'console','dist')
         cls.has_console=os.path.exists(os.path.join(built_console,'index.html'))
         assets=built_console if cls.has_console else cls.tmp.name
-        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_UPSTREAM_KEY=UPKEY,YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
+        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_EXTRA_API_KEYS='additional-key-for-testing',YAG_UPSTREAM_KEY=UPKEY,YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([sys.argv[1]],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
         for _ in range(100):
             if cls.proc.poll() is not None: raise RuntimeError(cls.proc.stderr.read().decode())
@@ -110,6 +110,9 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)
         status,_,body=request(self.port,'GET','/api/status');self.assertEqual(status,200);self.assertGreaterEqual(json.loads(body)['active_connections'],1)
+    def test_additional_api_key(self):
+        self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing')[0],200)
+        self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing-invalid')[0],401)
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
     def test_tools_and_parameters_pass_through(self):
