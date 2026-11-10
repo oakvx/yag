@@ -114,7 +114,7 @@ class Messages(unittest.TestCase):
         status,_,body=self.post(payload)
         self.assertEqual(status,200,body)
         messages=json.loads(json.loads(body)['content'][0]['text'])['messages']
-        self.assertEqual(messages[0]['content'],'System one\\n\\nSystem two')
+        self.assertEqual(messages[0]['content'],'System one\n\nSystem two')
         self.assertEqual(messages[1]['content'],[{'type':'text','text':'Hi'}])
         broken=dict(payload,system=[{'type':'image','source':'no'}])
         self.assertEqual(self.post(broken)[0],400)
