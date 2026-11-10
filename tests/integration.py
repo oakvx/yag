@@ -35,6 +35,13 @@ class Backend(BaseHTTPRequestHandler):
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if data['model']=='slow': time.sleep(2); return self.send(200, {})
         if data['model']=='bad': return self.send(429, {'error':{'message':'backend limit'}})
+        if data['model']=='anthropic-tools':
+            return self.send(200, {'object':'chat.completion','choices':[{'message':{
+                'role':'assistant','content':'I need the file',
+                'tool_calls':[{'id':'call_read','type':'function',
+                    'function':{'name':'read_file','arguments':'{"path":"src/main.c"}'}}]
+                },'finish_reason':'tool_calls'}],
+                'usage':{'prompt_tokens':15,'completion_tokens':7,'total_tokens':22}})
         if data['model']=='response-echo':
             return self.send(200, {'object':'chat.completion','choices':[{'message':{'role':'assistant','content':json.dumps(data)},'finish_reason':'stop'}], 'usage': {'prompt_tokens':10,'completion_tokens':3,'total_tokens':13}})
         if data['model']=='response-tools':
@@ -70,6 +77,13 @@ class Backend(BaseHTTPRequestHandler):
 class RoutedBackend(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     def log_message(self, *_): pass
+    def do_GET(self):
+        body=json.dumps({'object':'list','data':[{'id':'routed-model'}]}).encode()
+        self.send_response(200 if self.headers.get('Authorization')=='Bearer route-secret' else 401)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
     def do_POST(self):
         content=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         is_auth=self.headers.get('Authorization')=='Bearer route-secret'
@@ -144,6 +158,40 @@ class Integration(unittest.TestCase):
         result=json.loads(data)
         self.assertTrue(result['routed'])
         self.assertEqual(result['received'],payload)
+    def test_inference_counters_are_payload_free(self):
+        self.assertEqual(request(self.port,'POST','/v1/chat/completions',
+            {'model':'response-echo','messages':[{'role':'user','content':'secret-prompt'}]})[0],200)
+        status,_,body=request(self.port,'GET','/api/metrics')
+        self.assertEqual(status,200,body)
+        data=json.loads(body)
+        self.assertEqual(data['object'],'gateway.metrics')
+        self.assertGreaterEqual(data['chat_requests'],1)
+        self.assertEqual(data['responses_requests'],int(data['responses_requests']))
+        self.assertNotIn(b'secret-prompt',body)
+        self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
+
+    def test_provider_reachability_checks_do_not_disclose_secrets(self):
+        for payload in [{},{'model':'routed-model'}]:
+            status,_,body=request(self.port,'POST','/api/provider/check',payload)
+            self.assertEqual(status,200,body)
+            result=json.loads(body)
+            self.assertTrue(result['reachable'])
+            self.assertEqual(result['upstream_status'],200)
+            self.assertNotIn(b'route-secret',body)
+            self.assertNotIn(b'127.0.0.1',body)
+        self.assertEqual(request(self.port,'POST','/api/provider/check',{'model':'absent'})[0],404)
+        self.assertEqual(request(self.port,'POST','/api/provider/check',{'model':'routed-model'},key=None)[0],401)
+
+    def test_aggregate_model_list_includes_static_routes(self):
+        status,_,body=request(self.port,'GET','/v1/models')
+        self.assertEqual(status,200,body)
+        models={item['id']:item for item in json.loads(body)['data']}
+        self.assertIn('glm-test',models)
+        self.assertEqual(models['glm-test']['owned_by'],'local')
+        self.assertIn('routed-model',models)
+        self.assertEqual(models['routed-model']['owned_by'],'yag-configured-route')
+        self.assertNotIn('route-secret',body.decode())
+
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload); self.assertEqual(status,200); obj=json.loads(body);self.assertEqual(obj['request'],payload);self.assertEqual(obj['choices'][0]['message']['tool_calls'][0]['id'],'call_1')
