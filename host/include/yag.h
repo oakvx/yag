@@ -20,6 +20,9 @@ typedef struct {
     pthread_mutex_t lock;
     unsigned active;
     unsigned long total;
+    unsigned rate_limit_per_minute;
+    time_t rate_windows[17];
+    unsigned rate_counts[17];
 } yag_config;
 int config_load(yag_config *c);
 const yag_config *config_for_model(const yag_config *c, const char *model, yag_config *selected);

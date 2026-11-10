@@ -23,12 +23,26 @@ void reply(int fd,int status,const char *type,const char *body) {
 }
 static void error(int fd,int status,const char *msg) { char b[512]; snprintf(b,sizeof b,"{\"error\":{\"message\":\"%s\"}}",msg); reply(fd,status,"application/json",b); }
 static int key_equal(const char *a,const char *b) { size_t na=strlen(a),nb=strlen(b),n=na>nb?na:nb; unsigned diff=(unsigned)(na^nb); for(size_t i=0;i<n;i++) diff|=(unsigned char)(i<na?a[i]:0)^(unsigned char)(i<nb?b[i]:0); return diff==0; }
-static int authorized(const yag_config *c,const char *authorization) {
-    if(!authorization || strncmp(authorization,"Bearer ",7))return 0;
+static int authenticated_key(const yag_config *c,const char *authorization) {
+    if(!authorization || strncmp(authorization,"Bearer ",7))return -1;
     const char *candidate=authorization+7;
-    int ok=key_equal(candidate,c->api_key);
-    for(size_t i=0;i<c->extra_key_count;i++) ok |= key_equal(candidate,c->extra_keys[i]);
-    return ok;
+    int match=key_equal(candidate,c->api_key)?0:-1;
+    for(size_t i=0;i<c->extra_key_count;i++)
+        if(key_equal(candidate,c->extra_keys[i]))match=(int)i+1;
+    return match;
+}
+static int rate_permit(yag_config *c,int key_index) {
+    if(!c->rate_limit_per_minute)return 1;
+    time_t now=time(NULL);
+    pthread_mutex_lock(&c->lock);
+    if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
+        c->rate_windows[key_index]=now;
+        c->rate_counts[key_index]=0;
+    }
+    int permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
+    if(permit)c->rate_counts[key_index]++;
+    pthread_mutex_unlock(&c->lock);
+    return permit;
 }
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
@@ -64,7 +78,9 @@ static void handle(int fd,yag_config *c) {
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
-    if(!authorized(c,auth)){error(fd,401,"Invalid API key");goto done;}
+    int key_index=authenticated_key(c,auth);
+    if(key_index<0){error(fd,401,"Invalid API key");goto done;}
+    if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
         yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);

@@ -2,6 +2,7 @@
 #include "yyjson.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 static const char *env(const char *key, const char *fallback) { const char *v=getenv(key); return v && *v ? v : fallback; }
 
@@ -90,6 +91,15 @@ int config_load(yag_config *c) {
             start=comma+1;
         }
     }
+    const char *rate=env("YAG_RATE_LIMIT_PER_MINUTE","0");
+    char *rate_end=NULL;
+    errno=0;
+    unsigned long parsed_rate=strtoul(rate,&rate_end,10);
+    if(errno || *rate_end || rate_end==rate || parsed_rate>60000) {
+        fprintf(stderr,"YAG_RATE_LIMIT_PER_MINUTE must be an integer from 0 to 60000\n");
+        return -1;
+    }
+    c->rate_limit_per_minute=(unsigned)parsed_rate;
     if (load_routes(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     return pthread_mutex_init(&c->lock,NULL);
