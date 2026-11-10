@@ -216,6 +216,16 @@ class Integration(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
             results=list(pool.map(lambda _: request(self.port,'GET','/v1/models')[0],range(24)))
         self.assertEqual(results,[200]*24)
+    def test_auth_rejects_unfinished_request_body_immediately(self):
+        s=socket.create_connection(('127.0.0.1',self.port),timeout=1)
+        try:
+            s.sendall(b'POST /v1/chat/completions HTTP/1.1\\r\\n'
+                      b'Host: localhost\\r\\nContent-Length: 800000\\r\\n\\r\\n')
+            answer=s.recv(1024)
+            self.assertIn(b'401',answer)
+        finally:
+            s.close()
+
     def test_malformed_framing(self):
         s=socket.create_connection(('127.0.0.1',self.port)); s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\nx'); self.assertIn(b'400',s.recv(1024));s.close()
         s=socket.create_connection(('127.0.0.1',self.port));s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n');self.assertIn(b'400',s.recv(1024));s.close()

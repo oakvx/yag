@@ -95,17 +95,21 @@ static void handle(int fd,yag_config *c) {
     }
     if(transfer_encoding){error(fd,400,"Transfer-Encoding is not supported");goto done;}
     if(!strcmp(method,"POST") && !have_length){error(fd,411,"Content-Length required");goto done;}
+    /* Authenticate from headers BEFORE buffering potentially large request bodies.
+     * Never let an unauthenticated client monopolize an active worker on a slow POST. */
+    int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
+    if(api) {
+        int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
+        if(is_messages && auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
+        int key_index=auth?authenticated_key(c,auth):
+            (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
+        if(key_index<0){error(fd,401,"Invalid API key");goto done;}
+        if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
+    }
     while(used-header_len<length){ssize_t n=recv(fd,buf+used,length-(used-header_len),0);if(n<=0)goto done;used+=(size_t)n;}
     char *body=buf+header_len; body[length]=0;
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
-    int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
-    int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
-    if(is_messages && auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
-    int key_index=auth?authenticated_key(c,auth):
-        (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
-    if(key_index<0){error(fd,401,"Invalid API key");goto done;}
-    if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
