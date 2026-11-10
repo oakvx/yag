@@ -4,7 +4,7 @@
 
 YAG is an early-stage, self-hosted inference gateway. This repository currently contains a native C17 host and a React/TypeScript Console. It forwards OpenAI Chat Completions to a default OpenAI-compatible inference server and supports up to 16 exact-model upstream routes. Model discovery still uses the default upstream, and a limited Responses-to-Chat adapter is included. It does not run inference or execute tools.
 
-> **Status: foundation / experimental, not a production-ready multi-protocol gateway.** The Responses adapter supports a documented subset, but current Codex CLI requests do not yet work. Anthropic Messages supports text and function-tool translation in both non-streaming and streaming SSE modes, subject to documented limitations. Token counting, multimodal content and complete Claude Code integration are not yet verified. No real hosted inference provider has been tested. Do not deploy this version on an untrusted network. See [scope and architecture](docs/architecture/STATUS.md).
+> **Status: foundation / experimental, not a production-ready multi-protocol gateway.** The Responses adapter supports a documented subset, and Codex CLI 0.167.0 has passed both a streamed text turn and a client-shell-tool cycle against a deterministic mock backend. Anthropic Messages supports text and function-tool translation in both non-streaming and streaming SSE modes, subject to documented limitations. Token counting, multimodal content and complete Claude Code integration are not yet verified. No real hosted inference provider has been tested. Do not deploy this version on an untrusted network. See [scope and architecture](docs/architecture/STATUS.md).
 
 ## What works today
 
