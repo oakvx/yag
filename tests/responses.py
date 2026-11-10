@@ -24,6 +24,11 @@ class Responses(unittest.TestCase):
     def test_response_json_format(self):
         status,_,data=self.post({'model':'response-echo','input':'x','prompt_cache_key':'cache','text':{'verbosity':'low','format':{'type':'json_schema','name':'result','schema':{'type':'object'},'strict':True}}});self.assertEqual(status,200,data)
         chat=json.loads(json.loads(data)['output'][0]['content'][0]['text']);self.assertEqual(chat['verbosity'],'low');self.assertEqual(chat['prompt_cache_key'],'cache');self.assertEqual(chat['response_format'],{'type':'json_schema','json_schema':{'name':'result','schema':{'type':'object'},'strict':True}})
+    def test_responses_routes_to_configured_model(self):
+        status,_,data=self.post({'model':'routed-model','input':'hello'})
+        self.assertEqual(status,200,data)
+        response=json.loads(data)
+        self.assertEqual(response['output'][0]['content'][0]['text'],'routed response')
     def test_response_multiple_tool_outputs(self):
         status,_,data=self.post({'model':'response-tools','input':'go'});self.assertEqual(status,200,data);r=json.loads(data)
         self.assertEqual([i['type'] for i in r['output']],['message','function_call','function_call']);self.assertEqual([i['call_id'] for i in r['output'][1:]],['call_A','call_B']);self.assertEqual(r['output'][1]['arguments'],'{"path":"a"}');self.assertIsNone(r['usage'])
