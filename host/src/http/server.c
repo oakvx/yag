@@ -105,7 +105,22 @@ static void handle(int fd,yag_config *c) {
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
     const char *trace=getenv("YAG_TRACE_ROUTES");
-    if(trace && !strcmp(trace,"1"))fprintf(stderr,"YAG request method=%s route=%s\n",method,trace_route(uri));
+    if(trace && !strcmp(trace,"1")) {
+        const char *kind=trace_route(uri);
+        if(strcmp(kind,"other"))
+            fprintf(stderr,"YAG request method=%s route=%s\n",method,kind);
+        else {
+            char path[128];size_t i=0;
+            while(i<sizeof path-1 && uri[i] && uri[i]!='?' && uri[i]!='#') {
+                unsigned char ch=(unsigned char)uri[i];
+                path[i]=(ch>=33 && ch<=126)?(char)ch:'_';
+                i++;
+            }
+            path[i]=0;
+            fprintf(stderr,"YAG request method=%s route=other path=%s has_query=%d\n",
+                method,path,strchr(uri,'?')!=NULL);
+        }
+    }
     size_t length=0; int have_length=0,have_auth=0,have_native_key=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0; char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
