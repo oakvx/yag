@@ -49,6 +49,18 @@ class Messages(unittest.TestCase):
         self.assertEqual(request['tools'],[{'type':'function','function':{
             'name':'read_file','description':'Read a file','parameters':payload['tools'][0]['input_schema']}}])
 
+    def test_chat_tool_calls_become_anthropic_tool_use(self):
+        status,_,body=self.post({'model':'anthropic-tools','max_tokens':64,
+            'messages':[{'role':'user','content':'Read a file'}]})
+        self.assertEqual(status,200,body)
+        reply=json.loads(body)
+        self.assertEqual(reply['stop_reason'],'tool_use')
+        self.assertEqual(reply['content'],[
+            {'type':'text','text':'I need the file'},
+            {'type':'tool_use','id':'call_read','name':'read_file',
+             'input':{'path':'src/main.c'}}])
+        self.assertEqual(reply['usage'],{'input_tokens':15,'output_tokens':7})
+
     def test_errors_are_not_misrepresented(self):
         basic={'model':'response-echo','max_tokens':15,'messages':[{'role':'user','content':'hi'}]}
         for payload in [
