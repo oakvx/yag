@@ -131,6 +131,12 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing-invalid')[0],401)
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
+    def test_route_inventory_does_not_leak_secrets(self):
+        status,_,data=request(self.port,'GET','/api/routes')
+        self.assertEqual(status,200,data)
+        self.assertEqual(json.loads(data)['data'],[{'model':'routed-model'}])
+        self.assertNotIn(b'route-secret',data)
+        self.assertEqual(request(self.port,'GET','/api/routes',key=None)[0],401)
     def test_model_routes_to_separate_backend(self):
         payload={'model':'routed-model','messages':[{'role':'user','content':'hello'}]}
         status,_,data=request(self.port,'POST','/v1/chat/completions',payload)

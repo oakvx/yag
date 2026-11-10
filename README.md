@@ -87,7 +87,7 @@ export YAG_ROUTE_KEY='YOUR_SECOND_BACKEND_SECRET'
 export YAG_MODEL_ROUTES='[{"model":"my-other-model","url":"http://127.0.0.1:9000/v1","key_env":"YAG_ROUTE_KEY"}]'
 ```
 
-Currently `GET /v1/models` still lists only the default upstream. Configured routes can be called by ID; aggregate discovery is not yet implemented. There is no fallback after a matched backend fails.
+The authenticated `GET /api/routes` endpoint lists configured model IDs without backend credentials or addresses. Currently `GET /v1/models` still lists only the default upstream. Configured routes can be called by ID; aggregate discovery is not yet implemented. There is no fallback after a matched backend fails.
 
 Keys are supplied through the process environment; use your service manager's restricted secret provisioning and account permissions. Environment variables may be visible to privileged users or through process inspection. Additional keys allow distinct clients to authenticate, but there is no per-key identity, scope, revocation without restart, or usage attribution. There is no encrypted secret store, rate limiting, TLS server, CORS configuration, audit logging, request history, or administrative API. Rotating the single key requires restarting the Host. `/health` and Console assets are public; `/api/status` and `/v1/*` require the key. HTTP requests are limited to 1 MiB, headers to 16 KiB and concurrent connections to 32; chunked request bodies are not supported. Connections use HTTP/1.x and close after each request.
 
