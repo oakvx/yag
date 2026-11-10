@@ -37,6 +37,7 @@ with tempfile.TemporaryDirectory() as work:
     with open(os.path.join(home, 'config.toml'), 'w', encoding='utf8') as f:
         f.write(f'''model = "response-stream"
 model_provider = "yag"
+web_search = "disabled"
 [model_providers.yag]
 name = "YAG Local"
 base_url = "http://127.0.0.1:{port}/v1"
