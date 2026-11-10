@@ -22,9 +22,9 @@ Supported: text string or structured text messages, instructions, function defin
 
 Non-streaming emits basic Response objects. Streaming consumes Chat SSE incrementally and emits named Responses events with per-stream sequence numbers, text and function-argument deltas, completed items, and completed/incomplete terminal events. A malformed or prematurely closed stream emits `error` once streaming has started; earlier upstream HTTP errors retain their status and body. Usage is reported only when the upstream provides complete prompt/completion/total counts; detailed token breakdowns and reasoning content are not emitted. The adapter rejects upstream refusal, reasoning content, legacy function-call and audio output instead of silently dropping them.
 
-Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB incoming requests. Calls are accepted as function tools only. Image/audio/file inputs, non-string tool outputs, built-in and namespace tools, reasoning summaries/encrypted reasoning, stateful conversations, `previous_response_id`, `store: true`, and unrecognized fields are explicitly rejected. The adapter cannot reconstruct or report provider-specific reasoning. Function call ID/name fragments must be available before the first argument delta; a later change after the item is announced is rejected. Some backends reject translated fields or do not support tool calls; YAG does not have a model capability registry. A completed response does not guarantee that a particular model is suitable for an agent.
+Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB incoming requests. Calls are accepted as function tools only. Image/audio/file inputs, non-string tool outputs, built-in and namespace tools, reasoning summaries, actual encrypted reasoning items, stateful conversations, `previous_response_id`, `store: true`, and unrecognized fields are explicitly rejected. The adapter cannot reconstruct or report provider-specific reasoning. Function call ID/name fragments must be available before the first argument delta; a later change after the item is announced is rejected. Some backends reject translated fields or do not support tool calls; YAG does not have a model capability registry. A completed response does not guarantee that a particular model is suitable for an agent.
 
-**Codex: not yet compatible.** An actual Codex CLI 0.167.0 run against the deterministic mock backend failed with HTTP 400 on `include`. The observed request also contained `client_metadata`, `reasoning.summary`, namespace tools and `web_search`; these are outside the implemented subset. The test did not reach inference. No actual Codex tool cycle or real model has been verified. See [Codex probe](../integrations/codex.md).
+**Codex: not yet compatible.** The initial Codex CLI 0.167.0 probe against a mock backend failed on `include`. Since that historical probe, YAG has added support for the optional encrypted-reasoning projection (without generating reasoning items) and `client_metadata`; no new live Codex probe has been recorded. `reasoning.summary`, namespace tools and `web_search` remain unsupported. No actual Codex tool cycle or real model has been verified. See [Codex probe](../integrations/codex.md).
 
 ## Anthropic Messages (limited)
 
@@ -32,9 +32,9 @@ The `POST /v1/messages` adapter accepts a non-streaming request with text-only m
 
 ## Not implemented
 
-- A comprehensive cross-protocol canonical representation; explicit model capability descriptions; multiple providers and configuration management; provider health checks.
+- A comprehensive cross-protocol canonical representation; explicit model capability descriptions; runtime provider editing, multi-provider discovery and automatic fallback/health checks. Static per-model routing is implemented.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic streaming, `count_tokens`, Claude Code headers, events and tool semantics. The basic Messages adapter handles non-streaming text only and rejects unsupported content.
-- Per-client keys/scopes/revocation, administrative authorization, rate limiting, configured CORS, native TLS, encrypted secret storage, structured/audit logs, and access controls beyond one bearer key.
+- Identity-aware API key administration (scopes, revocation without restart, issuance/rotation), network-level abuse protection, configured CORS, native TLS, encrypted secret storage and structured/audit logs. Additional static bearer keys and an optional per-key fixed-window limit are available, but are not a replacement for production access controls.
 - Request history and usage aggregation, CPU/RAM/GPU monitoring, full backend settings, model capability management, and provider editing in the Console.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
@@ -42,7 +42,7 @@ The `POST /v1/messages` adapter accepts a non-streaming request with text-only m
 
 1. Replace or harden the listener and add protocol contract tests, cancellation and graceful lifecycle handling.
 2. Add canonical messages, content blocks, tool calls/results, generation settings and streaming events, with explicit ownership, lossless mappings and capability rejection.
-3. Complete and qualify Responses against current Codex request shapes, actual models and full tool loops; implement Anthropic separately. Do not claim compatibility without executing those tests.
-4. Add scoped credentials, revocation, rate limiting, TLS deployment and operational monitoring before production use.
+3. Complete and qualify Responses against current Codex request shapes, actual models and full tool loops; extend Anthropic Messages beyond text-only, non-streaming support. Do not claim compatibility without executing those tests.
+4. Add scoped credentials, revocation, stronger per-key quotas and TLS deployment with operational monitoring before production use.
 
 The [libcurl tutorial](https://github.com/curl/curl/blob/master/docs/libcurl/libcurl-tutorial.md) and [yyjson API](https://github.com/ibireme/yyjson/blob/master/doc/API.md) were consulted. Codex's own [configuration entry point](https://github.com/openai/codex/blob/main/docs/config.md) links to its current configuration reference; merely configuring `wire_api = "responses"` would not make this implementation compatible.
