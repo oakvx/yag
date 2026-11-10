@@ -49,6 +49,21 @@ class Messages(unittest.TestCase):
         self.assertEqual(request['tools'],[{'type':'function','function':{
             'name':'read_file','description':'Read a file','parameters':payload['tools'][0]['input_schema']}}])
 
+    def test_assistant_tool_use_is_replayed_as_chat_tool_call(self):
+        payload={'model':'response-echo','max_tokens':100,'messages':[
+            {'role':'user','content':'Read file'},
+            {'role':'assistant','content':[{'type':'text','text':'Reading now'},
+                {'type':'tool_use','id':'call_1','name':'read_file',
+                 'input':{'path':'docs/README.md'}}]}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        converted=json.loads(json.loads(body)['content'][0]['text'])
+        assistant=converted['messages'][1]
+        self.assertEqual(assistant['role'],'assistant')
+        self.assertEqual(assistant['content'],[{'type':'text','text':'Reading now'}])
+        self.assertEqual(assistant['tool_calls'],[{'type':'function','id':'call_1',
+            'function':{'name':'read_file','arguments':'{"path":"docs/README.md"}'}}])
+
     def test_chat_tool_calls_become_anthropic_tool_use(self):
         status,_,body=self.post({'model':'anthropic-tools','max_tokens':64,
             'messages':[{'role':'user','content':'Read a file'}]})
