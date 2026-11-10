@@ -77,6 +77,13 @@ class Backend(BaseHTTPRequestHandler):
 class RoutedBackend(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     def log_message(self, *_): pass
+    def do_GET(self):
+        body=json.dumps({'object':'list','data':[{'id':'routed-model'}]}).encode()
+        self.send_response(200 if self.headers.get('Authorization')=='Bearer route-secret' else 401)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
     def do_POST(self):
         content=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         is_auth=self.headers.get('Authorization')=='Bearer route-secret'
@@ -151,6 +158,18 @@ class Integration(unittest.TestCase):
         result=json.loads(data)
         self.assertTrue(result['routed'])
         self.assertEqual(result['received'],payload)
+    def test_provider_reachability_checks_do_not_disclose_secrets(self):
+        for payload in [{},{'model':'routed-model'}]:
+            status,_,body=request(self.port,'POST','/api/provider/check',payload)
+            self.assertEqual(status,200,body)
+            result=json.loads(body)
+            self.assertTrue(result['reachable'])
+            self.assertEqual(result['upstream_status'],200)
+            self.assertNotIn(b'route-secret',body)
+            self.assertNotIn(b'127.0.0.1',body)
+        self.assertEqual(request(self.port,'POST','/api/provider/check',{'model':'absent'})[0],404)
+        self.assertEqual(request(self.port,'POST','/api/provider/check',{'model':'routed-model'},key=None)[0],401)
+
     def test_aggregate_model_list_includes_static_routes(self):
         status,_,body=request(self.port,'GET','/v1/models')
         self.assertEqual(status,200,body)

@@ -33,6 +33,7 @@ int upstream_perform(const yag_config *c, const char *path, const char *body, si
 void responses_handle(int fd, const yag_config *c, const char *body, size_t len);
 void anthropic_messages_handle(int fd, const yag_config *c, const char *body, size_t len);
 void models_handle(int fd, const yag_config *c);
+void provider_check_handle(int fd,const yag_config *cfg,const char *body,size_t len);
 int send_all(int fd, const void *data, size_t len);
 void reply(int fd, int status, const char *type, const char *body);
 #endif

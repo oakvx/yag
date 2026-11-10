@@ -99,6 +99,7 @@ static void handle(int fd,yag_config *c) {
         else error(fd,500,"Could not serialize routes");
         free(serialized);yyjson_mut_doc_free(d);
     }
+    else if(!strcmp(uri,"/api/provider/check") && !strcmp(method,"POST")) provider_check_handle(fd,c,body,length);
     else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) models_handle(fd,c);
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
