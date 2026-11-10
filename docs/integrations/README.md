@@ -19,9 +19,9 @@ print(result.choices[0].message.content)
 
 The Console's Integrations page generates a cURL example using the current browser origin and discovered model. Never put a real key into a committed example.
 
-## Anthropic Messages — text only
+## Anthropic Messages — streaming and text/function tools
 
-YAG supports non-streaming requests to `POST /v1/messages` with either `Authorization: Bearer <YAG_API_KEY>` or `x-api-key: <YAG_API_KEY>`. The key authenticates to YAG, not the inference provider. Both headers together are rejected. The adapter supports text and basic function/tool exchanges, but is **not** a drop-in replacement for Claude Code: streaming events, system content blocks, error-marked tool results and token counting are unsupported.
+YAG supports non-streaming requests to `POST /v1/messages` with either `Authorization: Bearer <YAG_API_KEY>` or `x-api-key: <YAG_API_KEY>`. The key authenticates to YAG, not the inference provider. Both headers together are rejected. The adapter supports text, SSE streaming, function-tool definitions, tool-use and tool-result replay, system text blocks and error-marked tool results. It is **not yet a verified drop-in replacement for Claude Code**: token counting, multimodal messages, server-side tools and some request shapes remain unsupported.
 
 For example, when a supported upstream model is running:
 
@@ -36,4 +36,4 @@ The backend must return a single assistant text choice with prompt and completio
 
 ## Codex and Claude Code — not supported yet
 
-Codex still needs additional Responses features and verified tool cycles; see [Codex configuration and probe](codex.md). Claude Code requires Anthropic streaming and tool semantics that are not implemented in YAG. No Claude Code compatibility tests have been run.
+Codex still needs additional Responses features and verified tool cycles; see [Codex configuration and probe](codex.md). YAG now implements a subset of Anthropic streaming and tool semantics. An isolated Claude Code CLI smoke probe is run in CI; full compatibility requires successful real-model tool cycles and is not claimed.
