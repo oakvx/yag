@@ -276,6 +276,7 @@ real-model compatibility or the full range of client tools.
 ## Docs
 
 - [Real-model qualification](docs/integrations/live-model.md)
+- [Isolated YAG real-backend probe](docs/integrations/real-model.md)
 - [Docker / Compose deployment](docs/deployment/docker.md)
 - [Linux release packaging](docs/deployment/releases.md)
 

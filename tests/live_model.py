@@ -19,13 +19,13 @@ TEST_TOOL={'type':'function','function':{
         'required':['key'],'additionalProperties':False}}}
 TEST_USER='Call yag_fixture_lookup for the key "fixture". Do not answer without calling it.'
 
-def exercise(base, key, model, protocol, tools, stream):
+def exercise(base, key, model, protocol, tools, stream, opener=urlopen):
     headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
     def post(endpoint,payload):
         request=Request(base+endpoint,data=json.dumps(payload).encode(),
                         headers=headers,method='POST')
         try:
-            with urlopen(request,timeout=90) as response:
+            with opener(request,timeout=90) as response:
                 data=response.read(8*1024*1024+1)
                 if len(data)>8*1024*1024:raise RuntimeError('Response exceeded 8 MiB')
                 return response.headers.get('Content-Type',''),data

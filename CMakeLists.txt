@@ -49,3 +49,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME capability_policy COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/capability_policy.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME real_provider_config COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/real_provider_probe_test.py)
+endif()
