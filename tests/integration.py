@@ -165,6 +165,12 @@ class Integration(unittest.TestCase):
             status,headers,_=request(self.port,'GET',js.group(1).decode(),key=None)
             self.assertEqual(status,200); self.assertIn('javascript',headers['Content-Type'])
         self.assertEqual(request(self.port,'GET','/../etc/passwd',key=None)[0],404)
+    def test_unrecognized_paths_never_disclose_query_values_in_response(self):
+        secret='a-private-token-never-log'
+        status,_,body=request(self.port,'GET','/v1/unknown/'+secret+'?key='+secret)
+        self.assertIn(status,(400,404))
+        self.assertNotIn(secret.encode(),body)
+
     def test_auth_and_status(self):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)

@@ -167,17 +167,8 @@ static void handle(int fd,yag_config *c) {
         const char *kind=trace_route(uri);
         if(strcmp(kind,"other"))
             fprintf(stderr,"YAG request method=%s route=%s\n",method,kind);
-        else {
-            char path[128];size_t i=0;
-            while(i<sizeof path-1 && uri[i] && uri[i]!='?' && uri[i]!='#') {
-                unsigned char ch=(unsigned char)uri[i];
-                path[i]=(ch>=33 && ch<=126)?(char)ch:'_';
-                i++;
-            }
-            path[i]=0;
-            fprintf(stderr,"YAG request method=%s route=other path=%s has_query=%d\n",
-                method,path,strchr(uri,'?')!=NULL);
-        }
+        else fprintf(stderr,"YAG request method=%s route=other has_query=%d\n",
+            method,strchr(uri,'?')!=NULL);
     }
     size_t length=0; int have_length=0,have_auth=0,have_native_key=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0; char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
