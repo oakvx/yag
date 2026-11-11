@@ -4,6 +4,8 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <netdb.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,17 +73,64 @@ static void metrics(int fd,yag_config *cfg) {
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
     else reply(fd,200,"application/json",out);
 }
+/* Resolve every asset path component without following symlinks. Merely
+ * rejecting ".." is insufficient: an asset-tree symlink can escape its root. */
+static FILE *open_asset(const char *root,const char *rel,long *length) {
+    int directory=open(root,O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);
+    if(directory<0)return NULL;
+    char *path=strdup(rel+1),*save=NULL;
+    if(!path){close(directory);return NULL;}
+    char *part=strtok_r(path,"/",&save);
+    int fd=-1;
+    while(part) {
+        char *next=strtok_r(NULL,"/",&save);
+        if(!strcmp(part,".") || !strcmp(part,".."))break;
+        int flags=O_RDONLY|O_CLOEXEC|O_NOFOLLOW|(next?O_DIRECTORY:0);
+        fd=openat(directory,part,flags);
+        close(directory);directory=-1;
+        if(fd<0)break;
+        if(!next) {
+            struct stat st;
+            if(fstat(fd,&st)==0 && S_ISREG(st.st_mode)
+                && st.st_size>=0 && st.st_size<=10*1024*1024) {
+                *length=(long)st.st_size;
+                FILE *file=fdopen(fd,"rb");
+                free(path);
+                if(file)return file;
+            }
+            close(fd);fd=-1;break;
+        }
+        directory=fd;
+        part=next;
+    }
+    if(directory>=0)close(directory);
+    free(path);
+    return NULL;
+}
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
-    if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512) { error(fd,404,"Not found"); return; }
-    char path[2048]; int n=snprintf(path,sizeof path,"%s%s",c->assets,rel); if(n<0 || (size_t)n>=sizeof path) {error(fd,404,"Not found");return;}
-    FILE *f=fopen(path,"rb"); if(!f) {error(fd,404,"Not found");return;}
-    if(fseek(f,0,SEEK_END) || ftell(f)<0) {fclose(f);error(fd,500,"Asset read failed");return;}
-    long len=ftell(f); rewind(f); if(len>10*1024*1024){fclose(f);error(fd,500,"Asset too large");return;}
-    const char *type="application/octet-stream"; const char *ext=strrchr(rel,'.');
-    if(ext && !strcmp(ext,".html"))type="text/html; charset=utf-8"; else if(ext && !strcmp(ext,".js"))type="text/javascript; charset=utf-8"; else if(ext && !strcmp(ext,".css"))type="text/css; charset=utf-8"; else if(ext && !strcmp(ext,".svg"))type="image/svg+xml";
-    char h[512]; n=snprintf(h,sizeof h,"HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'\r\nConnection: close\r\n\r\n",type,len);
-    if(n>0 && (size_t)n<sizeof h && !send_all(fd,h,(size_t)n)) {char b[8192]; size_t got; while((got=fread(b,1,sizeof b,f))) if(send_all(fd,b,got)) break; } fclose(f);
+    if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512
+        || rel[0]!='/' || rel[strlen(rel)-1]=='/') {
+        error(fd,404,"Not found");return;
+    }
+    long len=0;
+    FILE *f=open_asset(c->assets,rel,&len);
+    if(!f){error(fd,404,"Not found");return;}
+    const char *type="application/octet-stream";const char *ext=strrchr(rel,'.');
+    if(ext && !strcmp(ext,".html"))type="text/html; charset=utf-8";
+    else if(ext && !strcmp(ext,".js"))type="text/javascript; charset=utf-8";
+    else if(ext && !strcmp(ext,".css"))type="text/css; charset=utf-8";
+    else if(ext && !strcmp(ext,".svg"))type="image/svg+xml";
+    char h[512];int n=snprintf(h,sizeof h,
+        "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\n"
+        "X-Content-Type-Options: nosniff\r\n"
+        "Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'\r\n"
+        "Connection: close\r\n\r\n",type,len);
+    if(n>0 && (size_t)n<sizeof h && !send_all(fd,h,(size_t)n)) {
+        char b[8192];size_t got;
+        while((got=fread(b,1,sizeof b,f)))if(send_all(fd,b,got))break;
+    }
+    fclose(f);
 }
 /* Diagnostics expose route categories only; never log prompt contents,
  * authentication headers, URL query strings or arbitrary path segments. */
