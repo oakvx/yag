@@ -64,14 +64,20 @@ static void increment(yag_config *cfg,unsigned long *counter) {
     pthread_mutex_unlock(&cfg->lock);
 }
 static void metrics(int fd,yag_config *cfg) {
-    char out[512];
+    char out[1024];
     pthread_mutex_lock(&cfg->lock);
     int n=snprintf(out,sizeof out,
         "{\"object\":\"gateway.metrics\",\"chat_requests\":%lu,"
         "\"responses_requests\":%lu,\"anthropic_requests\":%lu,"
-        "\"model_list_requests\":%lu,\"provider_check_requests\":%lu}",
+        "\"model_list_requests\":%lu,\"provider_check_requests\":%lu,"
+        "\"upstream_attempts\":%lu,\"upstream_successes\":%lu,"
+        "\"upstream_http_errors\":%lu,\"upstream_transport_failures\":%lu,"
+        "\"upstream_total_latency_ms\":%lu,\"circuit_rejections\":%lu}",
         cfg->chat_requests,cfg->responses_requests,cfg->anthropic_requests,
-        cfg->model_list_requests,cfg->provider_check_requests);
+        cfg->model_list_requests,cfg->provider_check_requests,
+        cfg->upstream_attempts,cfg->upstream_successes,
+        cfg->upstream_http_errors,cfg->upstream_transport_failures,
+        cfg->upstream_total_latency_ms,cfg->circuit_rejections);
     pthread_mutex_unlock(&cfg->lock);
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
     else reply(fd,200,"application/json",out);
@@ -286,6 +292,12 @@ static void handle(int fd,yag_config *c) {
         for(size_t i=0;i<c->route_count;i++) {
             yyjson_mut_val *route=yyjson_mut_obj(d);
             yyjson_mut_obj_add_strcpy(d,route,"model",c->routes[i].model);
+            pthread_mutex_lock(&c->lock);
+            int open=c->routes[i].circuit_open_until>time(NULL);
+            unsigned failures=c->routes[i].consecutive_connect_failures;
+            pthread_mutex_unlock(&c->lock);
+            yyjson_mut_obj_add_bool(d,route,"circuit_open",open);
+            yyjson_mut_obj_add_uint(d,route,"consecutive_connect_failures",failures);
             yyjson_mut_arr_add_val(routes,route);
         }
         yyjson_mut_doc_set_root(d,root);
