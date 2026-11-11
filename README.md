@@ -107,8 +107,8 @@ flowchart LR
 
 - Complete Codex compatibility across real models and built-in server tools. The pinned mock-only Codex text and shell cycle passed; hosted `web_search` and other unsupported tool types are not provided by YAG.
 - Full Claude Code compatibility with real models. A real Claude Code CLI now passes a text turn and local Read-tool cycle against a mock backend; multimodal inputs, native thinking, native token counting, prompt caching and server-side tools are still unsupported.
-- Live provider discovery and health-aware routing. `/v1/models` combines the default upstream with configured static route IDs; optional failover retries only DNS/connect failures before any upstream HTTP response.
-- TLS, CORS configuration, audit logging, request history, admin API, per-key identity, revocation without restart, usage attribution, encrypted secret store, unauthenticated rate limiting.
+- Continuous active health checking and latency-aware routing are not implemented. `/v1/models` merges default discovery and static route IDs; the opt-in circuit breaker reacts only to connection/DNS failures and a cooldown, not to model quality or full health status.
+- Native TLS, configurable CORS, structured audit logging, request history, runtime administrative mutation, per-key identity/revocation without restart, token usage attribution, encrypted secret store, unauthenticated network-level rate limiting. Extra static keys can now be restricted to inference-only scope, but rotation still needs restart.
 - Model inference. Tool execution. Not YAG's job.
 
 The model list is **not** a health or capability guarantee. Static route entries
@@ -123,6 +123,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
 | `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
+| `GET` | `/api/model-capabilities` | key | Operator-declared per-route tool/streaming/vision/reasoning/context hints. Unknown is `null`, not assumed true. |
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
@@ -132,6 +133,34 @@ don't guarantee their backends are reachable or support the requested operations
 `/api/*` and `/v1/*` are rate-limited per key when `YAG_RATE_LIMIT_PER_MINUTE > 0` —
 fixed 60-second windows, `429` on excess. Metrics count **request attempts**
 (invalid ones included), not successful generations.
+
+## New routing and deployment features
+
+Optional `YAG_MODEL_ROUTES` entries accept `capabilities` with explicitly
+declared `tools`, `streaming`, `vision`, `reasoning` booleans and
+`max_context_tokens` (positive integer). Missing fields are **unknown**;
+these declarations do not certify backend support. Example:
+
+```json
+[
+  {"model":"llm-tools","url":"http://127.0.0.1:9000/v1",
+   "capabilities":{"tools":true,"streaming":true,"vision":false,
+                   "reasoning":false,"max_context_tokens":32768}}
+]
+```
+
+With the opt-in circuit breaker, failing routes are temporarily excluded only
+after pre-response DNS/connect errors; if `YAG_FALLBACK_TO_DEFAULT=1`, traffic
+uses the default route. Never replay an already accepted inference request.
+`/api/metrics` reports aggregate upstream outcomes, total attempt duration and
+circuit rejection counts; it is neither a per-model usage/billing ledger nor
+token accounting. No prompt or request body is persisted.
+
+The Console now shows declared capability hints, route circuit status and
+transport-level metrics. For container deployment, see
+[Docker / Compose instructions](docs/deployment/docker.md). For actual
+provider qualification, see [real-model opt-in probe](docs/integrations/real-model.md).
+The native CLI probes continue to use deterministic mock backends.
 
 ## Build
 
@@ -202,6 +231,7 @@ Read once at startup. Restart to apply.
 | --- | --- | --- |
 | `YAG_API_KEY` | *required* | Primary gateway bearer key, ≥16 chars. Generate something long and random. |
 | `YAG_EXTRA_API_KEYS` | empty | Up to 16 extra keys, comma-separated, each ≥16 chars. No commas inside keys. |
+| `YAG_EXTRA_KEY_SCOPES` | empty (all) | Optional comma-separated `all` or `inference` scopes for each extra key; `inference` denies `/api/*` management endpoints. Primary key retains full access. |
 | `YAG_RATE_LIMIT_PER_MINUTE` | `0` | Per-key limit on authenticated `/api/*` + `/v1/*`, fixed 60 s window. `0` = off, max `60000`. |
 | `YAG_BIND` | `127.0.0.1` | Listen address. `0.0.0.0` only if you mean it. |
 | `YAG_PORT` | `8080` | Listen port. |
@@ -209,6 +239,8 @@ Read once at startup. Restart to apply.
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
 | `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in (`1`) retry on DNS or connection errors only, before an upstream HTTP response; never on timeouts or HTTP errors. |
+| `YAG_CIRCUIT_FAILURE_THRESHOLD` | `0` | Optional per-route circuit breaker after 1–100 consecutive pre-response DNS/connect failures; `0` disables it. |
+| `YAG_CIRCUIT_COOLDOWN_SECONDS` | `30` | Keep failing routes open for 1–3600 seconds before permitting new attempts. |
 | `YAG_TRACE_ROUTES` | `0` | Opt-in (`1`) privacy-conscious route category diagnostics; does not log query values, prompts or credentials. |
 | `YAG_TRACE_ANTHROPIC_SHAPE` | `0` | Opt-in (`1`) log allowlisted protocol fields and block categories on rejected Messages inputs, not prompt contents; use only for local diagnostics. |
 | `YAG_TIMEOUT` | `120` | Total upstream timeout, 1–3600 s. Connect timeout: 10 s. |
