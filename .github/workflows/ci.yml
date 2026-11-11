@@ -5,6 +5,10 @@ on:
     branches: [main, "feat/**"]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -14,8 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
@@ -27,8 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Configure with runtime sanitizers
         run: |
           cmake -S . -B build-sanitizers -DCMAKE_BUILD_TYPE=Debug \
@@ -58,14 +72,45 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  container:
+    name: Docker image build and localhost smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build non-root gateway and React Console image
+        run: docker build --tag yag:ci .
+      - name: Validate Compose port is loopback-only
+        env:
+          YAG_API_KEY: integration-key-dummy-12345
+        run: docker compose config --quiet
+      - name: Run image and check unprivileged process
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' yag:ci)" = "10001:10001"
+          docker run --detach --rm --name yag-ci-smoke \
+            -p 127.0.0.1:18080:8080 \
+            -e YAG_API_KEY=integration-key-dummy-12345 \
+            -e YAG_UPSTREAM_URL=http://127.0.0.1:8000/v1 yag:ci
+          trap 'docker stop yag-ci-smoke || true' EXIT
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:18080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs yag-ci-smoke
+          exit 1
+
   codex-mock-probe:
     name: Codex CLI mock qualification (informational)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Build gateway
         run: cmake -S . -B build && cmake --build build --parallel
       - uses: actions/setup-node@v4
@@ -84,8 +129,13 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Build gateway
         run: cmake -S . -B build && cmake --build build --parallel
       - uses: actions/setup-node@v4
