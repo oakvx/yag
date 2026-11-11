@@ -4,9 +4,18 @@
 #include <time.h>
 #include <pthread.h>
 typedef struct {
+    unsigned long attempts,successes,failures,bypassed,fallthroughs;
+    unsigned long latency_ms;
+    unsigned consecutive_failures;
+    time_t open_until;
+    int half_open_probe;
+    long last_http_status;
+} yag_provider_stats;
+typedef struct {
     char *model;
     char *url;
     const char *key;
+    yag_provider_stats stats;
 } yag_route;
 typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
@@ -25,6 +34,8 @@ typedef struct {
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     int fallback_to_default;
+    unsigned circuit_threshold, circuit_cooldown_seconds;
+    yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
 } yag_config;
