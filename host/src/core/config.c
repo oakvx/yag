@@ -153,6 +153,11 @@ int config_load(yag_config *c) {
         return -1;
     }
     c->rate_limit_per_minute=(unsigned)parsed_rate;
+    const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
+    if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
+        fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");return -1;
+    }
+    c->enforce_model_capabilities=!strcmp(enforce,"1");
     const char *fallback=env("YAG_FALLBACK_TO_DEFAULT","0");
     if(strcmp(fallback,"0") && strcmp(fallback,"1")) {
         fprintf(stderr,"YAG_FALLBACK_TO_DEFAULT must be 0 or 1\n");

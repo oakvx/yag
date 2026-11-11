@@ -202,6 +202,37 @@ static const char *trace_route(const char *uri) {
     if(!strncmp(uri,"/api/",5))return "admin";
     return "other";
 }
+/* Explicitly optional rejection guard. Missing operator capability declarations
+ * are treated as unknown and never silently upgraded to supported. */
+static int reject_unsupported_model_capability(int fd,const yag_config *cfg,
+    yyjson_val *request) {
+    if(!cfg->enforce_model_capabilities || !yyjson_is_obj(request))return 0;
+    yyjson_val *model=yyjson_obj_get(request,"model");
+    if(!yyjson_is_str(model))return 0;
+    const char *name=yyjson_get_str(model);
+    if(strlen(name)!=yyjson_get_len(model))return 0;
+    const yag_route *route=NULL;
+    for(size_t i=0;i<cfg->route_count;i++)
+        if(!strcmp(name,cfg->routes[i].model)){route=&cfg->routes[i];break;}
+    if(!route || !route->capabilities_declared)return 0;
+    yyjson_val *tools=yyjson_obj_get(request,"tools");
+    yyjson_val *stream=yyjson_obj_get(request,"stream");
+    yyjson_val *reasoning=yyjson_obj_get(request,"thinking");
+    if(!reasoning)reasoning=yyjson_obj_get(request,"reasoning");
+    if(!reasoning)reasoning=yyjson_obj_get(request,"reasoning_effort");
+    if(route->tools==0 && yyjson_is_arr(tools) && yyjson_arr_size(tools)) {
+        error(fd,422,"Model route declares function tools unsupported");return 1;
+    }
+    if(route->streaming==0 && yyjson_is_true(stream)) {
+        error(fd,422,"Model route declares streaming unsupported");return 1;
+    }
+    if(route->reasoning==0 && reasoning
+        && !(yyjson_is_obj(reasoning) &&
+             yyjson_equals_str(yyjson_obj_get(reasoning,"type"),"disabled"))) {
+        error(fd,422,"Model route declares reasoning unsupported");return 1;
+    }
+    return 0;
+}
 static void handle(int fd,yag_config *c) {
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     while(used<MAX_HEADER){ ssize_t n=recv(fd,buf+used,MAX_HEADER-used,0); if(n<=0) goto done; used+=(size_t)n; buf[used]=0; char *p=strstr(buf,"\r\n\r\n"); if(p){header_len=(size_t)(p-buf)+4;break;} }
@@ -322,15 +353,22 @@ static void handle(int fd,yag_config *c) {
         increment(c,&c->chat_requests);
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
-        else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
+        else if(!reject_unsupported_model_capability(fd,c,root))
+            upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) {
         increment(c,&c->responses_requests);
-        responses_handle(fd,c,body,length);
+        yyjson_doc *parsed=yyjson_read(body,length,0);
+        if(!reject_unsupported_model_capability(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+            responses_handle(fd,c,body,length);
+        yyjson_doc_free(parsed);
     }
     else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) {
         increment(c,&c->anthropic_requests);
-        anthropic_messages_handle(fd,c,body,length);
+        yyjson_doc *parsed=yyjson_read(body,length,0);
+        if(!reject_unsupported_model_capability(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+            anthropic_messages_handle(fd,c,body,length);
+        yyjson_doc_free(parsed);
     }
     else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
     else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
