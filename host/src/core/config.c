@@ -52,6 +52,58 @@ static int load_routes(yag_config *c) {
     if(!ok)fprintf(stderr,"YAG_MODEL_ROUTES must be an array of up to 16 unique model/url objects with optional valid key_env\n");
     return ok?0:-1;
 }
+static const char *const feature_names[]={
+    "streaming","function_tools","json_schema","reasoning","vision","audio",NULL
+};
+static int load_capabilities(yag_config *cfg) {
+    const char *raw=getenv("YAG_MODEL_CAPABILITIES");
+    if(!raw || !*raw)return 0;
+    yyjson_doc *doc=yyjson_read(raw,strlen(raw),0);
+    yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+    int valid=yyjson_is_arr(root) && yyjson_arr_size(root)<=32;
+    if(valid)for(size_t i=0;i<yyjson_arr_size(root);i++) {
+        yyjson_val *item=yyjson_arr_get(root,i);
+        yyjson_val *model=yyjson_obj_get(item,"model");
+        yyjson_val *features=yyjson_obj_get(item,"features");
+        yyjson_val *window=yyjson_obj_get(item,"context_window");
+        if(!yyjson_is_obj(item) || !yyjson_is_str(model)
+            || !yyjson_get_len(model) || yyjson_get_len(model)>128
+            || strlen(yyjson_get_str(model))!=yyjson_get_len(model)
+            || !yyjson_is_arr(features) || yyjson_arr_size(features)>6
+            || yyjson_obj_size(item)!=(size_t)(window?3:2)
+            || (window && (!yyjson_is_uint(window)
+                || yyjson_get_uint(window)<1024 || yyjson_get_uint(window)>2097152))) {
+            valid=0;break;
+        }
+        for(size_t j=0;j<cfg->capability_count;j++)
+            if(!strcmp(cfg->capabilities[j].model,yyjson_get_str(model)))valid=0;
+        if(!valid)break;
+        unsigned mask=0;
+        size_t j,n;yyjson_val *feature;
+        yyjson_arr_foreach(features,j,n,feature) {
+            int found=0;
+            for(unsigned k=0;feature_names[k];k++)
+                if(yyjson_equals_str(feature,feature_names[k])) {
+                    if(mask&(1u<<k)){valid=0;break;}
+                    mask|=1u<<k;found=1;break;
+                }
+            if(!found || !valid){valid=0;break;}
+        }
+        if(!valid)break;
+        yag_model_capability *entry=&cfg->capabilities[cfg->capability_count];
+        entry->model=strdup(yyjson_get_str(model));
+        if(!entry->model){valid=0;break;}
+        entry->feature_mask=mask;
+        entry->has_context_window=window!=NULL;
+        if(window)entry->context_window=(unsigned)yyjson_get_uint(window);
+        cfg->capability_count++;
+    }
+    yyjson_doc_free(doc);
+    if(!valid)fprintf(stderr,
+        "YAG_MODEL_CAPABILITIES must be an array of <=32 unique model entries "
+        "with allowlisted features and an optional context_window\n");
+    return valid?0:-1;
+}
 const yag_config *config_for_model(const yag_config *c,const char *model,yag_config *selected) {
     if(model)for(size_t i=0;i<c->route_count;i++) {
         if(strcmp(model,c->routes[i].model))continue;
@@ -123,7 +175,7 @@ int config_load(yag_config *c) {
     }
     c->circuit_threshold=(unsigned)threshold_value;
     c->circuit_cooldown_seconds=(unsigned)cooldown_value;
-    if (load_routes(c)) return -1;
+    if (load_routes(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
@@ -139,4 +191,5 @@ void config_free(yag_config *c) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
     free(c->extra_keys_storage);
+    for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
 }
