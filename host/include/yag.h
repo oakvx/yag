@@ -4,17 +4,37 @@
 #include <time.h>
 #include <pthread.h>
 typedef struct {
+    unsigned long attempts,successes,failures,bypassed,fallthroughs;
+    unsigned long latency_ms;
+    unsigned long long prompt_tokens, completion_tokens;
+    unsigned long usage_samples;
+    unsigned consecutive_failures;
+    time_t open_until;
+    int half_open_probe;
+    long last_http_status;
+} yag_provider_stats;
+typedef struct {
+    char *model;
+    unsigned feature_mask,context_window;
+    int has_context_window;
+} yag_model_capability;
+typedef struct {
     char *model;
     char *url;
     const char *key;
+    yag_provider_stats stats;
 } yag_route;
 typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
     char *extra_keys_storage;
+    char *extra_scope_storage;
     const char *extra_keys[16];
+    unsigned extra_key_scopes[16];
     size_t extra_key_count;
     yag_route routes[16];
     size_t route_count;
+    yag_model_capability capabilities[32];
+    size_t capability_count;
     long timeout;
     time_t started;
     pthread_mutex_t lock;
@@ -25,6 +45,10 @@ typedef struct {
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     int fallback_to_default;
+    int enforce_model_capabilities;
+    unsigned circuit_threshold, circuit_cooldown_seconds;
+    unsigned header_deadline_seconds, body_deadline_seconds;
+    yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
 } yag_config;
@@ -41,6 +65,8 @@ void anthropic_messages_handle(int fd, const yag_config *c, const char *body, si
 void anthropic_stream_handle(int fd,const yag_config *target,const char *model,const char *chat_json);
 void models_handle(int fd, const yag_config *c);
 void provider_check_handle(int fd,const yag_config *cfg,const char *body,size_t len);
+void providers_status_handle(int fd,yag_config *cfg);
+void model_capabilities_handle(int fd,const yag_config *cfg);
 int send_all(int fd, const void *data, size_t len);
 void reply(int fd, int status, const char *type, const char *body);
 #endif
