@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: yag-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   host:
     name: C17 host and protocol tests
@@ -41,6 +45,34 @@ jobs:
           ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build-sanitizers --output-on-failure
+
+  docker-smoke:
+    name: Docker image build and localhost smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build OCI image
+        run: docker build --pull -t yag:ci .
+      - name: Launch unprivileged gateway
+        run: |
+          docker run -d --rm --name yag-ci -p 127.0.0.1:18080:8080 \
+            -e YAG_API_KEY=test-only-forty-char-long-key \
+            -e YAG_UPSTREAM_URL=http://127.0.0.1:8000/v1 yag:ci
+      - name: Check unauthenticated health and protected metrics
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health | grep -q '"status":"ok"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:18080/api/metrics)" = 401
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: docker logs yag-ci || true
+      - name: Stop container
+        if: always()
+        run: docker stop yag-ci || true
 
   console:
     name: React console
