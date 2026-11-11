@@ -45,6 +45,7 @@ typedef struct {
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     int fallback_to_default;
+    int enforce_model_capabilities;
     unsigned circuit_threshold, circuit_cooldown_seconds;
     unsigned header_deadline_seconds, body_deadline_seconds;
     yag_provider_stats default_provider_stats;
