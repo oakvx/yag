@@ -34,9 +34,9 @@ class ClaudeProbeBackend(Backend):
         self.send_header('Content-Type','text/event-stream')
         self.end_headers()
         for choice in chunks:
-            self.wfile.write(('data: '+json.dumps(choice)+'\\n\\n').encode())
+            self.wfile.write(('data: '+json.dumps(choice)+'\n\n').encode())
             self.wfile.flush()
-        self.wfile.write(b'data: [DONE]\\n\\n')
+        self.wfile.write(b'data: [DONE]\n\n')
         self.wfile.flush()
         self.close_connection=True
 
@@ -126,7 +126,7 @@ with tempfile.TemporaryDirectory(prefix='yag-claude-probe-') as work:
         env.pop(name,None)
     if args.tool_cycle:
         with open(os.path.join(work,'yag_claude_probe.txt'),'w',encoding='utf-8') as fixture:
-            fixture.write('YAG_CLAUDE_PROBE_READ_OK\\n')
+            fixture.write('YAG_CLAUDE_PROBE_READ_OK\n')
     host=subprocess.Popen([os.path.abspath(args.host)],env=env,
                           stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
     try:
