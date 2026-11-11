@@ -143,6 +143,39 @@ int config_load(yag_config *c) {
             start=comma+1;
         }
     }
+    /* All extra keys default to legacy full access. Scope restrictions are
+     * opt-in, aligned positionally with YAG_EXTRA_API_KEYS. No key is logged. */
+    for(size_t i=0;i<c->extra_key_count;i++)c->extra_key_scopes[i]=15;
+    const char *policies=env("YAG_EXTRA_KEY_SCOPES","");
+    if(*policies) {
+        if(!c->extra_key_count){fprintf(stderr,"YAG_EXTRA_KEY_SCOPES requires extra keys\n");return -1;}
+        c->extra_scope_storage=strdup(policies);
+        if(!c->extra_scope_storage)return -1;
+        size_t position=0;
+        char *start=c->extra_scope_storage;
+        for(;;) {
+            char *comma=strchr(start,',');
+            if(comma)*comma=0;
+            if(position>=c->extra_key_count) {
+                fprintf(stderr,"YAG_EXTRA_KEY_SCOPES count mismatch\n");return -1;
+            }
+            unsigned scope=0;
+            if(!strcmp(start,"all"))scope=15;
+            else if(!strcmp(start,"inference"))scope=1;
+            else if(!strcmp(start,"models"))scope=2;
+            else if(!strcmp(start,"monitor"))scope=4;
+            else if(!strcmp(start,"inference+models"))scope=3;
+            else {
+                fprintf(stderr,"Invalid YAG_EXTRA_KEY_SCOPES entry\n");return -1;
+            }
+            c->extra_key_scopes[position++]=scope;
+            if(!comma)break;
+            start=comma+1;
+        }
+        if(position!=c->extra_key_count) {
+            fprintf(stderr,"YAG_EXTRA_KEY_SCOPES count mismatch\n");return -1;
+        }
+    }
     const char *rate=env("YAG_RATE_LIMIT_PER_MINUTE","0");
     char *rate_end=NULL;
     errno=0;
@@ -191,5 +224,6 @@ void config_free(yag_config *c) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
     free(c->extra_keys_storage);
+    free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
 }

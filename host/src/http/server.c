@@ -225,6 +225,13 @@ static void handle(int fd,yag_config *c) {
         int key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
+        /* Only the primary key may trigger active network probes. A scoped
+         * extra key can be restricted to inference, discovery or read-only
+         * monitoring without access to provider probe operations. */
+        unsigned required=!strcmp(uri,"/api/provider/check")?8u:
+            !strcmp(uri,"/v1/models")?2u:!strncmp(uri,"/v1/",4)?1u:4u;
+        unsigned scope=key_index==0?15u:c->extra_key_scopes[key_index-1];
+        if(!(scope&required)){error(fd,403,"Insufficient API key scope");goto done;}
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     }
     /* Send 100 Continue only AFTER authenticating and checking request size. */
