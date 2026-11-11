@@ -66,6 +66,26 @@ class HttpRobustness(unittest.TestCase):
             response=self.raw(message)
             self.assertTrue(response.startswith(b'HTTP/1.1 4'),response)
 
+    def test_known_framing_errors_have_precise_http_status(self):
+        auth=b'Authorization: Bearer '+KEY.encode()+b'\r\n'
+        cases=[
+            (b'Content-Length: 0\r\nContent-Length: 0\r\n',400),
+            (b'Transfer-Encoding: chunked\r\n',400),
+            (b'Content-Length: -1\r\n',400),
+            (b'Content-Length: 9999999999999999999\r\n',413),
+            (b'Content-Length: 1 2\r\n',400),
+            (b'Content-Length : 0\r\n',400),
+            (b'Expect: unsupported\r\nContent-Length: 0\r\n',417),
+        ]
+        for fields,expected in cases:
+            with self.subTest(fields=fields):
+                payload=(b'POST /v1/chat/completions HTTP/1.1\r\n'
+                    b'Host: localhost\r\n'+auth+fields+b'\r\n')
+                reply=self.raw(payload)
+                self.assertTrue(reply.startswith(
+                    b'HTTP/1.1 '+str(expected).encode()+b' '),reply)
+        self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
+
     def test_deterministic_malformed_header_corpus(self):
         rng=random.Random(190283)
         for _ in range(120):
