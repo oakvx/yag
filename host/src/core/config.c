@@ -106,6 +106,23 @@ int config_load(yag_config *c) {
         return -1;
     }
     c->fallback_to_default=!strcmp(fallback,"1");
+    const char *threshold=env("YAG_CIRCUIT_THRESHOLD","0");
+    const char *cooldown=env("YAG_CIRCUIT_COOLDOWN_SECONDS","30");
+    char *threshold_end=NULL,*cooldown_end=NULL;
+    errno=0;
+    unsigned long threshold_value=strtoul(threshold,&threshold_end,10);
+    int invalid=errno || threshold_end==threshold || *threshold_end || threshold_value>20;
+    errno=0;
+    unsigned long cooldown_value=strtoul(cooldown,&cooldown_end,10);
+    invalid|=errno || cooldown_end==cooldown || *cooldown_end
+        || cooldown_value<1 || cooldown_value>3600;
+    if(invalid) {
+        fprintf(stderr,"YAG_CIRCUIT_THRESHOLD must be 0..20; "
+            "YAG_CIRCUIT_COOLDOWN_SECONDS must be 1..3600\\n");
+        return -1;
+    }
+    c->circuit_threshold=(unsigned)threshold_value;
+    c->circuit_cooldown_seconds=(unsigned)cooldown_value;
     if (load_routes(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
