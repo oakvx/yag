@@ -100,6 +100,12 @@ int config_load(yag_config *c) {
         return -1;
     }
     c->rate_limit_per_minute=(unsigned)parsed_rate;
+    const char *fallback=env("YAG_FALLBACK_TO_DEFAULT","0");
+    if(strcmp(fallback,"0") && strcmp(fallback,"1")) {
+        fprintf(stderr,"YAG_FALLBACK_TO_DEFAULT must be 0 or 1\n");
+        return -1;
+    }
+    c->fallback_to_default=!strcmp(fallback,"1");
     if (load_routes(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     return pthread_mutex_init(&c->lock,NULL);

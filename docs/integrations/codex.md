@@ -1,14 +1,15 @@
 # Codex CLI: configuration and qualification
 
-**Not yet compatible.** A real Codex CLI 0.167.0 text-turn probe against YAG's deterministic mock Chat backend was attempted on 2026-11-10. It failed before reaching the upstream: YAG returned HTTP 400 for the unsupported `include` field. That client also sent `client_metadata`, `reasoning.summary`, a namespace tool and a web-search tool, none of which this adapter supports. A real model and an actual Codex tool cycle have not been tested. Do not interpret the configuration below as a working integration today.
+**Mock integration verified, real-model compatibility not yet qualified.** On 2026-11-10 the Codex CLI v0.167.0 completed both a streamed text turn and a real client-side `exec_command` tool cycle via YAG's Responses adapter. The deterministic mock upstream requested `pwd`, Codex executed it, returned tool output, and then received a final assistant reply. GitHub Actions runs both probes. These results establish one version-specific local protocol path, not arbitrary-model, server-side web-search, or production compatibility.
 
-## Provider configuration for future verification
+## Provider configuration
 
 The current official [Codex configuration reference](https://developers.openai.com/codex/config-reference) documents `model_provider`, `base_url`, `env_key`, and `wire_api = "responses"`. Provider configuration belongs in the user-level `~/.codex/config.toml` (or `config.toml` under a separate `CODEX_HOME`), not a project-local config. Use an actual model ID returned by YAG; the following placeholder must be replaced:
 
 ```toml
 model = "REPLACE_WITH_MODEL_ID_FROM_YAG"
 model_provider = "yag"
+web_search = "disabled" # YAG does not implement server-side web search
 
 [model_providers.yag]
 name = "YAG Local"
@@ -26,19 +27,20 @@ curl -sS http://127.0.0.1:8080/v1/models -H "Authorization: Bearer $YAG_API_KEY"
 codex exec --skip-git-repo-check --sandbox read-only 'Reply with a greeting.'
 ```
 
-**Currently expected:** a 400 describing an unsupported request field or tool, depending on Codex version and configuration. After request-shape support is implemented, qualification still requires a suitable tool-capable model and an actual multi-turn tool call/result test; a greeting alone is insufficient. Codex performs tool execution, not YAG. See OpenAI's [gateway compatibility requirements](https://developers.openai.com/codex/enterprise/gateway-compatibility).
+The isolated probes disable the built-in `web_search` tool because a local Chat Completions backend cannot implement server-hosted search implicitly. The text-turn and shell-tool cycle now pass on the mock model, but qualification on a real inference model and with more tool types remains necessary. Codex executes the tools; YAG only converts requests and responses. See OpenAI's [gateway compatibility requirements](https://developers.openai.com/codex/enterprise/gateway-compatibility).
 
 ## Repeat the isolated mock probe
 
-The probe starts its own Host and mock backend on localhost, uses a temporary `CODEX_HOME` and working directory, and requests a read-only text turn. It requires a Codex CLI executable and Python 3. It returns nonzero when the turn fails. From the repository root:
+Both probes start an isolated Host and mock backend on localhost and use a temporary `CODEX_HOME` and working directory. The text probe runs a greeting; `--tool-cycle` runs a command through Codex and checks that its output is replayed to the adapter. It requires a Codex CLI executable and Python 3. It returns nonzero when the turn fails. From the repository root:
 
 ```sh
 cmake -S . -B build && cmake --build build -j
 # If Codex is already installed:
 python3 tests/codex_probe.py --host ./build/yag
+python3 tests/codex_probe.py --host ./build/yag --tool-cycle
 # Or obtain the version used for the recorded test outside the repository:
 npm install --prefix /tmp/yag-codex --no-save @openai/codex@0.167.0
 python3 tests/codex_probe.py --host ./build/yag --binary /tmp/yag-codex/node_modules/.bin/codex
 ```
 
-The probe is deliberately separate from `ctest`: Codex is optional and this known failing compatibility check must not be misreported as a passing test. The temporary mock model identifier `response-stream` is only for this probe; it is not a real model.
+The probes are separate from the mandatory `ctest` suites because they require the Codex CLI binary. They pass with the pinned CLI version in CI, but do not validate model capability. The temporary mock ID `response-stream` is not a real model.
