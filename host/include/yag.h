@@ -10,6 +10,8 @@ typedef struct {
     int capabilities_declared;
     int tools, streaming, vision, reasoning;
     unsigned max_context_tokens;
+    unsigned consecutive_connect_failures;
+    time_t circuit_open_until;
 } yag_route;
 typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
@@ -28,6 +30,9 @@ typedef struct {
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     int fallback_to_default;
+    unsigned circuit_failure_threshold, circuit_cooldown_seconds;
+    unsigned long upstream_attempts, upstream_transport_failures, upstream_http_errors;
+    unsigned long upstream_successes, upstream_total_latency_ms, circuit_rejections;
     time_t rate_windows[17];
     unsigned rate_counts[17];
 } yag_config;
