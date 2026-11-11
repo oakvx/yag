@@ -107,6 +107,25 @@ static FILE *open_asset(const char *root,const char *rel,long *length) {
     free(path);
     return NULL;
 }
+static void capabilities(int fd,const yag_config *cfg) {
+    /* Reports gateway translation features, not a particular model's abilities. */
+    char body[1536];
+    int n=snprintf(body,sizeof body,
+        "{\"object\":\"gateway.capabilities\",\"api_version\":\"experimental-1\","
+        "\"routing\":{\"configured_routes\":%zu,\"fallback_enabled\":%s},"
+        "\"protocols\":{"
+        "\"chat_completions\":{\"streaming\":true,\"tool_calls\":\"upstream_passthrough\"},"
+        "\"responses\":{\"streaming\":true,\"function_tools\":true,"
+            "\"namespace_functions\":true,\"stateful\":false,\"web_search\":false},"
+        "\"anthropic_messages\":{\"streaming\":true,\"function_tools\":true,"
+            "\"tool_result_replay\":true,\"thinking\":\"best_effort_effort_mapping\","
+            "\"count_tokens\":false,\"multimodal\":false}},"
+        "\"limits\":{\"max_body_bytes\":%d,\"max_connections\":%d}}",
+        cfg->route_count,cfg->fallback_to_default?"true":"false",
+        MAX_BODY,MAX_CONNECTIONS);
+    if(n<0 || (size_t)n>=sizeof body)error(fd,500,"Could not describe capabilities");
+    else reply(fd,200,"application/json",body);
+}
 static void asset(int fd,const yag_config *c,const char *uri) {
     const char *rel=!strcmp(uri,"/")?"/index.html":uri;
     if(strstr(rel,"..") || strpbrk(rel,"%\\?") || strlen(rel)>512
@@ -224,6 +243,7 @@ static void handle(int fd,yag_config *c) {
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
+    else if(!strcmp(uri,"/api/capabilities") && !strcmp(method,"GET")) capabilities(fd,c);
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
         yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
         if(!d){error(fd,500,"Out of memory");goto done;}

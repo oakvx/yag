@@ -205,6 +205,22 @@ class Integration(unittest.TestCase):
         self.assertNotIn(b'secret-prompt',body)
         self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
 
+    def test_capabilities_contract_does_not_confuse_gateway_with_model_support(self):
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        self.assertEqual(status,200,body)
+        caps=json.loads(body)
+        self.assertEqual(caps['object'],'gateway.capabilities')
+        self.assertEqual(caps['routing']['configured_routes'],1)
+        self.assertFalse(caps['routing']['fallback_enabled'])
+        self.assertFalse(caps['protocols']['responses']['web_search'])
+        self.assertFalse(caps['protocols']['responses']['stateful'])
+        self.assertFalse(caps['protocols']['anthropic_messages']['multimodal'])
+        self.assertTrue(caps['protocols']['anthropic_messages']['streaming'])
+        self.assertEqual(caps['limits']['max_body_bytes'],1024*1024)
+        self.assertNotIn(b'route-secret',body)
+        self.assertNotIn(b'127.0.0.1',body)
+        self.assertEqual(request(self.port,'GET','/api/capabilities',key=None)[0],401)
+
     def test_provider_reachability_checks_do_not_disclose_secrets(self):
         for payload in [{},{'model':'routed-model'}]:
             status,_,body=request(self.port,'POST','/api/provider/check',payload)

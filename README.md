@@ -121,6 +121,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/status` | key | Host status. |
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
+| `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
