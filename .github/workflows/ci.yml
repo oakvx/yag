@@ -62,6 +62,32 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  container:
+    name: Docker image build and localhost smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build non-root gateway and React Console image
+        run: docker build --tag yag:ci .
+      - name: Validate Compose port is loopback-only
+        env:
+          YAG_API_KEY: integration-key-dummy-12345
+        run: docker compose config --quiet
+      - name: Run image and check unprivileged process
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' yag:ci)" = "10001:10001"
+          docker run --detach --rm --name yag-ci-smoke \
+            -p 127.0.0.1:18080:8080 \
+            -e YAG_API_KEY=integration-key-dummy-12345 \
+            -e YAG_UPSTREAM_URL=http://127.0.0.1:8000/v1 yag:ci
+          trap 'docker stop yag-ci-smoke || true' EXIT
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:18080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs yag-ci-smoke
+          exit 1
+
   codex-mock-probe:
     name: Codex CLI mock qualification (informational)
     runs-on: ubuntu-latest
