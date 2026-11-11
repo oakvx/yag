@@ -34,6 +34,10 @@ curl http://127.0.0.1:8080/v1/messages \
 
 Claude Code may authenticate with `ANTHROPIC_AUTH_TOKEN` (sent as `Authorization: Bearer`) or `ANTHROPIC_API_KEY` (`x-api-key`); both values must be YAG gateway keys. The non-streaming backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
 
+## Real-model validation
+
+Run the [opt-in real-model qualification script](live-model.md) against a running YAG gateway and a model you control. Text, SSE and tool-result replay can be checked individually; no real-model checks are executed in the default CI.
+
 ## Codex and Claude Code — mock CLI tool cycles verified
 
 Codex CLI 0.167.0 and Claude Code CLI both completed streaming text and local tool execution cycles against a deterministic mock backend. See [Codex](codex.md) and [Claude Code](claude-code.md) for setup and limitations. These tests do not establish compatibility with real inference models; YAG never executes client tools.
