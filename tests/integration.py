@@ -221,6 +221,19 @@ class Integration(unittest.TestCase):
         self.assertNotIn(b'127.0.0.1',body)
         self.assertEqual(request(self.port,'GET','/api/capabilities',key=None)[0],401)
 
+    def test_model_capabilities_unknown_fields_are_explicit(self):
+        status,_,body=request(self.port,'GET','/api/model-capabilities')
+        self.assertEqual(status,200,body)
+        result=json.loads(body)
+        self.assertEqual(result['object'],'gateway.model_capabilities')
+        route=result['data'][0]
+        self.assertEqual(route['model'],'routed-model')
+        self.assertFalse(route['declared'])
+        self.assertIsNone(route['capabilities']['vision'])
+        self.assertIsNone(route['capabilities']['max_context_tokens'])
+        self.assertNotIn(b'route-secret',body)
+        self.assertEqual(request(self.port,'GET','/api/model-capabilities',key=None)[0],401)
+
     def test_provider_reachability_checks_do_not_disclose_secrets(self):
         for payload in [{},{'model':'routed-model'}]:
             status,_,body=request(self.port,'POST','/api/provider/check',payload)
