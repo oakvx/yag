@@ -95,7 +95,7 @@ flowchart LR
 
 ## ✅ What works today
 
-- **Host.** Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys guarding `/v1/*` and `/api/*`.
+- **Host.** Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys, with optional read-only/scoped access for extra keys. HTTP header/body deadlines and connection caps are enforced.
 - **Chat Completions.** `GET /v1/models` and `POST /v1/chat/completions`, including transparent upstream SSE streaming and tool-call structures. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
 - **Responses subset (stateless).** Text, function calls and tool results (including namespaced function tools), semantic SSE events and explicitly rejected unsupported features. A pinned Codex CLI completed mock text and shell-tool cycles; see [Responses support](docs/architecture/STATUS.md).
 - **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
@@ -107,8 +107,8 @@ flowchart LR
 
 - Complete Codex compatibility across real models and built-in server tools. The pinned mock-only Codex text and shell cycle passed; hosted `web_search` and other unsupported tool types are not provided by YAG.
 - Full Claude Code compatibility with real models. A real Claude Code CLI now passes a text turn and local Read-tool cycle against a mock backend; multimodal inputs, native thinking, native token counting, prompt caching and server-side tools are still unsupported.
-- Live provider discovery and health-aware routing. `/v1/models` combines the default upstream with configured static route IDs; optional failover retries only DNS/connect failures before any upstream HTTP response.
-- TLS, CORS configuration, audit logging, request history, admin API, per-key identity, revocation without restart, usage attribution, encrypted secret store, unauthenticated rate limiting.
+- Automatic capability verification and predictive provider routing. `/v1/models` combines the default upstream with static route IDs; an opt-in circuit breaker now suppresses calls to failing routed providers, and only definitively failed connection setup may be retried. Operator-declared capability hints and passive provider health counters are not live model verification.
+- Native TLS, CORS configuration, audit logging, request history, dynamic admin API, per-key identity, revocation without restart, encrypted secret store and unauthenticated connection-level rate limiting. Scoped extra keys, in-memory aggregate usage and parser fuzz tests are present, but have not undergone an independent audit.
 - Model inference. Tool execution. Not YAG's job.
 
 The model list is **not** a health or capability guarantee. Static route entries
@@ -123,11 +123,15 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
 | `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
+| `GET` | `/api/models/capabilities` | key | Operator-declared model capabilities (never marked verified). |
+| `GET` | `/api/providers/status` | key | In-memory per-provider attempts, failures, circuit state, latency and reported tokens. |
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
 | `POST` | `/v1/responses` | key | Responses subset, translated to Chat. |
 | `POST` | `/v1/messages` | key | Anthropic text/function Messages, optional SSE streaming; translated to Chat. |
+
+Monitoring endpoints require a key with the `monitor` permission (or `all`); active `POST /api/provider/check` requires the primary/all-scope key. Inference and model discovery can be separately restricted for additional keys.
 
 `/api/*` and `/v1/*` are rate-limited per key when `YAG_RATE_LIMIT_PER_MINUTE > 0` —
 fixed 60-second windows, `429` on excess. Metrics count **request attempts**
@@ -202,16 +206,22 @@ Read once at startup. Restart to apply.
 | --- | --- | --- |
 | `YAG_API_KEY` | *required* | Primary gateway bearer key, ≥16 chars. Generate something long and random. |
 | `YAG_EXTRA_API_KEYS` | empty | Up to 16 extra keys, comma-separated, each ≥16 chars. No commas inside keys. |
+| `YAG_EXTRA_KEY_SCOPES` | empty | Optional positional scopes for extra keys: `all`, `inference`, `models`, `monitor`, or `inference+models`. Primary key always has full access. |
 | `YAG_RATE_LIMIT_PER_MINUTE` | `0` | Per-key limit on authenticated `/api/*` + `/v1/*`, fixed 60 s window. `0` = off, max `60000`. |
 | `YAG_BIND` | `127.0.0.1` | Listen address. `0.0.0.0` only if you mean it. |
 | `YAG_PORT` | `8080` | Listen port. |
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base. No trailing slash, query or fragment. |
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
+| `YAG_MODEL_CAPABILITIES` | empty | JSON array (≤32) of `{model,features,context_window?}`. Features: streaming, function_tools, json_schema, reasoning, vision, audio. Operator assertions only, not probed. |
 | `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in (`1`) retry on DNS or connection errors only, before an upstream HTTP response; never on timeouts or HTTP errors. |
+| `YAG_CIRCUIT_THRESHOLD` | `0` | 0 disables the circuit breaker; 1–20 upstream failures trip it for routed models. |
+| `YAG_CIRCUIT_COOLDOWN_SECONDS` | `30` | Cooldown for a tripped route, 1–3600. One half-open request probes recovery. |
 | `YAG_TRACE_ROUTES` | `0` | Opt-in (`1`) privacy-conscious route category diagnostics; does not log query values, prompts or credentials. |
 | `YAG_TRACE_ANTHROPIC_SHAPE` | `0` | Opt-in (`1`) log allowlisted protocol fields and block categories on rejected Messages inputs, not prompt contents; use only for local diagnostics. |
 | `YAG_TIMEOUT` | `120` | Total upstream timeout, 1–3600 s. Connect timeout: 10 s. |
+| `YAG_HEADER_DEADLINE_SECONDS` | `10` | Monotonic deadline for incoming HTTP headers; 1–300. |
+| `YAG_BODY_DEADLINE_SECONDS` | `30` | Monotonic deadline for HTTP request bodies; 1–3600. |
 | `YAG_ASSETS` | `console/dist` | Path to the compiled Console assets. |
 
 Multi-backend routing — secrets by reference, never inline:
@@ -228,6 +238,10 @@ only failed connection setup for mapped models; requests that received an HTTP r
 or timed out are never transparently replayed.
 
 SIGINT/SIGTERM drain in-flight workers before libcurl cleanup. The listener supports authenticated `Expect: 100-continue`, rejects invalid header names and serves Console assets without following symlinks. These hardening changes do **not** constitute a security audit.
+
+Provider operations are visible through `/api/providers/status`. Token counters include **only usage actually reported by upstream Chat responses**, not estimates. Counters are in memory and reset at restart; a large stream may exceed the bounded usage observer and therefore not contribute tokens. Circuit breaker outcomes are passive: an HTTP `/models` probe or capability declaration does not certify tool calling or inference.
+
+The default frontend exposes a model capability registry and per-provider operations summary. For production use, configure scopes, token rotation via your service manager, and a TLS reverse proxy. Static scopes cannot revoke live keys without restarting the gateway.
 
 ## Security & threat model
 
@@ -259,6 +273,10 @@ isolated mock. Both CLI qualification jobs remain informational; neither verifie
 real-model compatibility or the full range of client tools.
 
 ## Docs
+
+- [Real-model qualification](docs/integrations/live-model.md)
+- [Docker / Compose deployment](docs/deployment/docker.md)
+- [Linux release packaging](docs/deployment/releases.md)
 
 - [Integration notes](docs/integrations/README.md)
 - [Codex configuration & probe](docs/integrations/codex.md)
