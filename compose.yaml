@@ -1,0 +1,22 @@
+services:
+  yag:
+    build: .
+    image: yag:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      YAG_API_KEY: "${YAG_API_KEY:?Set a strong YAG_API_KEY in your environment}"
+      YAG_UPSTREAM_URL: "${YAG_UPSTREAM_URL:?Set a reachable upstream /v1 URL}"
+      YAG_UPSTREAM_KEY: "${YAG_UPSTREAM_KEY:-}"
+      YAG_RATE_LIMIT_PER_MINUTE: "${YAG_RATE_LIMIT_PER_MINUTE:-120}"
+      YAG_TIMEOUT: "${YAG_TIMEOUT:-120}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m

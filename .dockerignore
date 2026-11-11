@@ -1,0 +1,12 @@
+.git
+.github
+build*
+node_modules
+console/node_modules
+console/dist
+tests
+*.log
+.env
+.env.*
+*.key
+*.pem
