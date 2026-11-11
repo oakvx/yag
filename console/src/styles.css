@@ -16,3 +16,10 @@
   padding:8px 10px;font-size:11px;font-weight:600}
 .protocol-tabs button.selected{background:#edf4e9;border-color:#8eaa83;color:#3c5d38}
 .protocol-tabs button:hover{border-color:#9eaf9d}
+
+.provider-table-wrap{overflow-x:auto}
+.provider-table{width:100%;border-collapse:collapse;font-size:12px;text-align:left}
+.provider-table td,.provider-table th{padding:12px;border-bottom:1px solid var(--line,#e5e8e3);white-space:nowrap}
+.provider-table th{font-size:10px;font-weight:650;letter-spacing:.045em;color:#7c877c}
+.provider-table td b{font-weight:650}
+.operations-meta{font-size:12px;color:#657568;padding:12px 20px;border-bottom:1px solid #e5e8e3}
