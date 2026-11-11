@@ -22,6 +22,27 @@ jobs:
         run: cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure
+  native-sanitizers:
+    name: Native ASan / UBSan qualification (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Configure with runtime sanitizers
+        run: |
+          cmake -S . -B build-sanitizers -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build build-sanitizers --parallel
+      - name: Exercise protocol and HTTP regression suites
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-sanitizers --output-on-failure
+
   console:
     name: React console
     runs-on: ubuntu-latest
@@ -73,6 +94,8 @@ jobs:
           node-version: "22"
       - name: Install Claude Code CLI
         run: npm install --global @anthropic-ai/claude-code@latest
+      - name: Record tested Claude Code CLI version
+        run: claude --version
       - name: Probe real Claude Code with isolated mock gateway
         run: python3 tests/claude_probe.py --host ./build/yag
       - name: Probe Claude Code local Read tool execution and result replay
