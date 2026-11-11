@@ -10,3 +10,9 @@
 @media(max-width:700px){
   .route-check .outline-button{padding:5px 4px;font-size:9px}
 }
+
+.protocol-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.protocol-tabs button{background:#fff;border:1px solid #dce2da;color:#59685a;
+  padding:8px 10px;font-size:11px;font-weight:600}
+.protocol-tabs button.selected{background:#edf4e9;border-color:#8eaa83;color:#3c5d38}
+.protocol-tabs button:hover{border-color:#9eaf9d}
