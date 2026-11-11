@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure libcurl headers (bounded package fallback)
         run: |
-          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
             echo 'Using preinstalled libcurl development headers.'
           else
             timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure libcurl headers (bounded package fallback)
         run: |
-          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
             echo 'Using preinstalled libcurl development headers.'
           else
             timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure libcurl headers (bounded package fallback)
         run: |
-          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
             echo 'Using preinstalled libcurl development headers.'
           else
             timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
@@ -131,7 +131,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure libcurl headers (bounded package fallback)
         run: |
-          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\n' | cc -x c -E - >/dev/null; then
             echo 'Using preinstalled libcurl development headers.'
           else
             timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
