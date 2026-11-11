@@ -146,7 +146,7 @@ static const char *trace_route(const char *uri) {
     return "other";
 }
 static void handle(int fd,yag_config *c) {
-    char *buf=malloc(MAX_HEADER+MAX_BODY+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
+    char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     while(used<MAX_HEADER){ ssize_t n=recv(fd,buf+used,MAX_HEADER-used,0); if(n<=0) goto done; used+=(size_t)n; buf[used]=0; char *p=strstr(buf,"\r\n\r\n"); if(p){header_len=(size_t)(p-buf)+4;break;} }
     if(!header_len){error(fd,431,"Headers too large or invalid");goto done;}
     /* Reject NUL and malformed framing to avoid ambiguous request interpretation. */
@@ -199,6 +199,13 @@ static void handle(int fd,yag_config *c) {
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
+    }
+    /* Header-only connections allocate ~16 KiB instead of 1 MiB each.
+     * Authentication and rate checks run before expanding the request buffer. */
+    if(length) {
+        char *expanded=realloc(buf,MAX_HEADER+length+1);
+        if(!expanded){error(fd,500,"Out of memory");goto done;}
+        buf=expanded;
     }
     while(used-header_len<length){ssize_t n=recv(fd,buf+used,length-(used-header_len),0);if(n<=0)goto done;used+=(size_t)n;}
     char *body=buf+header_len; body[length]=0;
