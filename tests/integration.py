@@ -190,6 +190,28 @@ class Integration(unittest.TestCase):
         self.assertEqual(json.loads(data)['data'],[{'model':'routed-model'}])
         self.assertNotIn(b'route-secret',data)
         self.assertEqual(request(self.port,'GET','/api/routes',key=None)[0],401)
+    def test_only_upstream_reported_tokens_are_aggregated(self):
+        def usage():
+            data=json.loads(request(self.port,'GET','/api/providers/status')[2])
+            return data['data'][0]
+        before=usage()
+        self.assertEqual(request(self.port,'POST','/v1/chat/completions',{
+            'model':'response-echo','messages':[{'role':'user','content':'fixture'}]})[0],200)
+        self.assertEqual(request(self.port,'POST','/v1/responses',{
+            'model':'response-echo','input':'fixture'})[0],200)
+        self.assertEqual(request(self.port,'POST','/v1/messages',{
+            'model':'response-echo','max_tokens':32,'messages':[
+                {'role':'user','content':'fixture'}]})[0],200)
+        after=usage()
+        self.assertEqual(after['prompt_tokens']-before['prompt_tokens'],30)
+        self.assertEqual(after['completion_tokens']-before['completion_tokens'],9)
+        self.assertEqual(after['usage_samples']-before['usage_samples'],3)
+        self.assertGreaterEqual(after['total_latency_ms'],before['total_latency_ms'])
+        self.assertNotIn('fixture',str(after))
+        self.assertEqual(request(self.port,'POST','/v1/responses',{
+            'model':'response-stream','input':'fixture','stream':True})[0],200)
+        self.assertEqual(usage()['usage_samples'],after['usage_samples'])
+
     def test_declarative_model_capabilities_are_explicitly_unverified(self):
         status,_,body=request(self.port,'GET','/api/models/capabilities')
         self.assertEqual(status,200,body)
