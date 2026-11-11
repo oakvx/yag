@@ -14,6 +14,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
+#include <poll.h>
+#include <time.h>
 /* On Linux a disconnected peer must not terminate the whole gateway via SIGPIPE. */
 #ifdef MSG_NOSIGNAL
 #define YAG_SEND_FLAGS MSG_NOSIGNAL
@@ -166,9 +168,37 @@ static const char *trace_route(const char *uri) {
     if(!strncmp(uri,"/api/",5))return "admin";
     return "other";
 }
+/* Absolute monotonic deadlines prevent a peer from extending a read forever
+ * by sending one byte just before a per-recv socket timeout expires. */
+static int recv_before_deadline(int fd,char *dst,size_t cap,
+        const struct timespec *start,unsigned seconds) {
+    for(;;) {
+        struct timespec now={0};clock_gettime(CLOCK_MONOTONIC,&now);
+        long long elapsed=(long long)(now.tv_sec-start->tv_sec)*1000
+            +(now.tv_nsec-start->tv_nsec)/1000000LL;
+        long long left=(long long)seconds*1000-elapsed;
+        if(left<=0)return -2;
+        struct pollfd descriptor={.fd=fd,.events=POLLIN};
+        int ready=poll(&descriptor,1,left>2147483647LL?2147483647:(int)left);
+        if(ready==0)return -2;
+        if(ready<0){if(errno==EINTR)continue;return -1;}
+        ssize_t got=recv(fd,dst,cap,0);
+        if(got<0 && errno==EINTR)continue;
+        if(got<0 && (errno==EAGAIN || errno==EWOULDBLOCK))continue;
+        return got>0?(int)got:-1;
+    }
+}
 static void handle(int fd,yag_config *c) {
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
-    while(used<MAX_HEADER){ ssize_t n=recv(fd,buf+used,MAX_HEADER-used,0); if(n<=0) goto done; used+=(size_t)n; buf[used]=0; char *p=strstr(buf,"\r\n\r\n"); if(p){header_len=(size_t)(p-buf)+4;break;} }
+    struct timespec header_start={0};clock_gettime(CLOCK_MONOTONIC,&header_start);
+    while(used<MAX_HEADER){
+        int n=recv_before_deadline(fd,buf+used,MAX_HEADER-used,&header_start,c->header_deadline_seconds);
+        if(n==-2){error(fd,408,"Request headers timed out");goto done;}
+        if(n<=0)goto done;
+        used+=(size_t)n;buf[used]=0;
+        char *p=strstr(buf,"\r\n\r\n");
+        if(p){header_len=(size_t)(p-buf)+4;break;}
+    }
     if(!header_len){error(fd,431,"Headers too large or invalid");goto done;}
     /* Reject NUL and malformed framing to avoid ambiguous request interpretation. */
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
@@ -246,7 +276,14 @@ static void handle(int fd,yag_config *c) {
         if(!expanded){error(fd,500,"Out of memory");goto done;}
         buf=expanded;
     }
-    while(used-header_len<length){ssize_t n=recv(fd,buf+used,length-(used-header_len),0);if(n<=0)goto done;used+=(size_t)n;}
+    struct timespec body_start={0};clock_gettime(CLOCK_MONOTONIC,&body_start);
+    while(used-header_len<length) {
+        int n=recv_before_deadline(fd,buf+used,length-(used-header_len),
+            &body_start,c->body_deadline_seconds);
+        if(n==-2){error(fd,408,"Request body timed out");goto done;}
+        if(n<=0)goto done;
+        used+=(size_t)n;
+    }
     char *body=buf+header_len; body[length]=0;
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
