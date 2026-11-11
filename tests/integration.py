@@ -122,7 +122,11 @@ class Integration(unittest.TestCase):
         built_console=os.path.join(os.path.dirname(os.path.dirname(__file__)),'console','dist')
         cls.has_console=os.path.exists(os.path.join(built_console,'index.html'))
         assets=built_console if cls.has_console else cls.tmp.name
-        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_EXTRA_API_KEYS='additional-key-for-testing',YAG_UPSTREAM_KEY=UPKEY,YAG_ROUTE_SECRET='route-secret',YAG_MODEL_ROUTES=json.dumps([{'model':'routed-model','url':f'http://127.0.0.1:{cls.route_backend.server_port}/v1','key_env':'YAG_ROUTE_SECRET'}]),YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
+        env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(cls.port),YAG_API_KEY=KEY,YAG_EXTRA_API_KEYS='additional-key-for-testing',YAG_UPSTREAM_KEY=UPKEY,YAG_ROUTE_SECRET='route-secret',YAG_MODEL_ROUTES=json.dumps([{'model':'routed-model','url':f'http://127.0.0.1:{cls.route_backend.server_port}/v1','key_env':'YAG_ROUTE_SECRET'}]),YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.backend.server_port}/v1',
+                 YAG_MODEL_CAPABILITIES=json.dumps([
+                     {'model':'glm-test','features':['streaming','function_tools'],'context_window':65536},
+                     {'model':'routed-model','features':['streaming']}]),
+                 YAG_ASSETS=assets,YAG_TIMEOUT='1',NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([sys.argv[1]],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
         for _ in range(100):
             if cls.proc.poll() is not None: raise RuntimeError(cls.proc.stderr.read().decode())
@@ -186,6 +190,36 @@ class Integration(unittest.TestCase):
         self.assertEqual(json.loads(data)['data'],[{'model':'routed-model'}])
         self.assertNotIn(b'route-secret',data)
         self.assertEqual(request(self.port,'GET','/api/routes',key=None)[0],401)
+    def test_declarative_model_capabilities_are_explicitly_unverified(self):
+        status,_,body=request(self.port,'GET','/api/models/capabilities')
+        self.assertEqual(status,200,body)
+        listed=json.loads(body)
+        self.assertEqual(listed['object'],'gateway.model_capabilities')
+        self.assertFalse(listed['verified'])
+        self.assertEqual([m['model'] for m in listed['data']],['glm-test','routed-model'])
+        self.assertEqual(listed['data'][0]['features'],['streaming','function_tools'])
+        self.assertEqual(listed['data'][0]['context_window'],65536)
+        self.assertIsNone(listed['data'][1]['context_window'])
+        self.assertFalse(listed['data'][0]['verified'])
+        self.assertNotIn(b'upstream-secret',body)
+        self.assertNotIn(b'route-secret',body)
+        self.assertEqual(request(self.port,'GET','/api/models/capabilities',key=None)[0],401)
+
+    def test_model_capability_configuration_is_strict(self):
+        for entry in [
+            [{'model':'x','features':['unknown']}],
+            [{'model':'x','features':['streaming','streaming']}],
+            [{'model':'x','features':[],'context_window':20}],
+            [{'model':'x','features':[]},{'model':'x','features':[]}],
+            [{'model':'x','features':[],'key':'do-not-expose'}],
+        ]:
+            env=dict(os.environ,YAG_API_KEY=KEY,
+                YAG_MODEL_CAPABILITIES=json.dumps(entry))
+            completed=subprocess.run([sys.argv[1]],env=env,
+                capture_output=True,timeout=2)
+            self.assertNotEqual(completed.returncode,0,entry)
+            self.assertIn(b'YAG_MODEL_CAPABILITIES',completed.stderr)
+
     def test_model_routes_to_separate_backend(self):
         payload={'model':'routed-model','messages':[{'role':'user','content':'hello'}]}
         status,_,data=request(self.port,'POST','/v1/chat/completions',payload)
