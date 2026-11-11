@@ -133,6 +133,28 @@ class Integration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.proc.terminate();cls.proc.wait(timeout=5);cls.proc.stderr.close();cls.backend.shutdown();cls.backend.server_close();cls.route_backend.shutdown();cls.route_backend.server_close();cls.tmp.cleanup()
+    def test_assets_cannot_escape_root_through_symlinks(self):
+        if self.has_console:
+            self.skipTest('Asset root is the separately built Console')
+        directory=os.path.join(self.tmp.name,'nested')
+        os.makedirs(directory,exist_ok=True)
+        with open(os.path.join(directory,'view.html'),'w') as f:
+            f.write('safe nested asset')
+        status,_,body=request(self.port,'GET','/nested/view.html',key=None)
+        self.assertEqual(status,200,body)
+        self.assertEqual(body,b'safe nested asset')
+        outside=tempfile.NamedTemporaryFile(mode='wb',delete=False)
+        try:
+            outside.write(b'private fixture content')
+            outside.close()
+            os.symlink(outside.name,os.path.join(self.tmp.name,'public-leak.txt'))
+            os.symlink(os.path.dirname(outside.name),os.path.join(self.tmp.name,'external-directory'))
+            self.assertEqual(request(self.port,'GET','/public-leak.txt',key=None)[0],404)
+            self.assertEqual(request(self.port,'GET','/external-directory/'+os.path.basename(outside.name),key=None)[0],404)
+            self.assertEqual(request(self.port,'GET','/../private',key=None)[0],404)
+        finally:
+            os.unlink(outside.name)
+
     def test_health_and_console(self):
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
         page=request(self.port,'GET','/',key=None)[2]
