@@ -20,6 +20,25 @@ static int load_routes(yag_config *c) {
     if(ok) for(size_t i=0;i<yyjson_arr_size(list);i++) {
         yyjson_val *route=yyjson_arr_get(list,i);
         yyjson_val *m=yyjson_obj_get(route,"model"),*u=yyjson_obj_get(route,"url"),*k=yyjson_obj_get(route,"key_env");
+        yyjson_val *cap=yyjson_obj_get(route,"capabilities");
+        const char *const caps_allowed[]={"tools","streaming","vision","reasoning","max_context_tokens",NULL};
+        if(cap) {
+            if(!yyjson_is_obj(cap) || !yyjson_obj_size(cap)){ok=0;break;}
+            yyjson_obj_iter iterator=yyjson_obj_iter_with(cap);
+            yyjson_val *field;
+            while((field=yyjson_obj_iter_next(&iterator))) {
+                int recognized=0;
+                for(size_t t=0;caps_allowed[t];t++)
+                    if(yyjson_equals_str(field,caps_allowed[t])){recognized=1;break;}
+                if(!recognized){ok=0;break;}
+                yyjson_val *value=yyjson_obj_iter_get_val(field);
+                if(yyjson_equals_str(field,"max_context_tokens")) {
+                    if(!yyjson_is_uint(value) || !yyjson_get_uint(value)
+                        || yyjson_get_uint(value)>100000000){ok=0;break;}
+                } else if(!yyjson_is_bool(value)){ok=0;break;}
+            }
+            if(!ok)break;
+        }
         if(!yyjson_is_obj(route) || !yyjson_is_str(m) || !yyjson_is_str(u)
             || !yyjson_get_len(m) || !yyjson_get_len(u)
             || strlen(yyjson_get_str(m))!=yyjson_get_len(m)
@@ -27,7 +46,7 @@ static int load_routes(yag_config *c) {
             || !valid_url(yyjson_get_str(u))
             || (k && (!yyjson_is_str(k) || !yyjson_get_len(k)
                 || strlen(yyjson_get_str(k))!=yyjson_get_len(k)))
-            || yyjson_obj_size(route)!=(size_t)(k?3:2)) {ok=0;break;}
+            || yyjson_obj_size(route)!=(size_t)(2+(k?1:0)+(cap?1:0))) {ok=0;break;}
         for(size_t j=0;j<c->route_count;j++)
             if(!strcmp(c->routes[j].model,yyjson_get_str(m)))ok=0;
         if(!ok)break;
@@ -45,11 +64,21 @@ static int load_routes(yag_config *c) {
         r->model=strdup(yyjson_get_str(m));
         r->url=strdup(yyjson_get_str(u));
         r->key=secret;
+        if(cap) {
+            r->capabilities_declared=1;
+            yyjson_val *v;
+            v=yyjson_obj_get(cap,"tools");r->tools=v?yyjson_get_bool(v):-1;
+            v=yyjson_obj_get(cap,"streaming");r->streaming=v?yyjson_get_bool(v):-1;
+            v=yyjson_obj_get(cap,"vision");r->vision=v?yyjson_get_bool(v):-1;
+            v=yyjson_obj_get(cap,"reasoning");r->reasoning=v?yyjson_get_bool(v):-1;
+            v=yyjson_obj_get(cap,"max_context_tokens");
+            r->max_context_tokens=v?(unsigned)yyjson_get_uint(v):0;
+        } else r->tools=r->streaming=r->vision=r->reasoning=-1;
         if(!r->model || !r->url){ok=0;break;}
         c->route_count++;
     }
     yyjson_doc_free(doc);
-    if(!ok)fprintf(stderr,"YAG_MODEL_ROUTES must be an array of up to 16 unique model/url objects with optional valid key_env\n");
+    if(!ok)fprintf(stderr,"YAG_MODEL_ROUTES must be an array of up to 16 unique model/url objects with optional valid key_env and capabilities\n");
     return ok?0:-1;
 }
 const yag_config *config_for_model(const yag_config *c,const char *model,yag_config *selected) {
