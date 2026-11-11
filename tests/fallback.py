@@ -99,6 +99,28 @@ class Fallback(unittest.TestCase):
         self.assertEqual(status,200,body)
         self.assertIn(b'event: message_stop',body)
 
+    def test_no_fallback_after_upstream_401_in_translated_protocols(self):
+        # Responses passes the 401 back through; Anthropic intentionally
+        # sanitizes non-429 upstream status to 502. Neither may retry against
+        # the default provider after an actual HTTP reply.
+        status,_,body=request(self.port,'POST','/v1/responses',
+            {'model':'deny-fallback','input':'hello'})
+        self.assertEqual(status,401,body)
+        self.assertIn(b'route denied',body)
+        status,_,body=request(self.port,'POST','/v1/messages',
+            {'model':'deny-fallback','max_tokens':24,
+             'messages':[{'role':'user','content':'hello'}]})
+        self.assertEqual(status,502,body)
+        status,_,body=request(self.port,'POST','/v1/messages',
+            {'model':'deny-fallback','max_tokens':24,'stream':True,
+             'messages':[{'role':'user','content':'hello'}]})
+        self.assertEqual(status,502,body)
+        providers=json.loads(request(self.port,'GET','/api/providers/status')[2])
+        route=next(x for x in providers['data'] if x['model']=='deny-fallback')
+        self.assertEqual(route['last_http_status'],401)
+        self.assertEqual(route['fallbacks'],0)
+        self.assertEqual(route['circuit'],'closed')
+
     def test_no_fallback_after_authentication_failure(self):
         payload={'model':'deny-fallback','messages':[{'role':'user','content':'hello'}]}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload)
