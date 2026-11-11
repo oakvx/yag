@@ -43,8 +43,9 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 > **This is a foundation, not a fortress.** Codex CLI 0.167.0 completed a text exchange
 > and a client-side shell-tool cycle against a deterministic mock backend; compatibility
 > with real inference models remains unverified. The Anthropic adapter now handles
-> streaming text and function tools, but the real Claude Code CLI smoke qualification
-> currently fails, so Claude Code compatibility is **not** established. No TLS, CORS
+> streaming text and function tools. Claude Code CLI now completes streaming text
+> and a local Read-tool cycle against a deterministic mock backend; real models
+> remain **unverified**. No TLS, CORS
 > configuration, audit log or admin API. **Do not deploy this on an untrusted network.**
 > Full scope: [architecture & status](docs/architecture/STATUS.md).
 
@@ -105,7 +106,7 @@ flowchart LR
 ## ❌ What doesn't
 
 - Complete Codex compatibility across real models and built-in server tools. The pinned mock-only Codex text and shell cycle passed; hosted `web_search` and other unsupported tool types are not provided by YAG.
-- Full Claude Code compatibility: the isolated real CLI smoke qualification still fails. Anthropic multimodal inputs, token counting, native prompt caching and server-side tools are unsupported.
+- Full Claude Code compatibility with real models. A real Claude Code CLI now passes a text turn and local Read-tool cycle against a mock backend; multimodal inputs, native thinking, native token counting, prompt caching and server-side tools are still unsupported.
 - Live provider discovery and health-aware routing. `/v1/models` combines the default upstream with configured static route IDs; optional failover retries only DNS/connect failures before any upstream HTTP response.
 - TLS, CORS configuration, audit logging, request history, admin API, per-key identity, revocation without restart, usage attribution, encrypted secret store, unauthenticated rate limiting.
 - Model inference. Tool execution. Not YAG's job.
@@ -121,6 +122,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/status` | key | Host status. |
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
+| `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
@@ -208,6 +210,7 @@ Read once at startup. Restart to apply.
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
 | `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in (`1`) retry on DNS or connection errors only, before an upstream HTTP response; never on timeouts or HTTP errors. |
 | `YAG_TRACE_ROUTES` | `0` | Opt-in (`1`) privacy-conscious route category diagnostics; does not log query values, prompts or credentials. |
+| `YAG_TRACE_ANTHROPIC_SHAPE` | `0` | Opt-in (`1`) log allowlisted protocol fields and block categories on rejected Messages inputs, not prompt contents; use only for local diagnostics. |
 | `YAG_TIMEOUT` | `120` | Total upstream timeout, 1–3600 s. Connect timeout: 10 s. |
 | `YAG_ASSETS` | `console/dist` | Path to the compiled Console assets. |
 
@@ -223,6 +226,8 @@ or secrets. `GET /v1/models` merges default-upstream discovery with static route
 these entries do not guarantee backend capability. `YAG_FALLBACK_TO_DEFAULT=1` retries
 only failed connection setup for mapped models; requests that received an HTTP response
 or timed out are never transparently replayed.
+
+SIGINT/SIGTERM drain in-flight workers before libcurl cleanup. The listener supports authenticated `Expect: 100-continue`, rejects invalid header names and serves Console assets without following symlinks. These hardening changes do **not** constitute a security audit.
 
 ## Security & threat model
 
@@ -249,15 +254,15 @@ Read this before exposing anything to a network you don't fully control.
 ## Protocol qualification
 
 The native host, mock protocol tests and React console build pass. The pinned Codex
-CLI mock test verifies one streamed text turn and a shell-tool round trip. Claude Code
-is still **unqualified**: its informational CLI probe currently reports a failure.
-The GitHub Actions workflow can be green while an explicitly nonblocking qualification
-job fails; check that job separately before claiming CLI compatibility.
+CLI mock test verifies one streamed text turn and a shell-tool round trip. Claude Code CLI also passes a streamed text turn and local Read-tool cycle on its
+isolated mock. Both CLI qualification jobs remain informational; neither verifies
+real-model compatibility or the full range of client tools.
 
 ## Docs
 
 - [Integration notes](docs/integrations/README.md)
 - [Codex configuration & probe](docs/integrations/codex.md)
+- [Claude Code setup & mock verification](docs/integrations/claude-code.md)
 - [Architecture, scope & status](docs/architecture/STATUS.md)
 
 ---

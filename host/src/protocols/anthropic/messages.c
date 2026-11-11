@@ -24,7 +24,7 @@ static int permitted(yyjson_val *object,const char *const *names) {
 }
 static void anthropic_error(int fd,int status) {
     if(status==400)reply(fd,400,"application/json",
-        "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Unsupported Messages input: only non-streaming text is supported\"}}");
+        "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Unsupported Messages input: request contains fields or content not supported by this gateway\"}}");
     else if(status==429)reply(fd,429,"application/json",
         "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Upstream rate limit\"}}");
     else if(status==504)reply(fd,504,"application/json",
@@ -210,13 +210,62 @@ static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_va
     }
     return 2;
 }
+/* Map thinking intent to Chat's coarser reasoning_effort knob. The exact
+ * Anthropic budget and native thinking blocks cannot be preserved. */
+static int thinking_valid(yyjson_val *thinking,const char **effort) {
+    *effort=NULL;
+    if(!thinking)return 1;
+    const char *const fields[]={"type","budget_tokens",NULL};
+    yyjson_val *type=yyjson_obj_get(thinking,"type");
+    yyjson_val *budget=yyjson_obj_get(thinking,"budget_tokens");
+    if(!permitted(thinking,fields))return 0;
+    if(yyjson_equals_str(type,"disabled"))return budget==NULL;
+    if(yyjson_equals_str(type,"adaptive")) {
+        if(budget)return 0;
+        *effort="medium";return 1;
+    }
+    if(yyjson_equals_str(type,"enabled") && yyjson_is_int(budget)
+        && yyjson_get_sint(budget)>0) {
+        *effort="high";return 1;
+    }
+    return 0;
+}
+/* The gateway has no reasoning blocks in its replay representation, so a
+ * clear_thinking-only request is already satisfied without editing content.
+ * Tool-result clearing would change history and must remain unsupported. */
+static int context_valid(yyjson_val *context) {
+    if(!context)return 1;
+    const char *const fields[]={"edits",NULL},*const edit_fields[]={"type","keep",NULL};
+    yyjson_val *edits=yyjson_obj_get(context,"edits");
+    if(!permitted(context,fields) || !yyjson_is_arr(edits) || yyjson_arr_size(edits)>4)return 0;
+    size_t i,n;yyjson_val *edit;
+    yyjson_arr_foreach(edits,i,n,edit) {
+        yyjson_val *keep=yyjson_obj_get(edit,"keep");
+        if(!permitted(edit,edit_fields)
+            || !yyjson_equals_str(yyjson_obj_get(edit,"type"),"clear_thinking_20251015"))
+            return 0;
+        if(keep && !yyjson_equals_str(keep,"all")) {
+            const char *const keep_fields[]={"type","value",NULL};
+            yyjson_val *value=yyjson_obj_get(keep,"value");
+            if(!permitted(keep,keep_fields)
+                || !yyjson_equals_str(yyjson_obj_get(keep,"type"),"thinking_turns")
+                || !yyjson_is_int(value) || yyjson_get_sint(value)<=0)return 0;
+        }
+    }
+    return 1;
+}
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",NULL};
+        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",
+        "thinking","context_management",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
     yyjson_val *top=yyjson_obj_get(root,"top_p"),*stops=yyjson_obj_get(root,"stop_sequences");
+    yyjson_val *thinking=yyjson_obj_get(root,"thinking");
+    yyjson_val *context=yyjson_obj_get(root,"context_management");
+    const char *reasoning_effort=NULL;
+    if(!thinking_valid(thinking,&reasoning_effort) || !context_valid(context))return NULL;
     yyjson_val *metadata=yyjson_obj_get(root,"metadata");
     const char *const meta_fields[]={"user_id",NULL};
     yyjson_val *user_id=yyjson_obj_get(metadata,"user_id");
@@ -238,6 +287,7 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
     if(!yyjson_mut_obj_add_val(doc,chat,"model",yyjson_val_mut_copy(doc,model))
         || !yyjson_mut_obj_add_val(doc,chat,"max_tokens",yyjson_val_mut_copy(doc,max))
         || !yyjson_mut_obj_add_bool(doc,chat,"stream",stream && yyjson_get_bool(stream)))goto fail;
+    if(reasoning_effort && !yyjson_mut_obj_add_str(doc,chat,"reasoning_effort",reasoning_effort))goto fail;
     if(sys) {
         char *value=system_text(sys);
         if(!value)goto fail;
@@ -417,11 +467,78 @@ static void convert_response(int fd,yyjson_val *root,yyjson_val *model) {
     else anthropic_error(fd,502);
     free(json);yyjson_mut_doc_free(doc);
 }
+/* Optional local-only rejection diagnostics. Print static protocol field names,
+ * never user-supplied values, arbitrary field names or prompt/tool text. */
+static void diagnostic_shape(yyjson_val *root) {
+    const char *trace=getenv("YAG_TRACE_ANTHROPIC_SHAPE");
+    if(!trace || strcmp(trace,"1"))return;
+    if(!yyjson_is_obj(root)){fprintf(stderr,"YAG Anthropic shape: invalid_root\n");return;}
+    const char *const named[]={"model","messages","max_tokens","system","stream",
+        "temperature","top_p","top_k","stop_sequences","tools","tool_choice",
+        "metadata","thinking","output_config","context_management","service_tier",
+        "speed","betas",NULL};
+    fprintf(stderr,"YAG Anthropic shape: top=");
+    yyjson_obj_iter it=yyjson_obj_iter_with(root);yyjson_val *key;
+    while((key=yyjson_obj_iter_next(&it))) {
+        const char *name="other";
+        for(int i=0;named[i];i++)if(yyjson_equals_str(key,named[i])){name=named[i];break;}
+        fprintf(stderr,"%s,",name);
+    }
+    yyjson_val *messages=yyjson_obj_get(root,"messages");
+    fprintf(stderr," messages=%zu",yyjson_arr_size(messages));
+    size_t i,n;yyjson_val *message;
+    yyjson_arr_foreach(messages,i,n,message) {
+        yyjson_val *content=yyjson_obj_get(message,"content");
+        if(i>=3)break;
+        fprintf(stderr," m%zu=",i);
+        if(yyjson_is_str(content))fprintf(stderr,"string");
+        else if(yyjson_is_arr(content)) {
+            size_t j,c;yyjson_val *block;
+            yyjson_arr_foreach(content,j,c,block) {
+                const char *type="other";
+                const char *const known[]={"text","tool_result","tool_use","image",
+                    "document","thinking","redacted_thinking","server_tool_use",NULL};
+                yyjson_val *value=yyjson_obj_get(block,"type");
+                for(int k=0;known[k];k++)if(yyjson_equals_str(value,known[k])){type=known[k];break;}
+                fprintf(stderr,"%s,",type);
+                if(j>=5)break;
+            }
+        } else fprintf(stderr,"other");
+    }
+    yyjson_val *thinking=yyjson_obj_get(root,"thinking");
+    yyjson_val *kind=yyjson_obj_get(thinking,"type");
+    const char *thinking_type=yyjson_equals_str(kind,"enabled")?"enabled":
+        yyjson_equals_str(kind,"disabled")?"disabled":
+        yyjson_equals_str(kind,"adaptive")?"adaptive":"other";
+    yyjson_val *context=yyjson_obj_get(root,"context_management");
+    yyjson_val *edits=yyjson_obj_get(context,"edits");
+    fprintf(stderr," tools=%zu thinking=%s context_edits=%zu",
+        yyjson_arr_size(yyjson_obj_get(root,"tools")),thinking_type,yyjson_arr_size(edits));
+    const char *const type_names[]={"clear_tool_uses_20250919","clear_thinking_20251015",NULL};
+    yyjson_val *edit=yyjson_arr_get(edits,0),*etype=yyjson_obj_get(edit,"type");
+    for(int i=0;type_names[i];i++)if(yyjson_equals_str(etype,type_names[i]))
+        fprintf(stderr," edit_type=%s",type_names[i]);
+    yyjson_val *tools=yyjson_obj_get(root,"tools");
+    yyjson_val *first=yyjson_arr_get(tools,0);
+    const char *const known[]={"name","description","input_schema","cache_control",
+        "type","strict","defer_loading","eager_input_streaming","input_examples",NULL};
+    fprintf(stderr," tool_fields=");
+    if(yyjson_is_obj(first)) {
+        yyjson_obj_iter ti=yyjson_obj_iter_with(first);yyjson_val *tk;
+        while((tk=yyjson_obj_iter_next(&ti))) {
+            const char *label="other";
+            for(int i=0;known[i];i++)if(yyjson_equals_str(tk,known[i]))
+                {label=known[i];break;}
+            fprintf(stderr,"%s,",label);
+        }
+    }
+    fprintf(stderr,"\n");
+}
 void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,size_t size) {
     yyjson_doc *request=yyjson_read(body,size,0);
     yyjson_val *root=request?yyjson_doc_get_root(request):NULL;
     yyjson_mut_doc *translated=convert_request(root);
-    if(!translated){anthropic_error(fd,400);yyjson_doc_free(request);return;}
+    if(!translated){diagnostic_shape(root);anthropic_error(fd,400);yyjson_doc_free(request);return;}
     char *json=yyjson_mut_write(translated,0,NULL);
     yyjson_mut_doc_free(translated);
     if(!json){anthropic_error(fd,502);yyjson_doc_free(request);return;}

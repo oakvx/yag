@@ -101,6 +101,38 @@ class Messages(unittest.TestCase):
         self.assertIn(b'message_stop',response.read())
         conn.close()
 
+    def test_thinking_and_context_clearing_are_bounded_best_effort(self):
+        payload={'model':'response-echo','max_tokens':1024,
+            'messages':[{'role':'user','content':'Hello'}],
+            'thinking':{'type':'enabled','budget_tokens':128},
+            'context_management':{'edits':[{'type':'clear_thinking_20251015','keep':'all'}]}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        converted=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertEqual(converted['reasoning_effort'],'high')
+        self.assertNotIn('context_management',converted)
+        self.assertNotIn('thinking',converted)
+        payload['thinking']={'type':'adaptive'}
+        payload['context_management']={'edits':[{'type':'clear_thinking_20251015',
+            'keep':{'type':'thinking_turns','value':1}}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(json.loads(body)['content'][0]['text'])['reasoning_effort'],'medium')
+        payload['context_management']={'edits':[{'type':'clear_tool_uses_20250919'}]}
+        self.assertEqual(self.post(payload)[0],400)
+        payload['context_management']={'edits':[]}
+        payload['thinking']={'type':'enabled','budget_tokens':'128'}
+        self.assertEqual(self.post(payload)[0],400)
+
+    def test_unsupported_shape_remains_a_safe_rejection(self):
+        payload={'model':'response-echo','max_tokens':16,
+                 'messages':[{'role':'user','content':'SECRET_PROMPT'}],
+                 'thinking':{'type':'invalid','budget_tokens':1024}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,400,body)
+        self.assertNotIn(b'SECRET_PROMPT',body)
+        self.assertIn(b'Unsupported Messages input',body)
+
     def test_text_message_and_usage(self):
         status,_,data=self.post({'model':'response-echo','max_tokens':20,
                                  'system':'be brief','messages':[{'role':'user','content':'hello'}]})

@@ -117,9 +117,61 @@ function Playground({apiKey,models,model,setModel}: {apiKey: string; models: Mod
 }
 function CopyBlock({text}: {text: string}) { const [copied,setCopied]=useState(false); return <div className="code-block"><button onClick={async () => {try {await navigator.clipboard.writeText(text);setCopied(true);setTimeout(() => setCopied(false),2000)} catch { setCopied(false) }}} title="Copy to clipboard">{copied?<Check size={15}/>:<Clipboard size={15}/>} {copied?'Copied':'Copy'}</button><pre>{text}</pre></div> }
 function Integrations({model}: {model: string}) {
-  const base=window.location.origin; const shell=(s: string) => `'${s.replace(/'/g,"'\\''")}'`; const body=JSON.stringify({model: model || 'YOUR_MODEL',messages:[{role:'user',content:'Hello'}],stream:false},null,2)
-  const curl=`export YAG_API_KEY='your-yag-api-key'\ncurl ${shell(base+'/v1/chat/completions')} \\\n  -H "Authorization: Bearer $YAG_API_KEY" \\\n  -H 'Content-Type: application/json' \\\n  -d ${shell(body)}`
-  return <><PageHead eyebrow="CONNECT" title="Integrations" description="Connect your applications to your self-hosted inference gateway."/><div className="integration-grid"><section className="panel integration-main"><div className="panel-head"><div><h2>OpenAI-compatible clients</h2><p>Use Chat Completions with your own application or SDK.</p></div><span className="tag green">AVAILABLE</span></div><div className="integration-body"><div className="field-caption">BASE URL</div><div className="endpoint"><code>{base}/v1</code><span>CHAT COMPLETIONS</span></div><p>Set the base URL in your client and use your YAG API key. Your upstream credential is never sent to the browser.</p><div className="field-caption">EXAMPLE REQUEST</div><CopyBlock text={curl}/><p className="tiny-note">The model identifier is populated from the discovered model list when available.</p></div></section><section className="panel integration-side"><div className="panel-head"><div><h2>Protocol support</h2><p>Current gateway capabilities.</p></div></div><div className="protocol-row"><div><b>Chat Completions</b><small>OpenAI-compatible upstream</small></div><span className="tag green">AVAILABLE</span></div><div className="protocol-row"><div><b>Responses API</b><small>Partial adapter</small></div><span className="tag">PARTIAL</span></div><div className="protocol-row"><div><b>Messages API</b><small>Text, streaming SSE and function tools</small></div><span className="tag">PARTIAL</span></div><div className="integration-note">Codex compatibility is not yet achieved; Claude Code is not supported. The gateway does not execute client tools.</div></section></div></>
+  const [protocol,setProtocol]=useState<'chat'|'responses'|'anthropic'>('chat')
+  const base=window.location.origin
+  const shell=(s:string)=>"'"+s.replace(/'/g,"'\\''")+"'"
+  const chosen=model||'YOUR_MODEL'
+  const samples={
+    chat:{title:'Chat Completions',path:'/v1/chat/completions',body:{
+      model:chosen,messages:[{role:'user',content:'Hello'}],stream:false}},
+    responses:{title:'Responses API',path:'/v1/responses',body:{
+      model:chosen,input:'Hello',store:false,stream:false}},
+    anthropic:{title:'Anthropic Messages',path:'/v1/messages',body:{
+      model:chosen,max_tokens:128,messages:[{role:'user',content:'Hello'}],stream:false}}
+  }
+  const selected=samples[protocol]
+  const headers=['  -H "Authorization: Bearer $YAG_API_KEY" \\',
+    "  -H 'Content-Type: application/json' \\"]
+  if(protocol==='anthropic')headers.push("  -H 'anthropic-version: 2023-06-01' \\")
+  const curl=["export YAG_API_KEY='your-yag-api-key'",
+    'curl '+shell(base+selected.path)+' \\',
+    ...headers,'  -d '+shell(JSON.stringify(selected.body,null,2))].join('\n')
+  return <><PageHead eyebrow="CONNECT" title="Integrations"
+    description="Connect your applications to a self-hosted inference gateway."/>
+    <div className="integration-grid"><section className="panel integration-main">
+      <div className="panel-head"><div><h2>Client configuration</h2>
+        <p>Choose a protocol and copy its curl example.</p></div>
+        <span className="tag green">LOCAL API</span></div>
+      <div className="integration-body">
+        <div className="field-caption">BASE URL</div>
+        <div className="endpoint"><code>{base}/v1</code><span>YAG GATEWAY</span></div>
+        <p>Authenticate with a YAG gateway key. The upstream credential stays server-side.</p>
+        <div className="protocol-tabs" role="group" aria-label="Protocol sample">
+          {(['chat','responses','anthropic'] as const).map(p=>
+            <button type="button" key={p} aria-pressed={protocol===p}
+              className={protocol===p?'selected':''} onClick={()=>setProtocol(p)}>
+              {samples[p].title}
+            </button>)}
+        </div>
+        <div className="field-caption">EXAMPLE REQUEST</div>
+        <CopyBlock text={curl}/>
+        <p className="tiny-note">A discovered model is selected when available. Replace the example key with your gateway key. Protocol translation and model features may differ.</p>
+      </div></section>
+      <section className="panel integration-side">
+        <div className="panel-head"><div><h2>Protocol support</h2>
+          <p>Gateway-level capabilities, not model guarantees.</p></div></div>
+        <div className="protocol-row"><div><b>Chat Completions</b>
+          <small>OpenAI-compatible upstream passthrough</small></div><span className="tag green">AVAILABLE</span></div>
+        <div className="protocol-row"><div><b>Responses API</b>
+          <small>Codex CLI text and shell-tool cycle verified on mock</small></div><span className="tag">PARTIAL</span></div>
+        <div className="protocol-row"><div><b>Anthropic Messages</b>
+          <small>Claude Code CLI text and Read-tool cycle verified on mock</small></div><span className="tag">PARTIAL</span></div>
+        <div className="integration-note">
+          No real inference-model compatibility has been certified. Built-in server tools,
+          native thinking blocks, multimodal inputs and native token counting are not supported.
+          YAG never executes client tools.
+        </div>
+      </section></div></>
 }
 function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
   return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Aggregate in-memory request counts without storing prompts or responses."
