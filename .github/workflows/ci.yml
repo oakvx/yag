@@ -18,8 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
       - name: Build
@@ -31,8 +36,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Configure with runtime sanitizers
         run: |
           cmake -S . -B build-sanitizers -DCMAKE_BUILD_TYPE=Debug \
@@ -94,8 +104,13 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Build gateway
         run: cmake -S . -B build && cmake --build build --parallel
       - uses: actions/setup-node@v4
@@ -114,8 +129,13 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Ensure libcurl headers (bounded package fallback)
+        run: |
+          if pkg-config --exists libcurl && printf '#include <curl/curl.h>\\n' | cc -x c -E - >/dev/null; then
+            echo 'Using preinstalled libcurl development headers.'
+          else
+            timeout 120s bash -c 'sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev'
+          fi
       - name: Build gateway
         run: cmake -S . -B build && cmake --build build --parallel
       - uses: actions/setup-node@v4
