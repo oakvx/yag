@@ -98,8 +98,7 @@ static FILE *open_asset(const char *root,const char *rel,long *length) {
                 && st.st_size>=0 && st.st_size<=10*1024*1024) {
                 *length=(long)st.st_size;
                 FILE *file=fdopen(fd,"rb");
-                free(path);
-                if(file)return file;
+                if(file){free(path);return file;}
             }
             close(fd);fd=-1;break;
         }
