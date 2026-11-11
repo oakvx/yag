@@ -208,6 +208,20 @@ int config_load(yag_config *c) {
     }
     c->circuit_threshold=(unsigned)threshold_value;
     c->circuit_cooldown_seconds=(unsigned)cooldown_value;
+    const char *header_deadline=env("YAG_HEADER_DEADLINE_SECONDS","10");
+    const char *body_deadline=env("YAG_BODY_DEADLINE_SECONDS","30");
+    char *he=NULL,*be=NULL;
+    errno=0;unsigned long hv=strtoul(header_deadline,&he,10);
+    int bad=errno || he==header_deadline || *he || hv<1 || hv>300;
+    errno=0;unsigned long bv=strtoul(body_deadline,&be,10);
+    bad|=errno || be==body_deadline || *be || bv<1 || bv>3600;
+    if(bad) {
+        fprintf(stderr,"YAG_HEADER_DEADLINE_SECONDS must be 1..300; "
+            "YAG_BODY_DEADLINE_SECONDS must be 1..3600\n");
+        return -1;
+    }
+    c->header_deadline_seconds=(unsigned)hv;
+    c->body_deadline_seconds=(unsigned)bv;
     if (load_routes(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
