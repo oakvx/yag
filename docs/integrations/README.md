@@ -34,6 +34,6 @@ curl http://127.0.0.1:8080/v1/messages \
 
 Claude Code may authenticate with `ANTHROPIC_AUTH_TOKEN` (sent as `Authorization: Bearer`) or `ANTHROPIC_API_KEY` (`x-api-key`); both values must be YAG gateway keys. The non-streaming backend must return a single assistant text choice with prompt and completion token counts. The adapter rejects unsupported request and response types instead of silently discarding tool calls.
 
-## Codex and Claude Code — not supported yet
+## Codex and Claude Code — mock CLI tool cycles verified
 
-Codex still needs additional Responses features and verified tool cycles; see [Codex configuration and probe](codex.md). YAG now implements a subset of Anthropic streaming and tool semantics. An isolated Claude Code CLI smoke probe is run in CI; full compatibility requires successful real-model tool cycles and is not claimed.
+Codex CLI 0.167.0 and Claude Code CLI both completed streaming text and local tool execution cycles against a deterministic mock backend. See [Codex](codex.md) and [Claude Code](claude-code.md) for setup and limitations. These tests do not establish compatibility with real inference models; YAG never executes client tools.
