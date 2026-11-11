@@ -1,4 +1,5 @@
 #include "yag.h"
+#include "yyjson.h"
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +8,6 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <errno.h>
-#include <time.h>
 
 typedef struct { int fd, sent; long status; char content_type[128]; yag_upstream_write callback; void *context; } transfer;
 static void start(transfer *t) {
@@ -90,79 +90,169 @@ int upstream_perform(const yag_config *c, const char *path, const char *body, si
 done:
     free(auth); curl_slist_free_all(list); if(curl) curl_easy_cleanup(curl); free(url); return result;
 }
-/* Transport outcomes and coarse latency are metadata only: no payload, tokens
- * or per-key identity is captured. Time is monotonic for duration math. */
-static unsigned long elapsed_ms(const struct timespec *start) {
-    struct timespec now;
-    if(clock_gettime(CLOCK_MONOTONIC,&now))return 0;
-    long sec=now.tv_sec-start->tv_sec,ns=now.tv_nsec-start->tv_nsec;
-    long long ms=(long long)sec*1000+ns/1000000;
+/* The circuit breaker controls *admission* only: we never replay a request
+ * after an HTTP response, timeout, or ambiguous transport outcome. One request
+ * is allowed as a probe after cooldown; concurrent requests are bypassed. */
+static int route_admitted(yag_config *cfg,yag_provider_stats *stats) {
+    if(!cfg->circuit_threshold)return 1;
+    int allowed=1;time_t now=time(NULL);
+    pthread_mutex_lock(&cfg->lock);
+    if(stats->open_until) {
+        if(now<stats->open_until || stats->half_open_probe)allowed=0;
+        else stats->half_open_probe=1;
+    }
+    if(!allowed)stats->bypassed++;
+    pthread_mutex_unlock(&cfg->lock);
+    return allowed;
+}
+static unsigned long elapsed_milliseconds(const struct timespec *start) {
+    struct timespec end={0};
+    if(clock_gettime(CLOCK_MONOTONIC,&end))return 0;
+    long long sec=(long long)end.tv_sec-(long long)start->tv_sec;
+    long long nsec=(long long)end.tv_nsec-(long long)start->tv_nsec;
+    long long ms=sec*1000LL+nsec/1000000LL;
     return ms>0?(unsigned long)ms:0;
 }
-static void record_attempt(const yag_config *cfg,int rc,long status,unsigned long ms) {
-    yag_config *c=(yag_config *)cfg;
-    pthread_mutex_lock(&c->lock);
-    c->upstream_attempts++;
-    c->upstream_total_latency_ms+=ms;
-    if(rc!=CURLE_OK)c->upstream_transport_failures++;
-    else if(status>=400 || status<200)c->upstream_http_errors++;
-    else c->upstream_successes++;
-    pthread_mutex_unlock(&c->lock);
+static void record_attempt(yag_config *cfg,yag_provider_stats *stats,
+        int rc,long status,const struct timespec *start) {
+    int ok=rc==CURLE_OK && status>=200 && status<400;
+    /* 5xx and definite transport failures indicate provider instability.
+     * 4xx are counted as unsuccessful requests, but prove reachability. */
+    int unstable=(status>=500 || (!status && rc!=CURLE_OK
+        && rc!=CURLE_ABORTED_BY_CALLBACK && rc!=CURLE_WRITE_ERROR));
+    pthread_mutex_lock(&cfg->lock);
+    stats->attempts++;
+    stats->latency_ms+=elapsed_milliseconds(start);
+    stats->last_http_status=status;
+    if(ok)stats->successes++;else stats->failures++;
+    if(!unstable) {
+        stats->consecutive_failures=0;
+        stats->open_until=0;
+    } else {
+        if(stats->consecutive_failures<1000000)stats->consecutive_failures++;
+        if(cfg->circuit_threshold
+            && stats->consecutive_failures>=cfg->circuit_threshold)
+            stats->open_until=time(NULL)+(time_t)cfg->circuit_cooldown_seconds;
+    }
+    stats->half_open_probe=0;
+    pthread_mutex_unlock(&cfg->lock);
 }
-static int tracked_perform(const yag_config *root,const yag_config *target,
-    const char *path,const char *body,size_t len,yag_upstream_write cb,
-    void *ctx,long *status,int fd) {
+/* A bounded, ephemeral observer for upstream Chat usage only. No prompt,
+ * response content or serialized request is saved after this transfer. If the
+ * response exceeds the bound, usage remains unknown rather than estimated. */
+#define MAX_USAGE_CAPTURE (128*1024)
+typedef struct {
+    yag_upstream_write downstream;
+    void *context;
+    char *bytes;
+    size_t size;
+    int disabled;
+    int sse;
+    unsigned long long input,output;
+    int observed;
+} usage_capture;
+static size_t capture_write(void *context,long status,const char *type,
+        const char *data,size_t len) {
+    usage_capture *cap=context;
+    size_t written=cap->downstream(cap->context,status,type,data,len);
+    if(written!=len || cap->disabled || status<200 || status>=300)return written;
+    if(type && !strncmp(type,"text/event-stream",17))cap->sse=1;
+    if(len>MAX_USAGE_CAPTURE || cap->size>MAX_USAGE_CAPTURE-len) {
+        cap->disabled=1;
+        free(cap->bytes);cap->bytes=NULL;cap->size=0;
+        return written;
+    }
+    char *next=realloc(cap->bytes,cap->size+len+1);
+    if(!next){cap->disabled=1;free(cap->bytes);cap->bytes=NULL;cap->size=0;return written;}
+    cap->bytes=next;
+    memcpy(cap->bytes+cap->size,data,len);
+    cap->size+=len;
+    cap->bytes[cap->size]=0;
+    return written;
+}
+static void extract_usage(usage_capture *cap,yyjson_val *root) {
+    yyjson_val *usage=yyjson_obj_get(root,"usage");
+    yyjson_val *a=yyjson_obj_get(usage,"prompt_tokens");
+    yyjson_val *b=yyjson_obj_get(usage,"completion_tokens");
+    if(yyjson_is_uint(a) && yyjson_is_uint(b)) {
+        cap->input=yyjson_get_uint(a);
+        cap->output=yyjson_get_uint(b);
+        cap->observed=1;
+    }
+}
+static void parse_usage(usage_capture *cap) {
+    if(cap->disabled || !cap->bytes || !cap->size)return;
+    if(!cap->sse) {
+        yyjson_doc *d=yyjson_read(cap->bytes,cap->size,0);
+        if(d){extract_usage(cap,yyjson_doc_get_root(d));yyjson_doc_free(d);}
+        return;
+    }
+    char *cursor=cap->bytes;
+    while(*cursor) {
+        char *newline=strchr(cursor,'\n');
+        if(newline)*newline=0;
+        if(!strncmp(cursor,"data:",5)) {
+            char *item=cursor+5;
+            if(*item==' ')item++;
+            if(*item=='{') {
+                yyjson_doc *d=yyjson_read(item,strlen(item),0);
+                if(d){extract_usage(cap,yyjson_doc_get_root(d));yyjson_doc_free(d);}
+            }
+        }
+        if(!newline)break;
+        cursor=newline+1;
+    }
+}
+static int measured_upstream(yag_config *cfg,const yag_config *target,
+        yag_provider_stats *stats,const char *path,const char *body,size_t len,
+        yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
     struct timespec start={0};
     clock_gettime(CLOCK_MONOTONIC,&start);
-    int result=upstream_perform(target,path,body,len,cb,ctx,status,fd);
-    record_attempt(root,result,status?*status:0,elapsed_ms(&start));
-    return result;
-}
-/* An open circuit prevents repeated connection attempts only for a configured
- * route. Failover is opt-in; never retry after an upstream responded or timed out.
- * A route becomes eligible again when the cooldown expires. */
-int upstream_for_model(const yag_config *cfg,const char *model,const char *path,
-        const char *body,size_t len,yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
-    yag_config *c=(yag_config *)cfg;
-    yag_config selected={0};
-    const yag_config *target=config_for_model(cfg,model,&selected);
-    yag_route *route=NULL;
-    if(target!=cfg && model)
-        for(size_t i=0;i<c->route_count;i++)
-            if(!strcmp(c->routes[i].model,model)){route=&c->routes[i];break;}
-    int blocked=0;
-    if(route && c->circuit_failure_threshold) {
-        pthread_mutex_lock(&c->lock);
-        time_t now=time(NULL);
-        blocked=route->circuit_open_until>now;
-        if(blocked)c->circuit_rejections++;
-        pthread_mutex_unlock(&c->lock);
+    usage_capture cap={.downstream=cb,.context=ctx};
+    int rc=upstream_perform(target,path,body,len,capture_write,&cap,status,cancel_fd);
+    if(rc==CURLE_OK && status && *status>=200 && *status<300)parse_usage(&cap);
+    record_attempt(cfg,stats,rc,status?*status:0,&start);
+    if(rc==CURLE_OK && status && *status>=200 && *status<300 && cap.observed) {
+        pthread_mutex_lock(&cfg->lock);
+        stats->prompt_tokens+=cap.input;
+        stats->completion_tokens+=cap.output;
+        stats->usage_samples++;
+        pthread_mutex_unlock(&cfg->lock);
     }
-    if(blocked) {
+    free(cap.bytes);
+    return rc;
+}
+/* Retry only when connection setup definitively failed before receiving an
+ * HTTP response. Timeouts are ambiguous; never retry those. */
+int upstream_for_model(const yag_config *c,const char *model,const char *path,
+        const char *body,size_t len,yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
+    yag_config *state=(yag_config *)c; /* mutable statistics protected by lock */
+    yag_provider_stats *stats=&state->default_provider_stats;
+    for(size_t i=0;model && i<c->route_count;i++)
+        if(!strcmp(model,c->routes[i].model)){stats=&state->routes[i].stats;break;}
+    yag_config selected={0};
+    const yag_config *target=config_for_model(c,model,&selected);
+    if(target!=c && !route_admitted(state,stats)) {
+        if(c->fallback_to_default) {
+            pthread_mutex_lock(&state->lock);
+            stats->fallthroughs++;
+            pthread_mutex_unlock(&state->lock);
+            if(status)*status=0;
+            return measured_upstream(state,c,&state->default_provider_stats,
+                path,body,len,cb,ctx,status,cancel_fd);
+        }
         if(status)*status=0;
-        if(c->fallback_to_default)
-            return tracked_perform(cfg,c,path,body,len,cb,ctx,status,cancel_fd);
         return CURLE_COULDNT_CONNECT;
     }
-    int rc=tracked_perform(cfg,target,path,body,len,cb,ctx,status,cancel_fd);
-    int connection_failure=(rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)
-        && (!status || !*status);
-    if(route && c->circuit_failure_threshold) {
-        pthread_mutex_lock(&c->lock);
-        if(connection_failure) {
-            if(route->consecutive_connect_failures<c->circuit_failure_threshold)
-                route->consecutive_connect_failures++;
-            if(route->consecutive_connect_failures>=c->circuit_failure_threshold)
-                route->circuit_open_until=time(NULL)+c->circuit_cooldown_seconds;
-        } else if(rc==CURLE_OK) {
-            route->consecutive_connect_failures=0;
-            route->circuit_open_until=0;
-        }
-        pthread_mutex_unlock(&c->lock);
-    }
-    if(c->fallback_to_default && target!=cfg && connection_failure) {
+    int rc=measured_upstream(state,target,stats,path,body,len,cb,ctx,status,cancel_fd);
+    if(c->fallback_to_default && target!=c && (!status || !*status)
+        && (rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)) {
+        pthread_mutex_lock(&state->lock);
+        stats->fallthroughs++;
+        pthread_mutex_unlock(&state->lock);
         if(status)*status=0;
-        return tracked_perform(cfg,c,path,body,len,cb,ctx,status,cancel_fd);
+        return measured_upstream(state,c,&state->default_provider_stats,
+            path,body,len,cb,ctx,status,cancel_fd);
     }
     return rc;
 }

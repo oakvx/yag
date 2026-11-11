@@ -14,6 +14,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
+#include <poll.h>
+#include <time.h>
 /* On Linux a disconnected peer must not terminate the whole gateway via SIGPIPE. */
 #ifdef MSG_NOSIGNAL
 #define YAG_SEND_FLAGS MSG_NOSIGNAL
@@ -64,20 +66,14 @@ static void increment(yag_config *cfg,unsigned long *counter) {
     pthread_mutex_unlock(&cfg->lock);
 }
 static void metrics(int fd,yag_config *cfg) {
-    char out[1024];
+    char out[512];
     pthread_mutex_lock(&cfg->lock);
     int n=snprintf(out,sizeof out,
         "{\"object\":\"gateway.metrics\",\"chat_requests\":%lu,"
         "\"responses_requests\":%lu,\"anthropic_requests\":%lu,"
-        "\"model_list_requests\":%lu,\"provider_check_requests\":%lu,"
-        "\"upstream_attempts\":%lu,\"upstream_successes\":%lu,"
-        "\"upstream_http_errors\":%lu,\"upstream_transport_failures\":%lu,"
-        "\"upstream_total_latency_ms\":%lu,\"circuit_rejections\":%lu}",
+        "\"model_list_requests\":%lu,\"provider_check_requests\":%lu}",
         cfg->chat_requests,cfg->responses_requests,cfg->anthropic_requests,
-        cfg->model_list_requests,cfg->provider_check_requests,
-        cfg->upstream_attempts,cfg->upstream_successes,
-        cfg->upstream_http_errors,cfg->upstream_transport_failures,
-        cfg->upstream_total_latency_ms,cfg->circuit_rejections);
+        cfg->model_list_requests,cfg->provider_check_requests);
     pthread_mutex_unlock(&cfg->lock);
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
     else reply(fd,200,"application/json",out);
@@ -114,36 +110,6 @@ static FILE *open_asset(const char *root,const char *rel,long *length) {
     if(directory>=0)close(directory);
     free(path);
     return NULL;
-}
-static void model_capabilities(int fd,const yag_config *cfg) {
-    yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
-    if(!d){error(fd,500,"Out of memory");return;}
-    yyjson_mut_val *root=yyjson_mut_obj(d),*list=yyjson_mut_arr(d);
-    int ok=root && list && yyjson_mut_obj_add_str(d,root,"object","gateway.model_capabilities")
-        && yyjson_mut_obj_add_val(d,root,"data",list);
-    for(size_t i=0;ok && i<cfg->route_count;i++) {
-        const yag_route *r=&cfg->routes[i];
-        yyjson_mut_val *item=yyjson_mut_obj(d),*caps=yyjson_mut_obj(d);
-        ok=item && caps && yyjson_mut_obj_add_strcpy(d,item,"model",r->model)
-            && yyjson_mut_obj_add_bool(d,item,"declared",r->capabilities_declared)
-            && yyjson_mut_obj_add_val(d,item,"capabilities",caps);
-        const struct { const char *name; int value; } fields[]={
-            {"tools",r->tools},{"streaming",r->streaming},
-            {"vision",r->vision},{"reasoning",r->reasoning}};
-        for(size_t j=0;ok && j<sizeof fields/sizeof fields[0];j++)
-            ok=fields[j].value<0
-                ?yyjson_mut_obj_add_null(d,caps,fields[j].name)
-                :yyjson_mut_obj_add_bool(d,caps,fields[j].name,fields[j].value);
-        if(ok)ok=r->max_context_tokens
-            ?yyjson_mut_obj_add_uint(d,caps,"max_context_tokens",r->max_context_tokens)
-            :yyjson_mut_obj_add_null(d,caps,"max_context_tokens");
-        if(ok)ok=yyjson_mut_arr_add_val(list,item);
-    }
-    char *json=NULL;
-    if(ok){yyjson_mut_doc_set_root(d,root);json=yyjson_mut_write(d,0,NULL);}
-    if(json)reply(fd,200,"application/json",json);
-    else error(fd,500,"Could not serialize model capabilities");
-    free(json);yyjson_mut_doc_free(d);
 }
 static void capabilities(int fd,const yag_config *cfg) {
     /* Reports gateway translation features, not a particular model's abilities. */
@@ -202,40 +168,77 @@ static const char *trace_route(const char *uri) {
     if(!strncmp(uri,"/api/",5))return "admin";
     return "other";
 }
-/* Explicitly optional rejection guard. Missing operator capability declarations
- * are treated as unknown and never silently upgraded to supported. */
-static int reject_unsupported_model_capability(int fd,const yag_config *cfg,
-    yyjson_val *request) {
+/* Absolute monotonic deadlines prevent a peer from extending a read forever
+ * by sending one byte just before a per-recv socket timeout expires. */
+static int recv_before_deadline(int fd,char *dst,size_t cap,
+        const struct timespec *start,unsigned seconds) {
+    for(;;) {
+        struct timespec now={0};clock_gettime(CLOCK_MONOTONIC,&now);
+        long long elapsed=(long long)(now.tv_sec-start->tv_sec)*1000
+            +(now.tv_nsec-start->tv_nsec)/1000000LL;
+        long long left=(long long)seconds*1000-elapsed;
+        if(left<=0)return -2;
+        struct pollfd descriptor={.fd=fd,.events=POLLIN};
+        int ready=poll(&descriptor,1,left>2147483647LL?2147483647:(int)left);
+        if(ready==0)return -2;
+        if(ready<0){if(errno==EINTR)continue;return -1;}
+        ssize_t got=recv(fd,dst,cap,0);
+        if(got<0 && errno==EINTR)continue;
+        if(got<0 && (errno==EAGAIN || errno==EWOULDBLOCK))continue;
+        return got>0?(int)got:-1;
+    }
+}
+/* Optional fail-fast guard over *declared* operator capability hints.
+ * Unknown model IDs are not presumed capable or incapable; downstream
+ * validation remains authoritative. This is not feature discovery. */
+static int capability_rejected(int fd,const yag_config *cfg,yyjson_val *request) {
     if(!cfg->enforce_model_capabilities || !yyjson_is_obj(request))return 0;
-    yyjson_val *model=yyjson_obj_get(request,"model");
-    if(!yyjson_is_str(model))return 0;
-    const char *name=yyjson_get_str(model);
-    if(strlen(name)!=yyjson_get_len(model))return 0;
-    const yag_route *route=NULL;
-    for(size_t i=0;i<cfg->route_count;i++)
-        if(!strcmp(name,cfg->routes[i].model)){route=&cfg->routes[i];break;}
-    if(!route || !route->capabilities_declared)return 0;
+    yyjson_val *name=yyjson_obj_get(request,"model");
+    if(!yyjson_is_str(name) || !yyjson_get_len(name)
+        || strlen(yyjson_get_str(name))!=yyjson_get_len(name))return 0;
+    const yag_model_capability *cap=NULL;
+    for(size_t i=0;i<cfg->capability_count;i++)
+        if(yyjson_equals_str(name,cfg->capabilities[i].model)) {
+            cap=&cfg->capabilities[i];break;
+        }
+    if(!cap)return 0;
     yyjson_val *tools=yyjson_obj_get(request,"tools");
     yyjson_val *stream=yyjson_obj_get(request,"stream");
-    yyjson_val *reasoning=yyjson_obj_get(request,"thinking");
-    if(!reasoning)reasoning=yyjson_obj_get(request,"reasoning");
-    if(!reasoning)reasoning=yyjson_obj_get(request,"reasoning_effort");
-    if(route->tools==0 && yyjson_is_arr(tools) && yyjson_arr_size(tools)) {
-        error(fd,422,"Model route declares function tools unsupported");return 1;
+    yyjson_val *thinking=yyjson_obj_get(request,"thinking");
+    yyjson_val *reasoning=yyjson_obj_get(request,"reasoning");
+    yyjson_val *effort=yyjson_obj_get(request,"reasoning_effort");
+    yyjson_val *format=yyjson_obj_get(yyjson_obj_get(request,"text"),"format");
+    if(yyjson_is_arr(tools) && yyjson_arr_size(tools)
+        && !(cap->feature_mask&(1u<<1))) {
+        error(fd,422,"Declared model lacks function_tools");return 1;
     }
-    if(route->streaming==0 && yyjson_is_true(stream)) {
-        error(fd,422,"Model route declares streaming unsupported");return 1;
+    if(yyjson_is_true(stream) && !(cap->feature_mask&1u)) {
+        error(fd,422,"Declared model lacks streaming");return 1;
     }
-    if(route->reasoning==0 && reasoning
-        && !(yyjson_is_obj(reasoning) &&
-             yyjson_equals_str(yyjson_obj_get(reasoning,"type"),"disabled"))) {
-        error(fd,422,"Model route declares reasoning unsupported");return 1;
+    int needs_reasoning=(thinking
+        && !yyjson_equals_str(yyjson_obj_get(thinking,"type"),"disabled"))
+        || (reasoning && !yyjson_equals_str(yyjson_obj_get(reasoning,"effort"),"none"))
+        || (effort && !yyjson_equals_str(effort,"none"));
+    if(needs_reasoning && !(cap->feature_mask&(1u<<3))) {
+        error(fd,422,"Declared model lacks reasoning");return 1;
+    }
+    if(yyjson_equals_str(yyjson_obj_get(format,"type"),"json_schema")
+        && !(cap->feature_mask&(1u<<2))) {
+        error(fd,422,"Declared model lacks json_schema");return 1;
     }
     return 0;
 }
 static void handle(int fd,yag_config *c) {
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
-    while(used<MAX_HEADER){ ssize_t n=recv(fd,buf+used,MAX_HEADER-used,0); if(n<=0) goto done; used+=(size_t)n; buf[used]=0; char *p=strstr(buf,"\r\n\r\n"); if(p){header_len=(size_t)(p-buf)+4;break;} }
+    struct timespec header_start={0};clock_gettime(CLOCK_MONOTONIC,&header_start);
+    while(used<MAX_HEADER){
+        int n=recv_before_deadline(fd,buf+used,MAX_HEADER-used,&header_start,c->header_deadline_seconds);
+        if(n==-2){error(fd,408,"Request headers timed out");goto done;}
+        if(n<=0)goto done;
+        used+=(size_t)n;buf[used]=0;
+        char *p=strstr(buf,"\r\n\r\n");
+        if(p){header_len=(size_t)(p-buf)+4;break;}
+    }
     if(!header_len){error(fd,431,"Headers too large or invalid");goto done;}
     /* Reject NUL and malformed framing to avoid ambiguous request interpretation. */
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
@@ -292,10 +295,13 @@ static void handle(int fd,yag_config *c) {
         int key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
-        if(key_index>0 && c->extra_inference_only[key_index-1]
-            && !strncmp(uri,"/api/",5)) {
-            error(fd,403,"Key scope does not allow gateway administration");goto done;
-        }
+        /* Only the primary key may trigger active network probes. A scoped
+         * extra key can be restricted to inference, discovery or read-only
+         * monitoring without access to provider probe operations. */
+        unsigned required=!strcmp(uri,"/api/provider/check")?8u:
+            !strcmp(uri,"/v1/models")?2u:!strncmp(uri,"/v1/",4)?1u:4u;
+        unsigned scope=key_index==0?15u:c->extra_key_scopes[key_index-1];
+        if(!(scope&required)){error(fd,403,"Insufficient API key scope");goto done;}
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     }
     /* Send 100 Continue only AFTER authenticating and checking request size. */
@@ -310,14 +316,22 @@ static void handle(int fd,yag_config *c) {
         if(!expanded){error(fd,500,"Out of memory");goto done;}
         buf=expanded;
     }
-    while(used-header_len<length){ssize_t n=recv(fd,buf+used,length-(used-header_len),0);if(n<=0)goto done;used+=(size_t)n;}
+    struct timespec body_start={0};clock_gettime(CLOCK_MONOTONIC,&body_start);
+    while(used-header_len<length) {
+        int n=recv_before_deadline(fd,buf+used,length-(used-header_len),
+            &body_start,c->body_deadline_seconds);
+        if(n==-2){error(fd,408,"Request body timed out");goto done;}
+        if(n<=0)goto done;
+        used+=(size_t)n;
+    }
     char *body=buf+header_len; body[length]=0;
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
-    else if(!strcmp(uri,"/api/model-capabilities") && !strcmp(method,"GET")) model_capabilities(fd,c);
     else if(!strcmp(uri,"/api/capabilities") && !strcmp(method,"GET")) capabilities(fd,c);
+    else if(!strcmp(uri,"/api/models/capabilities") && !strcmp(method,"GET")) model_capabilities_handle(fd,c);
+    else if(!strcmp(uri,"/api/providers/status") && !strcmp(method,"GET")) providers_status_handle(fd,c);
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
         yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
         if(!d){error(fd,500,"Out of memory");goto done;}
@@ -327,12 +341,6 @@ static void handle(int fd,yag_config *c) {
         for(size_t i=0;i<c->route_count;i++) {
             yyjson_mut_val *route=yyjson_mut_obj(d);
             yyjson_mut_obj_add_strcpy(d,route,"model",c->routes[i].model);
-            pthread_mutex_lock(&c->lock);
-            int open=c->routes[i].circuit_open_until>time(NULL);
-            unsigned failures=c->routes[i].consecutive_connect_failures;
-            pthread_mutex_unlock(&c->lock);
-            yyjson_mut_obj_add_bool(d,route,"circuit_open",open);
-            yyjson_mut_obj_add_uint(d,route,"consecutive_connect_failures",failures);
             yyjson_mut_arr_add_val(routes,route);
         }
         yyjson_mut_doc_set_root(d,root);
@@ -353,20 +361,20 @@ static void handle(int fd,yag_config *c) {
         increment(c,&c->chat_requests);
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
-        else if(!reject_unsupported_model_capability(fd,c,root))
+        else if(!capability_rejected(fd,c,root))
             upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) {
         increment(c,&c->responses_requests);
         yyjson_doc *parsed=yyjson_read(body,length,0);
-        if(!reject_unsupported_model_capability(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+        if(!capability_rejected(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
             responses_handle(fd,c,body,length);
         yyjson_doc_free(parsed);
     }
     else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) {
         increment(c,&c->anthropic_requests);
         yyjson_doc *parsed=yyjson_read(body,length,0);
-        if(!reject_unsupported_model_capability(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+        if(!capability_rejected(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
             anthropic_messages_handle(fd,c,body,length);
         yyjson_doc_free(parsed);
     }

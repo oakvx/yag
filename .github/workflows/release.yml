@@ -1,0 +1,55 @@
+name: Release Linux package
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux x86_64 release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Build native binary and run tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Build Console
+        run: npm ci --prefix console && npm run build --prefix console
+      - name: Archive with documented runtime dependencies
+        run: |
+          mkdir -p package/console
+          cp build/yag package/
+          cp -r console/dist package/console/
+          cp README.md package/
+          cp -r docs package/
+          cat > package/RUNTIME.txt <<'EOF'
+          YAG Linux x86_64 package
+          Requires GNU/Linux with compatible glibc and libcurl4 runtime libraries.
+          Export YAG_API_KEY (minimum 16 characters), set the HTTP(S) upstream,
+          and start ./yag from this unpacked directory.
+          Binary is dynamically linked; it is not a portable static executable.
+          Do not expose the HTTP listener to an untrusted network.
+          EOF
+          tar -C package -czf yag-linux-x86_64.tar.gz .
+          sha256sum yag-linux-x86_64.tar.gz > yag-linux-x86_64.tar.gz.sha256
+      - name: Publish GitHub release for tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            yag-linux-x86_64.tar.gz yag-linux-x86_64.tar.gz.sha256 \
+            --title "YAG $GITHUB_REF_NAME" \
+            --notes "Experimental Linux x86_64 gateway and React Console. Requires system libcurl4. See RUNTIME.txt, README and deployment notes."
