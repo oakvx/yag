@@ -14,6 +14,9 @@ static void stat_json(yyjson_mut_doc *doc,yyjson_mut_val *obj,
     yyjson_mut_obj_add_uint(doc,obj,"bypassed",s->bypassed);
     yyjson_mut_obj_add_uint(doc,obj,"fallbacks",s->fallthroughs);
     yyjson_mut_obj_add_uint(doc,obj,"total_latency_ms",s->latency_ms);
+    yyjson_mut_obj_add_uint(doc,obj,"prompt_tokens",s->prompt_tokens);
+    yyjson_mut_obj_add_uint(doc,obj,"completion_tokens",s->completion_tokens);
+    yyjson_mut_obj_add_uint(doc,obj,"usage_samples",s->usage_samples);
     yyjson_mut_obj_add_uint(doc,obj,"consecutive_failures",s->consecutive_failures);
     yyjson_mut_obj_add_sint(doc,obj,"last_http_status",s->last_http_status);
     yyjson_mut_obj_add_str(doc,obj,"circuit",open?"open":

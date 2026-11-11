@@ -1,4 +1,5 @@
 #include "yag.h"
+#include "yyjson.h"
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,13 +137,89 @@ static void record_attempt(yag_config *cfg,yag_provider_stats *stats,
     stats->half_open_probe=0;
     pthread_mutex_unlock(&cfg->lock);
 }
+/* A bounded, ephemeral observer for upstream Chat usage only. No prompt,
+ * response content or serialized request is saved after this transfer. If the
+ * response exceeds the bound, usage remains unknown rather than estimated. */
+#define MAX_USAGE_CAPTURE (128*1024)
+typedef struct {
+    yag_upstream_write downstream;
+    void *context;
+    char *bytes;
+    size_t size;
+    int disabled;
+    int sse;
+    unsigned long long input,output;
+    int observed;
+} usage_capture;
+static size_t capture_write(void *context,long status,const char *type,
+        const char *data,size_t len) {
+    usage_capture *cap=context;
+    size_t written=cap->downstream(cap->context,status,type,data,len);
+    if(written!=len || cap->disabled || status<200 || status>=300)return written;
+    if(type && !strncmp(type,"text/event-stream",17))cap->sse=1;
+    if(len>MAX_USAGE_CAPTURE || cap->size>MAX_USAGE_CAPTURE-len) {
+        cap->disabled=1;
+        free(cap->bytes);cap->bytes=NULL;cap->size=0;
+        return written;
+    }
+    char *next=realloc(cap->bytes,cap->size+len+1);
+    if(!next){cap->disabled=1;free(cap->bytes);cap->bytes=NULL;cap->size=0;return written;}
+    cap->bytes=next;
+    memcpy(cap->bytes+cap->size,data,len);
+    cap->size+=len;
+    cap->bytes[cap->size]=0;
+    return written;
+}
+static void extract_usage(usage_capture *cap,yyjson_val *root) {
+    yyjson_val *usage=yyjson_obj_get(root,"usage");
+    yyjson_val *a=yyjson_obj_get(usage,"prompt_tokens");
+    yyjson_val *b=yyjson_obj_get(usage,"completion_tokens");
+    if(yyjson_is_uint(a) && yyjson_is_uint(b)) {
+        cap->input=yyjson_get_uint(a);
+        cap->output=yyjson_get_uint(b);
+        cap->observed=1;
+    }
+}
+static void parse_usage(usage_capture *cap) {
+    if(cap->disabled || !cap->bytes || !cap->size)return;
+    if(!cap->sse) {
+        yyjson_doc *d=yyjson_read(cap->bytes,cap->size,0);
+        if(d){extract_usage(cap,yyjson_doc_get_root(d));yyjson_doc_free(d);}
+        return;
+    }
+    char *cursor=cap->bytes;
+    while(*cursor) {
+        char *newline=strchr(cursor,'\n');
+        if(newline)*newline=0;
+        if(!strncmp(cursor,"data:",5)) {
+            char *item=cursor+5;
+            if(*item==' ')item++;
+            if(*item=='{') {
+                yyjson_doc *d=yyjson_read(item,strlen(item),0);
+                if(d){extract_usage(cap,yyjson_doc_get_root(d));yyjson_doc_free(d);}
+            }
+        }
+        if(!newline)break;
+        cursor=newline+1;
+    }
+}
 static int measured_upstream(yag_config *cfg,const yag_config *target,
         yag_provider_stats *stats,const char *path,const char *body,size_t len,
         yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
     struct timespec start={0};
     clock_gettime(CLOCK_MONOTONIC,&start);
-    int rc=upstream_perform(target,path,body,len,cb,ctx,status,cancel_fd);
+    usage_capture cap={.downstream=cb,.context=ctx};
+    int rc=upstream_perform(target,path,body,len,capture_write,&cap,status,cancel_fd);
+    if(rc==CURLE_OK && status && *status>=200 && *status<300)parse_usage(&cap);
     record_attempt(cfg,stats,rc,status?*status:0,&start);
+    if(rc==CURLE_OK && status && *status>=200 && *status<300 && cap.observed) {
+        pthread_mutex_lock(&cfg->lock);
+        stats->prompt_tokens+=cap.input;
+        stats->completion_tokens+=cap.output;
+        stats->usage_samples++;
+        pthread_mutex_unlock(&cfg->lock);
+    }
+    free(cap.bytes);
     return rc;
 }
 /* Retry only when connection setup definitively failed before receiving an
