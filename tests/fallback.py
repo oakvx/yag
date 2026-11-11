@@ -47,8 +47,6 @@ class Fallback(unittest.TestCase):
                  YAG_UPSTREAM_URL=f'http://127.0.0.1:{cls.default.server_port}/v1',
                  YAG_MODEL_ROUTES=json.dumps(routes),
                  YAG_FALLBACK_TO_DEFAULT='1',YAG_TIMEOUT='2',
-                 YAG_CIRCUIT_FAILURE_THRESHOLD='2',
-                 YAG_CIRCUIT_COOLDOWN_SECONDS='60',
                  NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([sys.argv[1]],env=env,stderr=subprocess.PIPE,
                                   stdout=subprocess.DEVNULL)
@@ -100,20 +98,6 @@ class Fallback(unittest.TestCase):
                                'stream':True})
         self.assertEqual(status,200,body)
         self.assertIn(b'event: message_stop',body)
-
-    def test_route_circuit_opens_only_on_connection_failures(self):
-        payload={'model':'response-echo','messages':[{'role':'user','content':'again'}]}
-        for _ in range(3):
-            self.assertEqual(request(self.port,'POST','/v1/chat/completions',payload)[0],200)
-        routes={r['model']:r for r in json.loads(request(self.port,'GET','/api/routes')[2])['data']}
-        self.assertTrue(routes['response-echo']['circuit_open'])
-        self.assertEqual(routes['response-echo']['consecutive_connect_failures'],2)
-        self.assertFalse(routes['deny-fallback']['circuit_open'])
-        metrics=json.loads(request(self.port,'GET','/api/metrics')[2])
-        self.assertGreaterEqual(metrics['circuit_rejections'],1)
-        self.assertGreaterEqual(metrics['upstream_attempts'],3)
-        self.assertGreaterEqual(metrics['upstream_successes'],1)
-        self.assertGreaterEqual(metrics['upstream_transport_failures'],2)
 
     def test_no_fallback_after_authentication_failure(self):
         payload={'model':'deny-fallback','messages':[{'role':'user','content':'hello'}]}

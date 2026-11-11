@@ -20,25 +20,6 @@ static int load_routes(yag_config *c) {
     if(ok) for(size_t i=0;i<yyjson_arr_size(list);i++) {
         yyjson_val *route=yyjson_arr_get(list,i);
         yyjson_val *m=yyjson_obj_get(route,"model"),*u=yyjson_obj_get(route,"url"),*k=yyjson_obj_get(route,"key_env");
-        yyjson_val *cap=yyjson_obj_get(route,"capabilities");
-        const char *const caps_allowed[]={"tools","streaming","vision","reasoning","max_context_tokens",NULL};
-        if(cap) {
-            if(!yyjson_is_obj(cap) || !yyjson_obj_size(cap)){ok=0;break;}
-            yyjson_obj_iter iterator=yyjson_obj_iter_with(cap);
-            yyjson_val *field;
-            while((field=yyjson_obj_iter_next(&iterator))) {
-                int recognized=0;
-                for(size_t t=0;caps_allowed[t];t++)
-                    if(yyjson_equals_str(field,caps_allowed[t])){recognized=1;break;}
-                if(!recognized){ok=0;break;}
-                yyjson_val *value=yyjson_obj_iter_get_val(field);
-                if(yyjson_equals_str(field,"max_context_tokens")) {
-                    if(!yyjson_is_uint(value) || !yyjson_get_uint(value)
-                        || yyjson_get_uint(value)>100000000){ok=0;break;}
-                } else if(!yyjson_is_bool(value)){ok=0;break;}
-            }
-            if(!ok)break;
-        }
         if(!yyjson_is_obj(route) || !yyjson_is_str(m) || !yyjson_is_str(u)
             || !yyjson_get_len(m) || !yyjson_get_len(u)
             || strlen(yyjson_get_str(m))!=yyjson_get_len(m)
@@ -46,7 +27,7 @@ static int load_routes(yag_config *c) {
             || !valid_url(yyjson_get_str(u))
             || (k && (!yyjson_is_str(k) || !yyjson_get_len(k)
                 || strlen(yyjson_get_str(k))!=yyjson_get_len(k)))
-            || yyjson_obj_size(route)!=(size_t)(2+(k?1:0)+(cap?1:0))) {ok=0;break;}
+            || yyjson_obj_size(route)!=(size_t)(k?3:2)) {ok=0;break;}
         for(size_t j=0;j<c->route_count;j++)
             if(!strcmp(c->routes[j].model,yyjson_get_str(m)))ok=0;
         if(!ok)break;
@@ -64,22 +45,64 @@ static int load_routes(yag_config *c) {
         r->model=strdup(yyjson_get_str(m));
         r->url=strdup(yyjson_get_str(u));
         r->key=secret;
-        if(cap) {
-            r->capabilities_declared=1;
-            yyjson_val *v;
-            v=yyjson_obj_get(cap,"tools");r->tools=v?yyjson_get_bool(v):-1;
-            v=yyjson_obj_get(cap,"streaming");r->streaming=v?yyjson_get_bool(v):-1;
-            v=yyjson_obj_get(cap,"vision");r->vision=v?yyjson_get_bool(v):-1;
-            v=yyjson_obj_get(cap,"reasoning");r->reasoning=v?yyjson_get_bool(v):-1;
-            v=yyjson_obj_get(cap,"max_context_tokens");
-            r->max_context_tokens=v?(unsigned)yyjson_get_uint(v):0;
-        } else r->tools=r->streaming=r->vision=r->reasoning=-1;
         if(!r->model || !r->url){ok=0;break;}
         c->route_count++;
     }
     yyjson_doc_free(doc);
-    if(!ok)fprintf(stderr,"YAG_MODEL_ROUTES must be an array of up to 16 unique model/url objects with optional valid key_env and capabilities\n");
+    if(!ok)fprintf(stderr,"YAG_MODEL_ROUTES must be an array of up to 16 unique model/url objects with optional valid key_env\n");
     return ok?0:-1;
+}
+static const char *const feature_names[]={
+    "streaming","function_tools","json_schema","reasoning","vision","audio",NULL
+};
+static int load_capabilities(yag_config *cfg) {
+    const char *raw=getenv("YAG_MODEL_CAPABILITIES");
+    if(!raw || !*raw)return 0;
+    yyjson_doc *doc=yyjson_read(raw,strlen(raw),0);
+    yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+    int valid=yyjson_is_arr(root) && yyjson_arr_size(root)<=32;
+    if(valid)for(size_t i=0;i<yyjson_arr_size(root);i++) {
+        yyjson_val *item=yyjson_arr_get(root,i);
+        yyjson_val *model=yyjson_obj_get(item,"model");
+        yyjson_val *features=yyjson_obj_get(item,"features");
+        yyjson_val *window=yyjson_obj_get(item,"context_window");
+        if(!yyjson_is_obj(item) || !yyjson_is_str(model)
+            || !yyjson_get_len(model) || yyjson_get_len(model)>128
+            || strlen(yyjson_get_str(model))!=yyjson_get_len(model)
+            || !yyjson_is_arr(features) || yyjson_arr_size(features)>6
+            || yyjson_obj_size(item)!=(size_t)(window?3:2)
+            || (window && (!yyjson_is_uint(window)
+                || yyjson_get_uint(window)<1024 || yyjson_get_uint(window)>2097152))) {
+            valid=0;break;
+        }
+        for(size_t j=0;j<cfg->capability_count;j++)
+            if(!strcmp(cfg->capabilities[j].model,yyjson_get_str(model)))valid=0;
+        if(!valid)break;
+        unsigned mask=0;
+        size_t j,n;yyjson_val *feature;
+        yyjson_arr_foreach(features,j,n,feature) {
+            int found=0;
+            for(unsigned k=0;feature_names[k];k++)
+                if(yyjson_equals_str(feature,feature_names[k])) {
+                    if(mask&(1u<<k)){valid=0;break;}
+                    mask|=1u<<k;found=1;break;
+                }
+            if(!found || !valid){valid=0;break;}
+        }
+        if(!valid)break;
+        yag_model_capability *entry=&cfg->capabilities[cfg->capability_count];
+        entry->model=strdup(yyjson_get_str(model));
+        if(!entry->model){valid=0;break;}
+        entry->feature_mask=mask;
+        entry->has_context_window=window!=NULL;
+        if(window)entry->context_window=(unsigned)yyjson_get_uint(window);
+        cfg->capability_count++;
+    }
+    yyjson_doc_free(doc);
+    if(!valid)fprintf(stderr,
+        "YAG_MODEL_CAPABILITIES must be an array of <=32 unique model entries "
+        "with allowlisted features and an optional context_window\n");
+    return valid?0:-1;
 }
 const yag_config *config_for_model(const yag_config *c,const char *model,yag_config *selected) {
     if(model)for(size_t i=0;i<c->route_count;i++) {
@@ -120,28 +143,37 @@ int config_load(yag_config *c) {
             start=comma+1;
         }
     }
-    const char *scope_list=getenv("YAG_EXTRA_KEY_SCOPES");
-    if(scope_list && *scope_list) {
-        if(!c->extra_key_count) {
-            fprintf(stderr,"YAG_EXTRA_KEY_SCOPES requires YAG_EXTRA_API_KEYS\n");return -1;
-        }
-        c->extra_scopes_storage=strdup(scope_list);
-        if(!c->extra_scopes_storage)return -1;
-        char *start=c->extra_scopes_storage;
-        for(size_t i=0;i<c->extra_key_count;i++) {
+    /* All extra keys default to legacy full access. Scope restrictions are
+     * opt-in, aligned positionally with YAG_EXTRA_API_KEYS. No key is logged. */
+    for(size_t i=0;i<c->extra_key_count;i++)c->extra_key_scopes[i]=15;
+    const char *policies=env("YAG_EXTRA_KEY_SCOPES","");
+    if(*policies) {
+        if(!c->extra_key_count){fprintf(stderr,"YAG_EXTRA_KEY_SCOPES requires extra keys\n");return -1;}
+        c->extra_scope_storage=strdup(policies);
+        if(!c->extra_scope_storage)return -1;
+        size_t position=0;
+        char *start=c->extra_scope_storage;
+        for(;;) {
             char *comma=strchr(start,',');
             if(comma)*comma=0;
-            if(!strcmp(start,"inference"))c->extra_inference_only[i]=1;
-            else if(strcmp(start,"all")) {
-                fprintf(stderr,"YAG_EXTRA_KEY_SCOPES expects all or inference per extra key\n");
-                return -1;
+            if(position>=c->extra_key_count) {
+                fprintf(stderr,"YAG_EXTRA_KEY_SCOPES count mismatch\n");return -1;
             }
-            if(i+1<c->extra_key_count) {
-                if(!comma){fprintf(stderr,"Not enough YAG_EXTRA_KEY_SCOPES entries\n");return -1;}
-                start=comma+1;
-            } else if(comma) {
-                fprintf(stderr,"Too many YAG_EXTRA_KEY_SCOPES entries\n");return -1;
+            unsigned scope=0;
+            if(!strcmp(start,"all"))scope=15;
+            else if(!strcmp(start,"inference"))scope=1;
+            else if(!strcmp(start,"models"))scope=2;
+            else if(!strcmp(start,"monitor"))scope=4;
+            else if(!strcmp(start,"inference+models"))scope=3;
+            else {
+                fprintf(stderr,"Invalid YAG_EXTRA_KEY_SCOPES entry\n");return -1;
             }
+            c->extra_key_scopes[position++]=scope;
+            if(!comma)break;
+            start=comma+1;
+        }
+        if(position!=c->extra_key_count) {
+            fprintf(stderr,"YAG_EXTRA_KEY_SCOPES count mismatch\n");return -1;
         }
     }
     const char *rate=env("YAG_RATE_LIMIT_PER_MINUTE","0");
@@ -153,33 +185,50 @@ int config_load(yag_config *c) {
         return -1;
     }
     c->rate_limit_per_minute=(unsigned)parsed_rate;
-    const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
-    if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
-        fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");return -1;
-    }
-    c->enforce_model_capabilities=!strcmp(enforce,"1");
     const char *fallback=env("YAG_FALLBACK_TO_DEFAULT","0");
     if(strcmp(fallback,"0") && strcmp(fallback,"1")) {
         fprintf(stderr,"YAG_FALLBACK_TO_DEFAULT must be 0 or 1\n");
         return -1;
     }
     c->fallback_to_default=!strcmp(fallback,"1");
-    const char *threshold=env("YAG_CIRCUIT_FAILURE_THRESHOLD","0");
+    const char *threshold=env("YAG_CIRCUIT_THRESHOLD","0");
     const char *cooldown=env("YAG_CIRCUIT_COOLDOWN_SECONDS","30");
-    char *end_threshold=NULL,*end_cooldown=NULL;
+    char *threshold_end=NULL,*cooldown_end=NULL;
     errno=0;
-    unsigned long th=strtoul(threshold,&end_threshold,10);
-    if(errno || !*threshold || *end_threshold || th>100) {
-        fprintf(stderr,"YAG_CIRCUIT_FAILURE_THRESHOLD must be 0..100\n");return -1;
-    }
+    unsigned long threshold_value=strtoul(threshold,&threshold_end,10);
+    int invalid=errno || threshold_end==threshold || *threshold_end || threshold_value>20;
     errno=0;
-    unsigned long cool=strtoul(cooldown,&end_cooldown,10);
-    if(errno || !*cooldown || *end_cooldown || cool<1 || cool>3600) {
-        fprintf(stderr,"YAG_CIRCUIT_COOLDOWN_SECONDS must be 1..3600\n");return -1;
+    unsigned long cooldown_value=strtoul(cooldown,&cooldown_end,10);
+    invalid|=errno || cooldown_end==cooldown || *cooldown_end
+        || cooldown_value<1 || cooldown_value>3600;
+    if(invalid) {
+        fprintf(stderr,"YAG_CIRCUIT_THRESHOLD must be 0..20; "
+            "YAG_CIRCUIT_COOLDOWN_SECONDS must be 1..3600\\n");
+        return -1;
     }
-    c->circuit_failure_threshold=(unsigned)th;
-    c->circuit_cooldown_seconds=(unsigned)cool;
-    if (load_routes(c)) return -1;
+    c->circuit_threshold=(unsigned)threshold_value;
+    c->circuit_cooldown_seconds=(unsigned)cooldown_value;
+    const char *header_deadline=env("YAG_HEADER_DEADLINE_SECONDS","10");
+    const char *body_deadline=env("YAG_BODY_DEADLINE_SECONDS","30");
+    char *he=NULL,*be=NULL;
+    errno=0;unsigned long hv=strtoul(header_deadline,&he,10);
+    int bad=errno || he==header_deadline || *he || hv<1 || hv>300;
+    errno=0;unsigned long bv=strtoul(body_deadline,&be,10);
+    bad|=errno || be==body_deadline || *be || bv<1 || bv>3600;
+    if(bad) {
+        fprintf(stderr,"YAG_HEADER_DEADLINE_SECONDS must be 1..300; "
+            "YAG_BODY_DEADLINE_SECONDS must be 1..3600\n");
+        return -1;
+    }
+    c->header_deadline_seconds=(unsigned)hv;
+    c->body_deadline_seconds=(unsigned)bv;
+    const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
+    if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
+        fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");
+        return -1;
+    }
+    c->enforce_model_capabilities=!strcmp(enforce,"1");
+    if (load_routes(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
@@ -195,5 +244,6 @@ void config_free(yag_config *c) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
     free(c->extra_keys_storage);
-    free(c->extra_scopes_storage);
+    free(c->extra_scope_storage);
+    for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
 }
