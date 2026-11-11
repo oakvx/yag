@@ -9,6 +9,7 @@ type Model = { id: string; owned_by?: string }
 type Route = { model: string }
 type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;successes:number;
     failures:number;bypassed:number;fallbacks:number;total_latency_ms:number;
+    prompt_tokens:number;completion_tokens:number;usage_samples:number;
     last_http_status:number;circuit:'closed'|'open'|'half_open_ready';retry_after_seconds:number}
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
@@ -106,11 +107,14 @@ function ProviderOperations({apiKey}: {apiKey:string}) {
     <div className="operations-meta">Circuit breaker: {threshold ? 'Enabled (threshold '+threshold+')' : 'Disabled'} · counters reset on restart</div>
     <div className="provider-table-wrap"><table className="provider-table">
       <thead><tr><th>BACKEND</th><th>ATTEMPTS</th><th>SUCCESS</th>
-        <th>FAIL</th><th>AVG LATENCY</th><th>CIRCUIT</th></tr></thead>
+        <th>FAIL</th><th>AVG LATENCY</th><th>REPORTED TOKENS</th><th>CIRCUIT</th></tr></thead>
       <tbody>{rows.map((p,i)=><tr key={p.kind+String(i)}>
         <td><b>{p.model || 'Default backend'}</b></td>
         <td>{p.attempts}</td><td>{p.successes}</td><td>{p.failures}</td>
         <td>{p.attempts ? Math.round(p.total_latency_ms/p.attempts)+' ms' : '—'}</td>
+        <td title={p.usage_samples+' responses reported usage'}>{p.usage_samples
+            ? p.prompt_tokens.toLocaleString()+' in / '+p.completion_tokens.toLocaleString()+' out'
+            : 'Not reported'}</td>
         <td>{p.circuit==='open'?'Open ('+p.retry_after_seconds+'s)' : p.circuit==='half_open_ready'?'Probe ready':'Closed'}</td>
       </tr>)}</tbody></table></div>
     {rows.some(p=>p.bypassed || p.fallbacks) &&
