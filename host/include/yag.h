@@ -7,6 +7,9 @@ typedef struct {
     char *model;
     char *url;
     const char *key;
+    int capabilities_declared;
+    int tools, streaming, vision, reasoning;
+    unsigned max_context_tokens;
 } yag_route;
 typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
