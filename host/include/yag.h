@@ -15,7 +15,8 @@ typedef struct {
 } yag_route;
 typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
-    char *extra_keys_storage;
+    char *extra_keys_storage, *extra_scopes_storage;
+    unsigned char extra_inference_only[16];
     const char *extra_keys[16];
     size_t extra_key_count;
     yag_route routes[16];

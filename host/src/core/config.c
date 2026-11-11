@@ -120,6 +120,30 @@ int config_load(yag_config *c) {
             start=comma+1;
         }
     }
+    const char *scope_list=getenv("YAG_EXTRA_KEY_SCOPES");
+    if(scope_list && *scope_list) {
+        if(!c->extra_key_count) {
+            fprintf(stderr,"YAG_EXTRA_KEY_SCOPES requires YAG_EXTRA_API_KEYS\n");return -1;
+        }
+        c->extra_scopes_storage=strdup(scope_list);
+        if(!c->extra_scopes_storage)return -1;
+        char *start=c->extra_scopes_storage;
+        for(size_t i=0;i<c->extra_key_count;i++) {
+            char *comma=strchr(start,',');
+            if(comma)*comma=0;
+            if(!strcmp(start,"inference"))c->extra_inference_only[i]=1;
+            else if(strcmp(start,"all")) {
+                fprintf(stderr,"YAG_EXTRA_KEY_SCOPES expects all or inference per extra key\n");
+                return -1;
+            }
+            if(i+1<c->extra_key_count) {
+                if(!comma){fprintf(stderr,"Not enough YAG_EXTRA_KEY_SCOPES entries\n");return -1;}
+                start=comma+1;
+            } else if(comma) {
+                fprintf(stderr,"Too many YAG_EXTRA_KEY_SCOPES entries\n");return -1;
+            }
+        }
+    }
     const char *rate=env("YAG_RATE_LIMIT_PER_MINUTE","0");
     char *rate_end=NULL;
     errno=0;
@@ -166,4 +190,5 @@ void config_free(yag_config *c) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
     free(c->extra_keys_storage);
+    free(c->extra_scopes_storage);
 }
