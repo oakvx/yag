@@ -18,6 +18,7 @@ typedef struct {
     long timeout;
     time_t started;
     pthread_mutex_t lock;
+    pthread_cond_t drained;
     unsigned active;
     unsigned long total;
     unsigned long chat_requests, responses_requests, anthropic_requests;
@@ -28,6 +29,7 @@ typedef struct {
     unsigned rate_counts[17];
 } yag_config;
 int config_load(yag_config *c);
+void config_free(yag_config *c);
 const yag_config *config_for_model(const yag_config *c, const char *model, yag_config *selected);
 int server_run(yag_config *c);
 void upstream_request(int fd, const yag_config *c, const char *path, const char *body, size_t len, const char *model);

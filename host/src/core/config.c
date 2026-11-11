@@ -108,5 +108,18 @@ int config_load(yag_config *c) {
     c->fallback_to_default=!strcmp(fallback,"1");
     if (load_routes(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
-    return pthread_mutex_init(&c->lock,NULL);
+    if(pthread_mutex_init(&c->lock,NULL))return -1;
+    if(pthread_cond_init(&c->drained,NULL)) {
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
+    return 0;
+}
+
+void config_free(yag_config *c) {
+    pthread_cond_destroy(&c->drained);
+    pthread_mutex_destroy(&c->lock);
+    for(size_t i=0;i<c->route_count;i++) {
+        free(c->routes[i].model);free(c->routes[i].url);
+    }
+    free(c->extra_keys_storage);
 }
