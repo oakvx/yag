@@ -101,6 +101,15 @@ class Messages(unittest.TestCase):
         self.assertIn(b'message_stop',response.read())
         conn.close()
 
+    def test_unsupported_shape_remains_a_safe_rejection(self):
+        payload={'model':'response-echo','max_tokens':16,
+                 'messages':[{'role':'user','content':'SECRET_PROMPT'}],
+                 'thinking':{'type':'enabled','budget_tokens':1024}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,400,body)
+        self.assertNotIn(b'SECRET_PROMPT',body)
+        self.assertIn(b'Unsupported Messages input',body)
+
     def test_text_message_and_usage(self):
         status,_,data=self.post({'model':'response-echo','max_tokens':20,
                                  'system':'be brief','messages':[{'role':'user','content':'hello'}]})
