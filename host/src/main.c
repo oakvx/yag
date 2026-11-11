@@ -7,7 +7,7 @@ int main(void) {
     if (config_load(&config)) return 1;
     if (curl_global_init(CURL_GLOBAL_DEFAULT)) return 1;
     int rc=server_run(&config);
-    /* server_run only returns on startup failure. */
     curl_global_cleanup();
+    config_free(&config);
     return rc ? 1 : 0;
 }

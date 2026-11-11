@@ -13,6 +13,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <errno.h>
+#include <signal.h>
 /* On Linux a disconnected peer must not terminate the whole gateway via SIGPIPE. */
 #ifdef MSG_NOSIGNAL
 #define YAG_SEND_FLAGS MSG_NOSIGNAL
@@ -23,6 +24,8 @@
 #define MAX_BODY (1024*1024)
 #define MAX_CONNECTIONS 32
 
+static volatile sig_atomic_t stop_requested=0;
+static void request_stop(int signum) {(void)signum;stop_requested=1;}
 typedef struct { int fd; yag_config *cfg; } client;
 int send_all(int fd,const void *data,size_t len) { const char *p=data; while(len){ ssize_t n=send(fd,p,len,YAG_SEND_FLAGS); if(n<0 && errno==EINTR) continue; if(n<=0) return -1; p+=n; len-=(size_t)n; } return 0; }
 void reply(int fd,int status,const char *type,const char *body) {
@@ -288,14 +291,40 @@ static void handle(int fd,yag_config *c) {
     else error(fd,404,"Not found");
 done: free(buf);
 }
-static void *worker(void *arg) { client *cl=arg; int fd=cl->fd; yag_config *c=cl->cfg; free(cl); struct timeval tv={.tv_sec=15}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv); setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof tv); handle(fd,c); close(fd); pthread_mutex_lock(&c->lock); c->active--; pthread_mutex_unlock(&c->lock); return NULL; }
+static void *worker(void *arg) { client *cl=arg; int fd=cl->fd; yag_config *c=cl->cfg; free(cl); struct timeval tv={.tv_sec=15}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv); setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof tv); handle(fd,c); close(fd); pthread_mutex_lock(&c->lock); c->active--;
+    if(!c->active)pthread_cond_broadcast(&c->drained);
+    pthread_mutex_unlock(&c->lock); return NULL; }
 int server_run(yag_config *c) {
     struct addrinfo hints={0},*res=NULL,*p; hints.ai_family=AF_UNSPEC; hints.ai_socktype=SOCK_STREAM; hints.ai_flags=AI_PASSIVE;
     int e=getaddrinfo(c->bind,c->port,&hints,&res); if(e){fprintf(stderr,"Listen address: %s\n",gai_strerror(e));return -1;}
     int sock=-1; for(p=res;p;p=p->ai_next){ sock=socket(p->ai_family,p->ai_socktype,p->ai_protocol);if(sock<0)continue; int yes=1; setsockopt(sock,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof yes); if(!bind(sock,p->ai_addr,p->ai_addrlen) && !listen(sock,64))break; close(sock);sock=-1; } freeaddrinfo(res); if(sock<0){perror("listen");return -1;}
+    stop_requested=0;
+    struct sigaction action={0};
+    action.sa_handler=request_stop;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGINT,&action,NULL);
+    sigaction(SIGTERM,&action,NULL);
+    /* Periodically return from accept to observe shutdown even when a signal
+     * is handled by another worker thread. */
+    struct timeval accept_timeout={.tv_sec=1};
+    setsockopt(sock,SOL_SOCKET,SO_RCVTIMEO,&accept_timeout,sizeof accept_timeout);
     fprintf(stderr,"YAG listening on %s:%s\n",c->bind,c->port);
-    for(;;){ int fd=accept(sock,NULL,NULL); if(fd<0){if(errno==EINTR)continue;perror("accept");break;} pthread_mutex_lock(&c->lock); if(c->active>=MAX_CONNECTIONS){pthread_mutex_unlock(&c->lock);error(fd,503,"Connection limit reached");close(fd);continue;} c->active++;c->total++;pthread_mutex_unlock(&c->lock);
+    int failure=0;
+    for(;;){ if(stop_requested)break; int fd=accept(sock,NULL,NULL);
+        if(fd<0){
+            if(errno==EINTR || errno==EAGAIN || errno==EWOULDBLOCK)continue;
+            if(stop_requested)break;
+            perror("accept");failure=1;break;
+        }
+        if(stop_requested){close(fd);break;} pthread_mutex_lock(&c->lock); if(c->active>=MAX_CONNECTIONS){pthread_mutex_unlock(&c->lock);error(fd,503,"Connection limit reached");close(fd);continue;} c->active++;c->total++;pthread_mutex_unlock(&c->lock);
         client *cl=malloc(sizeof *cl); pthread_t t; if(!cl){close(fd);pthread_mutex_lock(&c->lock);c->active--;pthread_mutex_unlock(&c->lock);continue;} cl->fd=fd;cl->cfg=c; if(pthread_create(&t,NULL,worker,cl)){free(cl);close(fd);pthread_mutex_lock(&c->lock);c->active--;pthread_mutex_unlock(&c->lock);} else pthread_detach(t);
     }
-    close(sock); return -1;
+    close(sock);
+    /* No accepted connection is abandoned during normal SIGINT/SIGTERM stop.
+     * curl transfers respect their configured total timeout, so wait is bounded
+     * by existing active requests rather than abandoning them mid-write. */
+    pthread_mutex_lock(&c->lock);
+    while(c->active)pthread_cond_wait(&c->drained,&c->lock);
+    pthread_mutex_unlock(&c->lock);
+    return failure?-1:0;
 }
