@@ -29,6 +29,37 @@ class Responses(unittest.TestCase):
         self.assertEqual(status,200,data)
         response=json.loads(data)
         self.assertEqual(response['output'][0]['content'][0]['text'],'routed response')
+    def test_namespaced_function_tools_and_replay(self):
+        tool={'type':'namespace','name':'workspace','description':'File operations',
+              'tools':[{'type':'function','name':'read_file','parameters':{'type':'object'},
+                        'description':'Read a file'}]}
+        payload={'model':'response-echo',
+                 'input':[{'role':'user','content':'Read a file'},
+                          {'type':'function_call','call_id':'call_1','name':'read_file',
+                           'namespace':'workspace','arguments':'{"path":"notes.txt"}'},
+                          {'type':'function_call_output','call_id':'call_1','output':'hello'}],
+                 'tools':[tool],
+                 'tool_choice':{'type':'function','namespace':'workspace','name':'read_file'}}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['output'][0]['content'][0]['text'])
+        self.assertEqual(chat['tools'][0]['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['tool_choice']['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['messages'][1]['tool_calls'][0]['function']['name'],'workspace__read_file')
+        self.assertEqual(chat['messages'][2]['content'],'hello')
+
+    def test_namespaced_function_calls_decode_in_response(self):
+        tool={'type':'namespace','name':'workspace',
+              'tools':[{'type':'function','name':'read_file','parameters':{'type':'object'}}]}
+        status,_,body=self.post({'model':'response-namespaced-tools','input':'open README',
+                                  'tools':[tool]})
+        self.assertEqual(status,200,body)
+        answer=json.loads(body)
+        self.assertEqual(answer['output'][0]['type'],'function_call')
+        self.assertEqual(answer['output'][0]['namespace'],'workspace')
+        self.assertEqual(answer['output'][0]['name'],'read_file')
+        self.assertEqual(answer['output'][0]['call_id'],'call_namespaced')
+
     def test_response_multiple_tool_outputs(self):
         status,_,data=self.post({'model':'response-tools','input':'go'});self.assertEqual(status,200,data);r=json.loads(data)
         self.assertEqual([i['type'] for i in r['output']],['message','function_call','function_call']);self.assertEqual([i['call_id'] for i in r['output'][1:]],['call_A','call_B']);self.assertEqual(r['output'][1]['arguments'],'{"path":"a"}');self.assertIsNone(r['usage'])
@@ -53,10 +84,16 @@ class Responses(unittest.TestCase):
         status,_,data=self.post({'model':'bad','input':'x','stream':True});self.assertEqual(status,429);self.assertEqual(json.loads(data)['error']['message'],'backend limit')
     def test_response_errors(self):
         self.assertEqual(self.post({'model':'bad','input':'x'})[0],429)
-        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['web_search_call.action.sources']}, {'model':'x','input':'a','client_metadata':'invalid'}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'auto'}} ]:
+        for payload in [ {}, {'model':'x','input':'a','previous_response_id':'resp_1'}, {'model':'x','input':'a','include':['web_search_call.action.sources']}, {'model':'x','input':'a','client_metadata':'invalid'}, {'model':'x','input':'a','tools':[{'type':'namespace','name':'shell','tools':[]}]}, {'model':'x','input':[{'type':'function_call','call_id':'c','name':'x','arguments':'{}','status':'incomplete'}]}, {'model':'x','input':'a','store':True}, {'model':'x','input':'a','tools':[{'type':'web_search'}]}, {'model':'x','input':[{'type':'function_call_output','call_id':'c','output':{'nested':1}}]}, {'model':'x','input':'a','text':{'verbosity':'extreme'}}, {'model':'x','input':'a','reasoning':{'summary':'invalid'}} ]:
             status,_,data=self.post(payload);self.assertEqual(status,400,(payload,data));self.assertIn('error',json.loads(data))
         self.assertEqual(request(self.port,'POST','/v1/responses','{')[0],400)
         self.assertEqual(request(self.port,'POST','/v1/responses',{'model':'x','input':'x'},key=None)[0],401)
+    def test_unsupported_tool_type_is_diagnosed(self):
+        status,_,body=self.post({'model':'response-echo','input':'hi',
+                                 'tools':[{'type':'web_search'}]})
+        self.assertEqual(status,400,body)
+        self.assertIn('web_search',json.loads(body)['error']['message'])
+
     def test_empty_include_is_safe(self):
         status,_,data=self.post({'model':'response-echo','input':'x','include':[]})
         self.assertEqual(status,200,data)
@@ -66,6 +103,19 @@ class Responses(unittest.TestCase):
         status,_,data=self.post({'model':'response-echo','input':'x','include':['web_search_call.action.sources']})
         self.assertEqual(status,400,data)
         self.assertIn('include',json.loads(data)['error']['message'])
+    def test_optional_reasoning_summary_selector_does_not_fabricate_content(self):
+        status,_,body=self.post({'model':'response-echo','input':'hello',
+                                'reasoning':{'effort':'medium','summary':'auto'}})
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertTrue(all(item['type']!='reasoning' for item in response['output']))
+        translated=json.loads(response['output'][0]['content'][0]['text'])
+        self.assertEqual(translated['reasoning_effort'],'medium')
+        self.assertNotIn('summary',translated)
+        status,_,body=self.post({'model':'response-echo','input':'hello',
+                                'reasoning':{'generate_summary':'concise'}})
+        self.assertEqual(status,200,body)
+
     def test_client_metadata_is_not_forwarded(self):
         status,_,data=self.post({'model':'response-echo','input':'hello','client_metadata':{'client':'codex','trace':'test'}})
         self.assertEqual(status,200,data)

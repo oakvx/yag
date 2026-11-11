@@ -37,3 +37,41 @@ jobs:
           cache-dependency-path: console/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  codex-mock-probe:
+    name: Codex CLI mock qualification (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Build gateway
+        run: cmake -S . -B build && cmake --build build --parallel
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned Codex CLI
+        run: npm install --global @openai/codex@0.167.0
+      - name: Probe a real Codex CLI against the deterministic mock
+        run: python3 tests/codex_probe.py --host ./build/yag
+      - name: Probe a real Codex CLI shell tool cycle
+        run: python3 tests/codex_probe.py --host ./build/yag --tool-cycle
+
+  claude-mock-probe:
+    name: Claude Code CLI mock qualification (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Build gateway
+        run: cmake -S . -B build && cmake --build build --parallel
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code CLI
+        run: npm install --global @anthropic-ai/claude-code@latest
+      - name: Probe real Claude Code with isolated mock gateway
+        run: python3 tests/claude_probe.py --host ./build/yag

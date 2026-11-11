@@ -32,6 +32,41 @@ static void anthropic_error(int fd,int status) {
     else reply(fd,502,"application/json",
         "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Unsupported or unavailable upstream response\"}}");
 }
+static int cache_hint(yyjson_val *hint) {
+    if(!hint)return 1;
+    const char *const keys[]={"type","ttl",NULL};
+    yyjson_val *type=yyjson_obj_get(hint,"type"),*ttl=yyjson_obj_get(hint,"ttl");
+    return permitted(hint,keys) && yyjson_equals_str(type,"ephemeral")
+        && (!ttl || yyjson_equals_str(ttl,"5m") || yyjson_equals_str(ttl,"1h"));
+}
+static char *system_text(yyjson_val *system) {
+    if(string_value(system))return strdup(yyjson_get_str(system));
+    if(!yyjson_is_arr(system))return NULL;
+    size_t total=0,i,n;yyjson_val *block;
+    const char *const fields[]={"type","text","cache_control",NULL};
+    yyjson_arr_foreach(system,i,n,block) {
+        yyjson_val *value=yyjson_obj_get(block,"text");
+        if(!permitted(block,fields)
+            || !yyjson_equals_str(yyjson_obj_get(block,"type"),"text")
+            || !string_value(value) || !cache_hint(yyjson_obj_get(block,"cache_control"))
+            || yyjson_get_len(value)>1024*1024-total)return NULL;
+        total+=yyjson_get_len(value);
+        if(i) {
+            if(total>1024*1024-2)return NULL;
+            total+=2;
+        }
+    }
+    char *result=malloc(total+1);if(!result)return NULL;
+    size_t pos=0;
+    yyjson_arr_foreach(system,i,n,block) {
+        yyjson_val *value=yyjson_obj_get(block,"text");
+        if(i){result[pos++]='\n';result[pos++]='\n';}
+        memcpy(result+pos,yyjson_get_str(value),yyjson_get_len(value));
+        pos+=yyjson_get_len(value);
+    }
+    result[pos]=0;
+    return result;
+}
 static char *serialize_value(yyjson_val *value) {
     yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
     if(!d)return NULL;
@@ -48,8 +83,8 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
     if(!yyjson_is_arr(content))return 0;
     yyjson_mut_val *parts=yyjson_mut_arr(doc);
     if(!parts)return 0;
-    const char *const keys[]={"type","text",NULL};
-    const char *const call_keys[]={"type","id","name","input",NULL};
+    const char *const keys[]={"type","text","cache_control",NULL};
+    const char *const call_keys[]={"type","id","name","input","cache_control",NULL};
     yyjson_mut_val *calls=yyjson_mut_arr(doc);
     if(!calls)return 0;
     size_t i,max;yyjson_val *item;
@@ -59,7 +94,8 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
             yyjson_val *id=yyjson_obj_get(item,"id"),*name=yyjson_obj_get(item,"name");
             yyjson_val *input=yyjson_obj_get(item,"input");
             if(!permitted(item,call_keys) || !string_value(id) || !yyjson_get_len(id)
-                || !string_value(name) || !yyjson_get_len(name) || !yyjson_is_obj(input))return 0;
+                || !string_value(name) || !yyjson_get_len(name) || !yyjson_is_obj(input)
+                || !cache_hint(yyjson_obj_get(item,"cache_control")))return 0;
             char *arguments=serialize_value(input);
             if(!arguments)return 0;
             yyjson_mut_val *tool=yyjson_mut_obj(doc),*fn=yyjson_mut_obj(doc);
@@ -74,7 +110,8 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
             if(!good)return 0;
             continue;
         }
-        if(!permitted(item,keys) || !yyjson_equals_str(type,"text") || !string_value(value))return 0;
+        if(!permitted(item,keys) || !yyjson_equals_str(type,"text") || !string_value(value)
+            || !cache_hint(yyjson_obj_get(item,"cache_control")))return 0;
         yyjson_mut_val *part=yyjson_mut_obj(doc);
         if(!part || !yyjson_mut_obj_add_str(doc,part,"type","text")
             || !yyjson_mut_obj_add_val(doc,part,"text",yyjson_val_mut_copy(doc,value))
@@ -88,41 +125,109 @@ static int add_text(yyjson_mut_doc *doc,yyjson_mut_val *message,yyjson_val *cont
     }
     return yyjson_mut_obj_add_val(doc,message,"content",parts);
 }
-/* Result-only user messages become Chat role=tool messages. Mixed text/result
- * arrays are rejected because flattening them would reorder conversation turns. */
+/* Anthropic tool results must precede optional trailing user text. Preserve
+ * their order as Chat tool messages, followed by a normal user message. */
+static char *tool_result_text(yyjson_val *value) {
+    if(!value)return strdup("");
+    if(string_value(value))return strdup(yyjson_get_str(value));
+    if(!yyjson_is_arr(value))return NULL;
+    size_t total=0;const char *const keys[]={"type","text","cache_control",NULL};
+    size_t i,n;yyjson_val *block;
+    yyjson_arr_foreach(value,i,n,block) {
+        yyjson_val *text=yyjson_obj_get(block,"text");
+        if(!permitted(block,keys)
+            || !yyjson_equals_str(yyjson_obj_get(block,"type"),"text")
+            || !string_value(text) || !cache_hint(yyjson_obj_get(block,"cache_control")))return NULL;
+        if(yyjson_get_len(text)>1024*1024-total)return NULL;
+        total+=yyjson_get_len(text);
+        if(i && ++total>1024*1024)return NULL;
+    }
+    char *joined=malloc(total+1);if(!joined)return NULL;
+    size_t pos=0;
+    yyjson_arr_foreach(value,i,n,block) {
+        yyjson_val *text=yyjson_obj_get(block,"text");
+        if(i)joined[pos++]='\n';
+        size_t length=yyjson_get_len(text);
+        memcpy(joined+pos,yyjson_get_str(text),length);pos+=length;
+    }
+    joined[pos]=0;
+    return joined;
+}
 static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val *content) {
     if(!yyjson_is_arr(content) || !yyjson_arr_size(content))return 1;
     yyjson_val *first=yyjson_arr_get(content,0);
     if(!yyjson_equals_str(yyjson_obj_get(first,"type"),"tool_result"))return 1;
-    const char *const allowed[]={"type","tool_use_id","content","is_error",NULL};
+    const char *const allowed[]={"type","tool_use_id","content","is_error","cache_control",NULL};
+    const char *const text_fields[]={"type","text","cache_control",NULL};
+    yyjson_mut_val *user_parts=yyjson_mut_arr(d);
+    if(!user_parts)return 0;
+    int seen_text=0;
     size_t i,n;yyjson_val *item;
     yyjson_arr_foreach(content,i,n,item) {
+        yyjson_val *type=yyjson_obj_get(item,"type");
+        if(yyjson_equals_str(type,"text")) {
+            yyjson_val *text=yyjson_obj_get(item,"text");
+            if(!permitted(item,text_fields) || !string_value(text)
+                || !cache_hint(yyjson_obj_get(item,"cache_control")))return 0;
+            seen_text=1;
+            yyjson_mut_val *part=yyjson_mut_obj(d);
+            if(!part || !yyjson_mut_obj_add_str(d,part,"type","text")
+                || !yyjson_mut_obj_add_val(d,part,"text",yyjson_val_mut_copy(d,text))
+                || !yyjson_mut_arr_add_val(user_parts,part))return 0;
+            continue;
+        }
+        if(seen_text || !yyjson_equals_str(type,"tool_result"))return 0;
         yyjson_val *id=yyjson_obj_get(item,"tool_use_id");
-        yyjson_val *result=yyjson_obj_get(item,"content");
+        yyjson_val *value=yyjson_obj_get(item,"content");
         yyjson_val *is_error=yyjson_obj_get(item,"is_error");
-        if(!permitted(item,allowed) || !yyjson_equals_str(yyjson_obj_get(item,"type"),"tool_result")
-            || !string_value(id) || !yyjson_get_len(id) || !string_value(result)
-            || (is_error && (!yyjson_is_bool(is_error) || yyjson_get_bool(is_error))))return 0;
+        if(!permitted(item,allowed) || !string_value(id) || !yyjson_get_len(id)
+            || (is_error && !yyjson_is_bool(is_error))
+            || !cache_hint(yyjson_obj_get(item,"cache_control")))return 0;
+        char *text=tool_result_text(value);
+        if(!text)return 0;
+        if(is_error && yyjson_get_bool(is_error)) {
+            const char *prefix="[Tool execution error]\n";
+            size_t p=strlen(prefix),length=strlen(text);
+            char *marked=malloc(p+length+1);
+            if(!marked){free(text);return 0;}
+            memcpy(marked,prefix,p);
+            memcpy(marked+p,text,length+1);
+            free(text);text=marked;
+        }
         yyjson_mut_val *message=yyjson_mut_obj(d);
-        if(!message || !yyjson_mut_obj_add_str(d,message,"role","tool")
-            || !yyjson_mut_obj_add_val(d,message,"tool_call_id",yyjson_val_mut_copy(d,id))
-            || !yyjson_mut_obj_add_val(d,message,"content",yyjson_val_mut_copy(d,result))
-            || !yyjson_mut_arr_add_val(messages,message))return 0;
+        int ok=message && yyjson_mut_obj_add_str(d,message,"role","tool")
+            && yyjson_mut_obj_add_val(d,message,"tool_call_id",yyjson_val_mut_copy(d,id))
+            && yyjson_mut_obj_add_strcpy(d,message,"content",text)
+            && yyjson_mut_arr_add_val(messages,message);
+        free(text);
+        if(!ok)return 0;
+    }
+    if(yyjson_mut_arr_size(user_parts)) {
+        yyjson_mut_val *user=yyjson_mut_obj(d);
+        if(!user || !yyjson_mut_obj_add_str(d,user,"role","user")
+            || !yyjson_mut_obj_add_val(d,user,"content",user_parts)
+            || !yyjson_mut_arr_add_val(messages,user))return 0;
     }
     return 2;
 }
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences","tools","tool_choice",NULL};
+        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
     yyjson_val *top=yyjson_obj_get(root,"top_p"),*stops=yyjson_obj_get(root,"stop_sequences");
+    yyjson_val *metadata=yyjson_obj_get(root,"metadata");
+    const char *const meta_fields[]={"user_id",NULL};
+    yyjson_val *user_id=yyjson_obj_get(metadata,"user_id");
+    if(metadata && (!permitted(metadata,meta_fields)
+        || (user_id && (!string_value(user_id) || yyjson_get_len(user_id)>256))))return NULL;
+    /* Metadata is client annotation only: do not forward/store user IDs. */
     if(!permitted(root,allowed) || !string_value(model) || !yyjson_get_len(model)
         || !yyjson_is_arr(items) || !yyjson_arr_size(items)
         || !yyjson_is_int(max) || yyjson_get_sint(max)<=0
-        || (sys && !string_value(sys))
-        || (stream && (!yyjson_is_bool(stream) || yyjson_get_bool(stream)))
+        || (sys && !string_value(sys) && !yyjson_is_arr(sys))
+        || (stream && !yyjson_is_bool(stream))
         || (temp && !yyjson_is_num(temp)) || (top && !yyjson_is_num(top))
         || (stops && !yyjson_is_arr(stops)))return NULL;
     yyjson_mut_doc *doc=yyjson_mut_doc_new(NULL);
@@ -132,12 +237,16 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
     yyjson_mut_doc_set_root(doc,chat);
     if(!yyjson_mut_obj_add_val(doc,chat,"model",yyjson_val_mut_copy(doc,model))
         || !yyjson_mut_obj_add_val(doc,chat,"max_tokens",yyjson_val_mut_copy(doc,max))
-        || !yyjson_mut_obj_add_bool(doc,chat,"stream",0))goto fail;
+        || !yyjson_mut_obj_add_bool(doc,chat,"stream",stream && yyjson_get_bool(stream)))goto fail;
     if(sys) {
+        char *value=system_text(sys);
+        if(!value)goto fail;
         yyjson_mut_val *system=yyjson_mut_obj(doc);
-        if(!system || !yyjson_mut_obj_add_str(doc,system,"role","system")
-            || !yyjson_mut_obj_add_val(doc,system,"content",yyjson_val_mut_copy(doc,sys))
-            || !yyjson_mut_arr_add_val(messages,system))goto fail;
+        int ok=system && yyjson_mut_obj_add_str(doc,system,"role","system")
+            && yyjson_mut_obj_add_strcpy(doc,system,"content",value)
+            && yyjson_mut_arr_add_val(messages,system);
+        free(value);
+        if(!ok)goto fail;
     }
     const char *const msg_keys[]={"role","content",NULL};
     size_t i,n;yyjson_val *msg;
@@ -316,11 +425,15 @@ void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,siz
     char *json=yyjson_mut_write(translated,0,NULL);
     yyjson_mut_doc_free(translated);
     if(!json){anthropic_error(fd,502);yyjson_doc_free(request);return;}
+    const char *model=yyjson_get_str(yyjson_obj_get(root,"model"));
+    yyjson_val *requested_stream=yyjson_obj_get(root,"stream");
+    if(requested_stream && yyjson_get_bool(requested_stream)) {
+        anthropic_stream_handle(fd,cfg,model,json);
+        free(json);yyjson_doc_free(request);return;
+    }
     response_buffer data={0};
-    yag_config selected={0};
-    const yag_config *target=config_for_model(cfg,yyjson_get_str(yyjson_obj_get(root,"model")),&selected);
     long status=0;
-    int rc=upstream_perform(target,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
+    int rc=upstream_for_model(cfg,model,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
     if(rc!=CURLE_OK || status<200 || status>=300)
         anthropic_error(fd,rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502);
     else {

@@ -13,7 +13,7 @@
 
 **One host. Multiple models. Every interface.**
 
-One native binary. One bearer key. A default upstream + up to 16 per-model routes.
+One native binary. One primary gateway key (plus optional additional keys). A default upstream + up to 16 per-model routes.
 Your upstream does the inference — YAG owns everything around it:
 **auth, routing, protocol translation, limits.**
 
@@ -40,11 +40,12 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 </div>
 
 > [!WARNING]
-> **This is a foundation, not a fortress.** The Responses adapter covers a documented
-> subset — current Codex CLI requests do **not** work yet (a 0.167.0 probe against the
-> mock upstream fails on an unsupported field). Anthropic support is non-streaming and
-> limited. No TLS, no CORS, no audit log, no admin API. No real model, live provider or
-> Claude Code has been tested. **Do not deploy this on an untrusted network.**
+> **This is a foundation, not a fortress.** Codex CLI 0.167.0 completed a text exchange
+> and a client-side shell-tool cycle against a deterministic mock backend; compatibility
+> with real inference models remains unverified. The Anthropic adapter now handles
+> streaming text and function tools, but the real Claude Code CLI smoke qualification
+> currently fails, so Claude Code compatibility is **not** established. No TLS, CORS
+> configuration, audit log or admin API. **Do not deploy this on an untrusted network.**
 > Full scope: [architecture & status](docs/architecture/STATUS.md).
 
 ---
@@ -89,23 +90,23 @@ flowchart LR
     routes --> alt
 ```
 
-\* Codex CLI is a *future* client — not compatible yet. See the warning above.
+\* Codex has passed version-pinned mock qualification only; real model compatibility is unverified.
 
 ## ✅ What works today
 
 - **Host.** Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys guarding `/v1/*` and `/api/*`.
 - **Chat Completions.** `GET /v1/models` and `POST /v1/chat/completions`, including transparent upstream SSE streaming and tool-call structures. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
-- **Responses subset (stateless).** Text, function calls and tool results, semantic SSE events, explicit rejection of unsupported features. Not yet Codex-compatible — see [Responses support](docs/architecture/STATUS.md).
-- **Anthropic Messages (non-streaming).** `POST /v1/messages` for text and function tools: tool definitions, selection, `tool_use` and string `tool_result` replay. Accepts `Authorization: Bearer` or `x-api-key` with the YAG secret.
+- **Responses subset (stateless).** Text, function calls and tool results (including namespaced function tools), semantic SSE events and explicitly rejected unsupported features. A pinned Codex CLI completed mock text and shell-tool cycles; see [Responses support](docs/architecture/STATUS.md).
+- **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
 - **Console.** Served by the Host itself: session-only key entry, real status and model discovery, text chat with cancellation, copyable HTTP instructions. The playground doesn't do tools — API clients handle those themselves.
 - **Hard limits, enforced.** Bounded request size, connection count, socket and upstream timeouts.
 - **Tests.** Automated mock-upstream suite: auth, framing, discovery, tool data, streaming, errors, timeout, disconnection, concurrency.
 
 ## ❌ What doesn't
 
-- Codex CLI compatibility — the 0.167.0 probe **failed** on an unsupported Responses field.
-- Anthropic streaming, multimodal input, mixed text/tool-result blocks, token counting, Claude Code.
-- Aggregate discovery across route backends. No failover once a matched backend fails — matched means **committed**.
+- Complete Codex compatibility across real models and built-in server tools. The pinned mock-only Codex text and shell cycle passed; hosted `web_search` and other unsupported tool types are not provided by YAG.
+- Full Claude Code compatibility: the isolated real CLI smoke qualification still fails. Anthropic multimodal inputs, token counting, native prompt caching and server-side tools are unsupported.
+- Live provider discovery and health-aware routing. `/v1/models` combines the default upstream with configured static route IDs; optional failover retries only DNS/connect failures before any upstream HTTP response.
 - TLS, CORS configuration, audit logging, request history, admin API, per-key identity, revocation without restart, usage attribution, encrypted secret store, unauthenticated rate limiting.
 - Model inference. Tool execution. Not YAG's job.
 
@@ -124,7 +125,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
 | `POST` | `/v1/responses` | key | Responses subset, translated to Chat. |
-| `POST` | `/v1/messages` | key | Anthropic Messages (non-streaming), translated to Chat. |
+| `POST` | `/v1/messages` | key | Anthropic text/function Messages, optional SSE streaming; translated to Chat. |
 
 `/api/*` and `/v1/*` are rate-limited per key when `YAG_RATE_LIMIT_PER_MINUTE > 0` —
 fixed 60-second windows, `429` on excess. Metrics count **request attempts**
@@ -205,6 +206,8 @@ Read once at startup. Restart to apply.
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base. No trailing slash, query or fragment. |
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
+| `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in (`1`) retry on DNS or connection errors only, before an upstream HTTP response; never on timeouts or HTTP errors. |
+| `YAG_TRACE_ROUTES` | `0` | Opt-in (`1`) privacy-conscious route category diagnostics; does not log query values, prompts or credentials. |
 | `YAG_TIMEOUT` | `120` | Total upstream timeout, 1–3600 s. Connect timeout: 10 s. |
 | `YAG_ASSETS` | `console/dist` | Path to the compiled Console assets. |
 
@@ -216,7 +219,10 @@ export YAG_MODEL_ROUTES='[{"model":"my-other-model","url":"http://127.0.0.1:9000
 ```
 
 Routes are called by model ID. `GET /api/routes` lists them without leaking addresses
-or secrets. `GET /v1/models` merges default-upstream discovery with the static route IDs.
+or secrets. `GET /v1/models` merges default-upstream discovery with static route IDs;
+these entries do not guarantee backend capability. `YAG_FALLBACK_TO_DEFAULT=1` retries
+only failed connection setup for mapped models; requests that received an HTTP response
+or timed out are never transparently replayed.
 
 ## Security & threat model
 
@@ -239,6 +245,14 @@ Read this before exposing anything to a network you don't fully control.
   at a trusted reverse proxy, firewall the host, and independently assess this
   experimental server. **Wi-Fi membership is not authentication.** Native TLS and
   hardened network-facing operation are not implemented.
+
+## Protocol qualification
+
+The native host, mock protocol tests and React console build pass. The pinned Codex
+CLI mock test verifies one streamed text turn and a shell-tool round trip. Claude Code
+is still **unqualified**: its informational CLI probe currently reports a failure.
+The GitHub Actions workflow can be green while an explicitly nonblocking qualification
+job fails; check that job separately before claiming CLI compatibility.
 
 ## Docs
 

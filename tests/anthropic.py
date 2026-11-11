@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Anthropic text-only Messages adapter contract tests against mock Chat upstream."""
 import json
+import http.client
+import time
 import unittest
 import integration as base
 
@@ -10,6 +12,18 @@ class Messages(unittest.TestCase):
 
     def post(self, payload):
         return base.request(self.port, 'POST', '/v1/messages', payload)
+
+    def test_claude_code_beta_query_is_routed_without_losing_auth(self):
+        payload={'model':'response-echo','max_tokens':32,
+                 'messages':[{'role':'user','content':'hello'}]}
+        status,_,body=base.request(self.port,'POST','/v1/messages?beta=true',
+            payload,key=None,headers={'X-API-Key':base.KEY})
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['type'],'message')
+        self.assertEqual(base.request(self.port,'POST','/v1/messages?unknown=true',
+            payload,key=None,headers={'X-API-Key':base.KEY})[0],400)
+        self.assertEqual(base.request(self.port,'POST','/v1/messages?beta=true',
+            payload,key=None)[0],401)
 
     def test_native_anthropic_header_uses_gateway_key(self):
         payload={'model':'response-echo','max_tokens':16,
@@ -23,6 +37,69 @@ class Messages(unittest.TestCase):
         status,_,_=base.request(self.port,'GET','/v1/models',key=None,
                                 headers={'X-API-Key':base.KEY})
         self.assertEqual(status,401)
+
+    def sse(self, model):
+        payload={'model':model,'max_tokens':96,'stream':True,
+                 'messages':[{'role':'user','content':'Hello'}]}
+        status,headers,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        self.assertIn('text/event-stream',headers['Content-Type'])
+        events=[]
+        for frame in body.decode().split('\n\n'):
+            if not frame.strip(): continue
+            name=next((s[7:] for s in frame.splitlines() if s.startswith('event: ')),None)
+            item=next((s[6:] for s in frame.splitlines() if s.startswith('data: ')),None)
+            self.assertIsNotNone(name,frame)
+            self.assertIsNotNone(item,frame)
+            data=json.loads(item)
+            self.assertEqual(data['type'],name)
+            events.append(data)
+        return events
+
+    def test_streaming_text_event_order(self):
+        events=self.sse('response-stream')
+        types=[e['type'] for e in events]
+        self.assertEqual(types,['message_start','content_block_start',
+            'content_block_delta','content_block_delta','content_block_stop',
+            'message_delta','message_stop'])
+        self.assertEqual(events[0]['message']['content'],[])
+        self.assertEqual(events[1]['content_block'],{'type':'text','text':''})
+        self.assertEqual(''.join(e['delta']['text'] for e in events
+            if e['type']=='content_block_delta'),'Hello world')
+        self.assertEqual(events[-2]['delta']['stop_reason'],'end_turn')
+
+    def test_streaming_tool_blocks(self):
+        events=self.sse('response-stream-tools')
+        blocks=[e for e in events if e['type']=='content_block_start']
+        self.assertEqual([e['content_block']['name'] for e in blocks],['read','write'])
+        self.assertEqual([e['content_block']['id'] for e in blocks],['call_A','call_B'])
+        partial=[e for e in events if e['type']=='content_block_delta']
+        self.assertEqual([json.loads(e['delta']['partial_json']) for e in partial],
+                         [{'p':1},{}])
+        self.assertEqual(events[-2]['delta']['stop_reason'],'tool_use')
+        self.assertEqual(events[-1]['type'],'message_stop')
+
+    def test_streaming_incomplete_and_backend_errors(self):
+        self.assertEqual(self.sse('response-incomplete')[-2]['delta']['stop_reason'],'max_tokens')
+        self.assertEqual(self.sse('response-truncated')[-1]['type'],'error')
+        self.assertEqual(self.sse('response-stream-error')[-1]['type'],'error')
+        bad={'model':'bad','max_tokens':32,'stream':True,
+             'messages':[{'role':'user','content':'Hello'}]}
+        self.assertEqual(self.post(bad)[0],429)
+
+    def test_stream_is_incremental(self):
+        conn=http.client.HTTPConnection('127.0.0.1',self.port,timeout=5)
+        payload=json.dumps({'model':'response-stream-slow','max_tokens':64,'stream':True,
+            'messages':[{'role':'user','content':'test'}]})
+        started=time.monotonic()
+        conn.request('POST','/v1/messages',payload,
+            {'Authorization':'Bearer '+base.KEY,'Content-Type':'application/json'})
+        response=conn.getresponse()
+        first=response.readline()
+        self.assertIn(b'message_start',first)
+        self.assertLess(time.monotonic()-started,.4)
+        self.assertIn(b'message_stop',response.read())
+        conn.close()
 
     def test_text_message_and_usage(self):
         status,_,data=self.post({'model':'response-echo','max_tokens':20,
@@ -38,6 +115,32 @@ class Messages(unittest.TestCase):
                                              {'role':'user','content':'hello'}])
         self.assertEqual(upstream['max_tokens'],20)
         self.assertFalse(upstream['stream'])
+
+    def test_system_text_blocks_and_cache_hints(self):
+        cache={'type':'ephemeral'}
+        payload={'model':'response-echo','max_tokens':64,
+            'system':[{'type':'text','text':'System one','cache_control':cache},
+                      {'type':'text','text':'System two'}],
+            'messages':[{'role':'user','content':[{'type':'text','text':'Hi',
+                'cache_control':cache}]}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        messages=json.loads(json.loads(body)['content'][0]['text'])['messages']
+        self.assertEqual(messages[0]['content'],'System one\n\nSystem two')
+        self.assertEqual(messages[1]['content'],[{'type':'text','text':'Hi'}])
+        broken=dict(payload,system=[{'type':'image','source':'no'}])
+        self.assertEqual(self.post(broken)[0],400)
+
+    def test_metadata_annotation_is_validated_not_forwarded(self):
+        payload={'model':'response-echo','max_tokens':32,'metadata':{'user_id':'local-test'},
+                 'messages':[{'role':'user','content':'Hello'}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        chat=json.loads(json.loads(body)['content'][0]['text'])
+        self.assertNotIn('metadata',chat)
+        self.assertNotIn('local-test',body.decode())
+        payload['metadata']={'unexpected':'no'}
+        self.assertEqual(self.post(payload)[0],400)
 
     def test_text_blocks_and_generation_settings(self):
         payload={'model':'response-echo','max_tokens':50,
@@ -108,6 +211,28 @@ class Messages(unittest.TestCase):
         chat=json.loads(json.loads(body)['content'][0]['text'])
         self.assertEqual(chat['tool_choice'],'required')
 
+    def test_mixed_tool_results_text_blocks_and_errors(self):
+        payload={'model':'response-echo','max_tokens':96,'messages':[
+            {'role':'assistant','content':[{'type':'tool_use','id':'t1','name':'read','input':{}},
+                                           {'type':'tool_use','id':'t2','name':'write','input':{}}]},
+            {'role':'user','content':[
+                {'type':'tool_result','tool_use_id':'t1','content':[{'type':'text','text':'first'}, {'type':'text','text':'second'}]},
+                {'type':'tool_result','tool_use_id':'t2','is_error':True,'content':'permission denied'},
+                {'type':'text','text':'Please retry'}]}]}
+        status,_,body=self.post(payload)
+        self.assertEqual(status,200,body)
+        converted=json.loads(json.loads(body)['content'][0]['text'])
+        messages=converted['messages']
+        self.assertEqual(messages[1]['content'],'first\nsecond')
+        self.assertEqual(messages[1]['tool_call_id'],'t1')
+        self.assertEqual(messages[2]['content'],'[Tool execution error]\npermission denied')
+        self.assertEqual(messages[2]['tool_call_id'],'t2')
+        self.assertEqual(messages[3],{'role':'user','content':[{'type':'text','text':'Please retry'}]})
+        invalid=dict(payload,messages=[payload['messages'][0],{'role':'user','content':[
+            {'type':'text','text':'wrong order'},
+            {'type':'tool_result','tool_use_id':'t1','content':'ignored'}]}])
+        self.assertEqual(self.post(invalid)[0],400)
+
     def test_chat_tool_calls_become_anthropic_tool_use(self):
         status,_,body=self.post({'model':'anthropic-tools','max_tokens':64,
             'messages':[{'role':'user','content':'Read a file'}]})
@@ -124,7 +249,7 @@ class Messages(unittest.TestCase):
         basic={'model':'response-echo','max_tokens':15,'messages':[{'role':'user','content':'hi'}]}
         for payload in [
             {'model':'response-echo','messages':[{'role':'user','content':'hi'}]},
-            dict(basic,stream=True),
+            dict(basic,stream='not-a-boolean'),
             dict(basic,tools=[{'name':'read'}]),
             dict(basic,messages=[{'role':'user','content':[{'type':'tool_result','tool_use_id':'id','content':{'unsupported':1}}]}]),
             dict(basic,max_tokens=0),

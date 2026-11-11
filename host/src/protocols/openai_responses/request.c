@@ -36,15 +36,29 @@ static int replay_metadata(yyjson_val *item) {
     return (!id || isstr(id)) && (!status || eq(status,"completed"));
 }
 static int add_call(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val *item) {
-    const char *const allowed[]={"type","id","call_id","name","arguments","status",NULL};
+    const char *const allowed[]={"type","id","call_id","name","arguments","status","namespace",NULL};
     yyjson_val *call=yyjson_obj_get(item,"call_id"),*name=yyjson_obj_get(item,"name"),*args=yyjson_obj_get(item,"arguments");
-    if(!keys(item,allowed) || !replay_metadata(item) || !isstr(call) || !*yyjson_get_str(call) || !isstr(name) || !*yyjson_get_str(name) || !isstr(args))return 0;
+    yyjson_val *ns=yyjson_obj_get(item,"namespace");
+    char flat[128];
+    if(!keys(item,allowed) || !replay_metadata(item) || !isstr(call) || !*yyjson_get_str(call)
+        || !isstr(name) || !*yyjson_get_str(name) || !isstr(args)
+        || (ns && (!isstr(ns) || !*yyjson_get_str(ns))))return 0;
+    if(ns) {
+        int n=snprintf(flat,sizeof flat,"%s__%s",yyjson_get_str(ns),yyjson_get_str(name));
+        if(n<=0 || n>64)return 0;
+        for(int i=0;i<n;i++) if(!((flat[i]>='A'&&flat[i]<='Z')
+            || (flat[i]>='a'&&flat[i]<='z') || (flat[i]>='0'&&flat[i]<='9')
+            || flat[i]=='_' || flat[i]=='-'))return 0;
+    }
     yyjson_mut_val *last=yyjson_mut_arr_get_last(messages),*role=last?yyjson_mut_obj_get(last,"role"):NULL,*calls=NULL;
     if(role && yyjson_mut_equals_str(role,"assistant")) calls=yyjson_mut_obj_get(last,"tool_calls");
     else { last=yyjson_mut_obj(d); if(!last || !yyjson_mut_obj_add_str(d,last,"role","assistant") || !yyjson_mut_obj_add_null(d,last,"content") || !yyjson_mut_arr_add_val(messages,last))return 0; }
     if(!calls) { calls=yyjson_mut_arr(d); if(!calls || !yyjson_mut_obj_add_val(d,last,"tool_calls",calls))return 0; }
     yyjson_mut_val *t=yyjson_mut_obj(d),*f=yyjson_mut_obj(d);
-    return t && f && yyjson_mut_obj_add_str(d,t,"type","function") && copy(d,t,"id",call) && copy(d,f,"name",name) && copy(d,f,"arguments",args) && yyjson_mut_obj_add_val(d,t,"function",f) && yyjson_mut_arr_add_val(calls,t);
+    return t && f && yyjson_mut_obj_add_str(d,t,"type","function") && copy(d,t,"id",call)
+        && (ns?yyjson_mut_obj_add_strcpy(d,f,"name",flat):copy(d,f,"name",name))
+        && copy(d,f,"arguments",args)
+        && yyjson_mut_obj_add_val(d,t,"function",f) && yyjson_mut_arr_add_val(calls,t);
 }
 static int add_result(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val *item) {
     const char *const allowed[]={"type","id","call_id","output","status",NULL};
@@ -68,29 +82,84 @@ static int translate_input(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_val
     }
     return 1;
 }
-static int translate_tools(yyjson_mut_doc *d,yyjson_mut_val *chat,yyjson_val *tools) {
-    if(!yyjson_is_arr(tools))return 0;
-    yyjson_mut_val *out=yyjson_mut_arr(d); if(!out)return 0;
+static int tool_identifier(const char *s) {
+    size_t n=strlen(s);
+    if(!n || n>64)return 0;
+    for(size_t i=0;i<n;i++) {
+        char c=s[i];
+        if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')
+            ||(c>='0'&&c<='9')||c=='_'||c=='-'))return 0;
+    }
+    return 1;
+}
+static int tool_name(char dest[128],yyjson_val *name,yyjson_val *ns) {
+    if(!isstr(name) || !tool_identifier(yyjson_get_str(name)))return 0;
+    if(ns && (!isstr(ns) || !tool_identifier(yyjson_get_str(ns))))return 0;
+    int n=snprintf(dest,128,ns?"%s__%s":"%s",
+        ns?yyjson_get_str(ns):yyjson_get_str(name),
+        ns?yyjson_get_str(name):"");
+    return n>0 && n<=64;
+}
+static int append_tool(yyjson_mut_doc *d,yyjson_mut_val *out,yyjson_val *fn,yyjson_val *ns) {
     const char *const allowed[]={"type","name","description","parameters","strict",NULL};
-    size_t i,max; yyjson_val *tool;
+    yyjson_val *name=yyjson_obj_get(fn,"name"),*desc=yyjson_obj_get(fn,"description");
+    yyjson_val *params=yyjson_obj_get(fn,"parameters"),*strict=yyjson_obj_get(fn,"strict");
+    char flat[128];
+    if(!keys(fn,allowed) || !eq(yyjson_obj_get(fn,"type"),"function") || !tool_name(flat,name,ns)
+        || (desc && !isstr(desc) && !yyjson_is_null(desc))
+        || (params && !yyjson_is_obj(params) && !yyjson_is_null(params))
+        || (strict && !yyjson_is_bool(strict) && !yyjson_is_null(strict)))return 0;
+    size_t i,max; yyjson_mut_val *existing;
+    yyjson_mut_arr_foreach(out,i,max,existing) {
+        yyjson_mut_val *f=yyjson_mut_obj_get(existing,"function");
+        yyjson_mut_val *other=yyjson_mut_obj_get(f,"name");
+        if(yyjson_mut_equals_str(other,flat))return 0;
+    }
+    yyjson_mut_val *t=yyjson_mut_obj(d),*f=yyjson_mut_obj(d);
+    if(!t || !f || !yyjson_mut_obj_add_strcpy(d,f,"name",flat))return 0;
+    if(desc && !copy(d,f,"description",desc))return 0;
+    if(params && !copy(d,f,"parameters",params))return 0;
+    if(strict && !copy(d,f,"strict",strict))return 0;
+    return yyjson_mut_obj_add_str(d,t,"type","function")
+        && yyjson_mut_obj_add_val(d,t,"function",f)
+        && yyjson_mut_arr_add_val(out,t);
+}
+static int translate_tools(yyjson_mut_doc *d,yyjson_mut_val *chat,yyjson_val *tools) {
+    if(!yyjson_is_arr(tools) || yyjson_arr_size(tools)>64)return 0;
+    yyjson_mut_val *out=yyjson_mut_arr(d);if(!out)return 0;
+    const char *const ns_fields[]={"type","name","description","tools",NULL};
+    size_t i,max;yyjson_val *tool;
     yyjson_arr_foreach(tools,i,max,tool) {
-        yyjson_val *name=yyjson_obj_get(tool,"name"),*desc=yyjson_obj_get(tool,"description"),*params=yyjson_obj_get(tool,"parameters"),*strict=yyjson_obj_get(tool,"strict");
-        if(!keys(tool,allowed) || !eq(yyjson_obj_get(tool,"type"),"function") || !isstr(name) || !*yyjson_get_str(name) || (desc && !isstr(desc) && !yyjson_is_null(desc)) || (params && !yyjson_is_obj(params) && !yyjson_is_null(params)) || (strict && !yyjson_is_bool(strict) && !yyjson_is_null(strict)))return 0;
-        yyjson_mut_val *t=yyjson_mut_obj(d),*f=yyjson_mut_obj(d); if(!t || !f || !copy(d,f,"name",name))return 0;
-        if(desc && !copy(d,f,"description",desc))return 0;
-        if(params && !copy(d,f,"parameters",params))return 0;
-        if(strict && !copy(d,f,"strict",strict))return 0;
-        if(!yyjson_mut_obj_add_str(d,t,"type","function") || !yyjson_mut_obj_add_val(d,t,"function",f) || !yyjson_mut_arr_add_val(out,t))return 0;
+        yyjson_val *type=yyjson_obj_get(tool,"type");
+        if(eq(type,"function")) {
+            if(!append_tool(d,out,tool,NULL))return 0;
+        } else if(eq(type,"namespace")) {
+            yyjson_val *ns=yyjson_obj_get(tool,"name"),*desc=yyjson_obj_get(tool,"description");
+            yyjson_val *members=yyjson_obj_get(tool,"tools");
+            if(!keys(tool,ns_fields) || !isstr(ns) || !tool_identifier(yyjson_get_str(ns))
+                || (desc && !isstr(desc)) || !yyjson_is_arr(members) || !yyjson_arr_size(members))
+                return 0;
+            size_t j,count;yyjson_val *fn;
+            yyjson_arr_foreach(members,j,count,fn) {
+                if(yyjson_mut_arr_size(out)>=64 || !append_tool(d,out,fn,ns))return 0;
+            }
+        } else return 0;
     }
     /* Many chat servers reject an empty tools array. */
-    return !yyjson_arr_size(tools) || yyjson_mut_obj_add_val(d,chat,"tools",out);
+    return !yyjson_mut_arr_size(out) || yyjson_mut_obj_add_val(d,chat,"tools",out);
 }
 static int translate_choice(yyjson_mut_doc *d,yyjson_mut_val *chat,yyjson_val *v) {
     if(eq(v,"auto") || eq(v,"none") || eq(v,"required"))return copy(d,chat,"tool_choice",v);
-    const char *const allowed[]={"type","name",NULL}; yyjson_val *name=yyjson_obj_get(v,"name");
-    if(!keys(v,allowed) || !eq(yyjson_obj_get(v,"type"),"function") || !isstr(name))return 0;
+    const char *const allowed[]={"type","name","namespace",NULL};
+    yyjson_val *name=yyjson_obj_get(v,"name"),*ns=yyjson_obj_get(v,"namespace");
+    char flat[128];
+    if(!keys(v,allowed) || !eq(yyjson_obj_get(v,"type"),"function")
+        || !tool_name(flat,name,ns))return 0;
     yyjson_mut_val *choice=yyjson_mut_obj(d),*f=yyjson_mut_obj(d);
-    return choice && f && copy(d,f,"name",name) && yyjson_mut_obj_add_str(d,choice,"type","function") && yyjson_mut_obj_add_val(d,choice,"function",f) && yyjson_mut_obj_add_val(d,chat,"tool_choice",choice);
+    return choice && f && yyjson_mut_obj_add_strcpy(d,f,"name",flat)
+        && yyjson_mut_obj_add_str(d,choice,"type","function")
+        && yyjson_mut_obj_add_val(d,choice,"function",f)
+        && yyjson_mut_obj_add_val(d,chat,"tool_choice",choice);
 }
 int responses_parse(const char *body,size_t len,response_request *r,const char **err) {
     memset(r,0,sizeof *r); *err="Invalid Responses request";
@@ -127,12 +196,47 @@ int responses_parse(const char *body,size_t len,response_request *r,const char *
     if(!copy(d,chat,"model",model) || !yyjson_mut_obj_add_bool(d,chat,"stream",r->stream))goto done;
     if(inst && !yyjson_is_null(inst) && !add_message(d,messages,"system",inst))goto done;
     if(!translate_input(d,messages,input) || !yyjson_mut_obj_add_val(d,chat,"messages",messages)) { *err="Unsupported input item or content; only text messages and function calls/results are supported";goto done; }
-    yyjson_val *v=yyjson_obj_get(r->root,"tools"); if(v && !translate_tools(d,chat,v)){*err="Only function tools are supported";goto done;}
+    yyjson_val *v=yyjson_obj_get(r->root,"tools");
+    if(v && !translate_tools(d,chat,v)) {
+        *err="Invalid or unsupported function/namespace tool schema";
+        if(yyjson_is_arr(v)) {
+            size_t i,n;yyjson_val *tool;
+            yyjson_arr_foreach(v,i,n,tool) {
+                yyjson_val *type=yyjson_obj_get(tool,"type");
+                if(!eq(type,"function") && !eq(type,"namespace")) {
+                    snprintf(r->diagnostic,sizeof r->diagnostic,
+                        "Unsupported tool type: %.100s",
+                        isstr(type)?yyjson_get_str(type):"(invalid)");
+                    *err=r->diagnostic;
+                    break;
+                }
+            }
+        }
+        goto done;
+    }
     v=yyjson_obj_get(r->root,"tool_choice");if(v && !yyjson_is_null(v) && !translate_choice(d,chat,v)){*err="Unsupported tool_choice";goto done;}
     v=yyjson_obj_get(r->root,"parallel_tool_calls");if(v && (!yyjson_is_bool(v) || !copy(d,chat,"parallel_tool_calls",v))){*err="parallel_tool_calls must be boolean";goto done;}
     v=yyjson_obj_get(r->root,"max_output_tokens");if(v && (!yyjson_is_int(v) || yyjson_get_sint(v)<=0 || !copy(d,chat,"max_tokens",v))){*err="max_output_tokens must be a positive integer";goto done;}
     const char *numbers[]={"temperature","top_p",NULL}; for(int i=0;numbers[i];i++){v=yyjson_obj_get(r->root,numbers[i]);if(v && (!yyjson_is_num(v) || !copy(d,chat,numbers[i],v))){*err="Invalid generation parameter";goto done;}}
-    v=yyjson_obj_get(r->root,"reasoning"); if(v && !yyjson_is_null(v)){ const char *const a[]={"effort",NULL}; yyjson_val *eff=yyjson_obj_get(v,"effort"); if(!keys(v,a) || (eff && !yyjson_is_null(eff) && !(eq(eff,"none") || eq(eff,"minimal") || eq(eff,"low") || eq(eff,"medium") || eq(eff,"high") || eq(eff,"xhigh") || eq(eff,"max")))){*err="Only reasoning.effort is supported";goto done;} if(eff && !yyjson_is_null(eff) && !copy(d,chat,"reasoning_effort",eff))goto done; }
+    v=yyjson_obj_get(r->root,"reasoning");
+    if(v && !yyjson_is_null(v)) {
+        const char *const allowed[]={"effort","summary","generate_summary",NULL};
+        yyjson_val *eff=yyjson_obj_get(v,"effort");
+        yyjson_val *summary=yyjson_obj_get(v,"summary");
+        yyjson_val *legacy=yyjson_obj_get(v,"generate_summary");
+        if(!keys(v,allowed) || (eff && !yyjson_is_null(eff)
+            && !(eq(eff,"none") || eq(eff,"minimal") || eq(eff,"low")
+                || eq(eff,"medium") || eq(eff,"high") || eq(eff,"xhigh") || eq(eff,"max")))
+            || (summary && !yyjson_is_null(summary)
+                && !(eq(summary,"auto") || eq(summary,"concise") || eq(summary,"detailed")))
+            || (legacy && !yyjson_is_null(legacy)
+                && !(eq(legacy,"auto") || eq(legacy,"concise") || eq(legacy,"detailed")))) {
+            *err="Invalid reasoning effort or summary selector";goto done;
+        }
+        /* A Chat upstream cannot supply Responses reasoning summaries.
+         * These selectors only request an optional projection; never invent it. */
+        if(eff && !yyjson_is_null(eff) && !copy(d,chat,"reasoning_effort",eff))goto done;
+    }
     v=yyjson_obj_get(r->root,"prompt_cache_key"); if(v && !yyjson_is_null(v) && (!isstr(v) || !copy(d,chat,"prompt_cache_key",v))){*err="Invalid prompt_cache_key";goto done;}
     v=yyjson_obj_get(r->root,"text"); if(v && !yyjson_is_null(v)){
         const char *const a[]={"format","verbosity",NULL}; yyjson_val *f=yyjson_obj_get(v,"format"),*verbosity=yyjson_obj_get(v,"verbosity");
