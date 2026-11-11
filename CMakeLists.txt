@@ -41,3 +41,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME http_fuzz COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/http_fuzz.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME load_smoke COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/load_smoke.py $<TARGET_FILE:yag>)
+endif()
