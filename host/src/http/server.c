@@ -109,6 +109,36 @@ static FILE *open_asset(const char *root,const char *rel,long *length) {
     free(path);
     return NULL;
 }
+static void model_capabilities(int fd,const yag_config *cfg) {
+    yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
+    if(!d){error(fd,500,"Out of memory");return;}
+    yyjson_mut_val *root=yyjson_mut_obj(d),*list=yyjson_mut_arr(d);
+    int ok=root && list && yyjson_mut_obj_add_str(d,root,"object","gateway.model_capabilities")
+        && yyjson_mut_obj_add_val(d,root,"data",list);
+    for(size_t i=0;ok && i<cfg->route_count;i++) {
+        const yag_route *r=&cfg->routes[i];
+        yyjson_mut_val *item=yyjson_mut_obj(d),*caps=yyjson_mut_obj(d);
+        ok=item && caps && yyjson_mut_obj_add_strcpy(d,item,"model",r->model)
+            && yyjson_mut_obj_add_bool(d,item,"declared",r->capabilities_declared)
+            && yyjson_mut_obj_add_val(d,item,"capabilities",caps);
+        const struct { const char *name; int value; } fields[]={
+            {"tools",r->tools},{"streaming",r->streaming},
+            {"vision",r->vision},{"reasoning",r->reasoning}};
+        for(size_t j=0;ok && j<sizeof fields/sizeof fields[0];j++)
+            ok=fields[j].value<0
+                ?yyjson_mut_obj_add_null(d,caps,fields[j].name)
+                :yyjson_mut_obj_add_bool(d,caps,fields[j].name,fields[j].value);
+        if(ok)ok=r->max_context_tokens
+            ?yyjson_mut_obj_add_uint(d,caps,"max_context_tokens",r->max_context_tokens)
+            :yyjson_mut_obj_add_null(d,caps,"max_context_tokens");
+        if(ok)ok=yyjson_mut_arr_add_val(list,item);
+    }
+    char *json=NULL;
+    if(ok){yyjson_mut_doc_set_root(d,root);json=yyjson_mut_write(d,0,NULL);}
+    if(json)reply(fd,200,"application/json",json);
+    else error(fd,500,"Could not serialize model capabilities");
+    free(json);yyjson_mut_doc_free(d);
+}
 static void capabilities(int fd,const yag_config *cfg) {
     /* Reports gateway translation features, not a particular model's abilities. */
     char body[1536];
@@ -245,6 +275,7 @@ static void handle(int fd,yag_config *c) {
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
+    else if(!strcmp(uri,"/api/model-capabilities") && !strcmp(method,"GET")) model_capabilities(fd,c);
     else if(!strcmp(uri,"/api/capabilities") && !strcmp(method,"GET")) capabilities(fd,c);
     else if(!strcmp(uri,"/api/routes") && !strcmp(method,"GET")) {
         yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
