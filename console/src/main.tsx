@@ -7,6 +7,10 @@ import './styles.css'
 type Page = 'Overview' | 'Playground' | 'Models' | 'Integrations' | 'Requests' | 'Settings'
 type Model = { id: string; owned_by?: string }
 type Route = { model: string }
+type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;successes:number;
+    failures:number;bypassed:number;fallbacks:number;total_latency_ms:number;
+    last_http_status:number;circuit:'closed'|'open'|'half_open_ready';retry_after_seconds:number}
+type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
 type Metrics = { chat_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
 type Message = { role: 'user' | 'assistant'; content: string }
@@ -78,7 +82,69 @@ function Overview({status, models, modelError, lastUpdated, go, refresh}: {statu
     <div className="section-heading lower"><div><span className="section-number">02</span><h2>System resources</h2></div><span className="updated">HOST METRICS</span></div><div className="resource-line"><Cpu size={17}/><div><b>Resource metrics not available</b><span>CPU, memory and GPU monitoring are not supported in this version.</span></div><span className="tag">NOT REPORTED</span></div>
   </>
 }
-function Models({apiKey,models,routes,routeError,modelError,refresh,go}: {apiKey:string; models: Model[]; routes: Route[]; routeError: string; modelError: string; refresh: () => Promise<void>; go: (p: Page) => void}) { return <><PageHead eyebrow="INFERENCE" title="Models" description="Model identifiers discovered from the configured upstream backend." action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/><section className="panel"><div className="panel-head"><div><h2>Model registry</h2><p>Live response from the upstream /models endpoint.</p></div><span className="tag">{models.length} LISTED</span></div><div className="table-head"><span>MODEL ID</span><span>PROVIDER</span><span>STATUS</span></div>{models.length ? models.map(m => <div className="model-row" key={m.id}><span className="model-name"><span className="model-icon"><Box size={15}/></span>{m.id}</span><span className="secondary">{m.owned_by || 'Not reported'}</span><span className="model-status"><span className="status-dot on"/> Listed</span></div>) : <div className="empty-table"><Box size={20}/><b>No models to display</b><span>{modelError || 'Add an API key and configure an inference backend.'}</span><button className="text-link" onClick={() => go('Settings')}>Connection settings <ArrowUpRight size={14}/></button></div>}</section><section className="panel"><div className="panel-head"><div><h2>Configured routes</h2><p>Model IDs mapped to separate backends. These are configuration entries, not health checks.</p></div><span className="tag">{routes.length} CONFIGURED</span></div><div className="setting-row"><div><b>Default provider</b><small>Checks HTTP reachability of /models only</small></div><ProviderProbe apiKey={apiKey}/></div><div className="table-head"><span>MODEL ID</span><span>TYPE</span><span>STATUS</span></div>{routes.length ? routes.map(r => <div className="model-row" key={r.model}><span className="model-name"><span className="model-icon"><Layers3 size={15}/></span>{r.model}</span><span className="secondary">Model route</span><ProviderProbe apiKey={apiKey} model={r.model}/></div>) : <div className="empty-table"><Layers3 size={20}/><b>No configured routes</b><span>{routeError || 'Define YAG_MODEL_ROUTES on the Host to add routed models.'}</span></div>}</section><div className="info-block"><CircleHelp size={16}/><span>Provider configuration is managed on the host through environment variables. Model capabilities and per-model health checks are not yet available.</span></div></> }
+function Models({apiKey,models,routes,routeError,modelError,refresh,go}: {apiKey:string; models: Model[]; routes: Route[]; routeError: string; modelError: string; refresh: () => Promise<void>; go: (p: Page) => void}) { return <><PageHead eyebrow="INFERENCE" title="Models" description="Model identifiers discovered from the configured upstream backend." action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/><section className="panel"><div className="panel-head"><div><h2>Model registry</h2><p>Live response from the upstream /models endpoint.</p></div><span className="tag">{models.length} LISTED</span></div><div className="table-head"><span>MODEL ID</span><span>PROVIDER</span><span>STATUS</span></div>{models.length ? models.map(m => <div className="model-row" key={m.id}><span className="model-name"><span className="model-icon"><Box size={15}/></span>{m.id}</span><span className="secondary">{m.owned_by || 'Not reported'}</span><span className="model-status"><span className="status-dot on"/> Listed</span></div>) : <div className="empty-table"><Box size={20}/><b>No models to display</b><span>{modelError || 'Add an API key and configure an inference backend.'}</span><button className="text-link" onClick={() => go('Settings')}>Connection settings <ArrowUpRight size={14}/></button></div>}</section><section className="panel"><div className="panel-head"><div><h2>Configured routes</h2><p>Model IDs mapped to separate backends. These are configuration entries, not health checks.</p></div><span className="tag">{routes.length} CONFIGURED</span></div><div className="setting-row"><div><b>Default provider</b><small>Checks HTTP reachability of /models only</small></div><ProviderProbe apiKey={apiKey}/></div><div className="table-head"><span>MODEL ID</span><span>TYPE</span><span>STATUS</span></div>{routes.length ? routes.map(r => <div className="model-row" key={r.model}><span className="model-name"><span className="model-icon"><Layers3 size={15}/></span>{r.model}</span><span className="secondary">Model route</span><ProviderProbe apiKey={apiKey} model={r.model}/></div>) : <div className="empty-table"><Layers3 size={20}/><b>No configured routes</b><span>{routeError || 'Define YAG_MODEL_ROUTES on the Host to add routed models.'}</span></div>}</section><ProviderOperations apiKey={apiKey}/><ModelCapabilityPanel apiKey={apiKey}/><div className="info-block"><CircleHelp size={16}/><span>Routes and model capability declarations are configured using host environment variables. A listed model or capability declaration does not prove backend reachability. Use Check HTTP for an on-demand /models probe.</span></div></> }
+function ProviderOperations({apiKey}: {apiKey:string}) {
+  const [rows,setRows]=useState<ProviderRow[]>([])
+  const [threshold,setThreshold]=useState(0)
+  const [err,setErr]=useState('')
+  const reload=useCallback(async()=>{
+    if(!apiKey){setRows([]);setErr('');return}
+    try {
+      const data=await (await api('/api/providers/status',apiKey)).json()
+      if(!Array.isArray(data.data))throw new Error('Unexpected provider status')
+      setRows(data.data);setThreshold(data.circuit_threshold);setErr('')
+    } catch(e){setRows([]);setErr((e as Error).message)}
+  },[apiKey])
+  useEffect(()=>{
+    void reload()
+    const interval=setInterval(()=>void reload(),30000)
+    return ()=>clearInterval(interval)
+  },[reload])
+  return <section className="panel"><div className="panel-head">
+    <div><h2>Provider operations</h2><p>In-memory request outcomes, not active reachability probes.</p></div>
+    <button className="outline-button small" onClick={()=>void reload()}>Refresh</button></div>
+    <div className="operations-meta">Circuit breaker: {threshold ? 'Enabled (threshold '+threshold+')' : 'Disabled'} · counters reset on restart</div>
+    <div className="provider-table-wrap"><table className="provider-table">
+      <thead><tr><th>BACKEND</th><th>ATTEMPTS</th><th>SUCCESS</th>
+        <th>FAIL</th><th>AVG LATENCY</th><th>CIRCUIT</th></tr></thead>
+      <tbody>{rows.map((p,i)=><tr key={p.kind+String(i)}>
+        <td><b>{p.model || 'Default backend'}</b></td>
+        <td>{p.attempts}</td><td>{p.successes}</td><td>{p.failures}</td>
+        <td>{p.attempts ? Math.round(p.total_latency_ms/p.attempts)+' ms' : '—'}</td>
+        <td>{p.circuit==='open'?'Open ('+p.retry_after_seconds+'s)' : p.circuit==='half_open_ready'?'Probe ready':'Closed'}</td>
+      </tr>)}</tbody></table></div>
+    {rows.some(p=>p.bypassed || p.fallbacks) &&
+      <div className="tiny-note">Total bypassed: {rows.reduce((a,p)=>a+p.bypassed,0)}
+        {' · '}Default fallbacks: {rows.reduce((a,p)=>a+p.fallbacks,0)}</div>}
+    {err && <div className="tiny-note">{err}</div>}
+    {!rows.length && !err && <div className="tiny-note">Add an API key to view provider operations.</div>}
+  </section>
+}
+function ModelCapabilityPanel({apiKey}: {apiKey:string}) {
+  const [rows,setRows]=useState<ModelCapabilities[]>([])
+  const [err,setErr]=useState('')
+  const reload=useCallback(async()=>{
+    if(!apiKey){setRows([]);setErr('');return}
+    try {
+      const data=await (await api('/api/models/capabilities',apiKey)).json()
+      if(!Array.isArray(data.data))throw new Error('Unexpected capability registry')
+      setRows(data.data);setErr('')
+    } catch(e){setRows([]);setErr((e as Error).message)}
+  },[apiKey])
+  useEffect(()=>{void reload()},[reload])
+  return <section className="panel"><div className="panel-head">
+    <div><h2>Declared model capabilities</h2><p>Operator-configured hints only: not validated by model execution.</p></div>
+    <button className="outline-button small" onClick={()=>void reload()}>Refresh</button>
+    </div>
+    {rows.length?rows.map((cap,i)=><div className="model-row" key={cap.model+String(i)}>
+      <span className="model-name"><span className="model-icon"><Cpu size={15}/></span>{cap.model}</span>
+      <span className="secondary">{cap.features.length?cap.features.join(', '):'No features declared'}</span>
+      <span className="tiny-note">Window: {cap.context_window || 'unknown'} · unverified</span>
+    </div>):<div className="empty-table"><Box size={20}/><b>No capabilities declared</b>
+      <span>{err || 'Configure YAG_MODEL_CAPABILITIES to describe known model features.'}</span>
+    </div>}
+  </section>
+}
 function ProviderProbe({apiKey,model}: {apiKey:string;model?:string}) {
   const [result,setResult]=useState<{reachable:boolean;upstream_status:number}|null>(null)
   const [busy,setBusy]=useState(false)
