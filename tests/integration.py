@@ -133,6 +133,28 @@ class Integration(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.proc.terminate();cls.proc.wait(timeout=5);cls.proc.stderr.close();cls.backend.shutdown();cls.backend.server_close();cls.route_backend.shutdown();cls.route_backend.server_close();cls.tmp.cleanup()
+    def test_assets_cannot_escape_root_through_symlinks(self):
+        if self.has_console:
+            self.skipTest('Asset root is the separately built Console')
+        directory=os.path.join(self.tmp.name,'nested')
+        os.makedirs(directory,exist_ok=True)
+        with open(os.path.join(directory,'view.html'),'w') as f:
+            f.write('safe nested asset')
+        status,_,body=request(self.port,'GET','/nested/view.html',key=None)
+        self.assertEqual(status,200,body)
+        self.assertEqual(body,b'safe nested asset')
+        outside=tempfile.NamedTemporaryFile(mode='wb',delete=False)
+        try:
+            outside.write(b'private fixture content')
+            outside.close()
+            os.symlink(outside.name,os.path.join(self.tmp.name,'public-leak.txt'))
+            os.symlink(os.path.dirname(outside.name),os.path.join(self.tmp.name,'external-directory'))
+            self.assertEqual(request(self.port,'GET','/public-leak.txt',key=None)[0],404)
+            self.assertEqual(request(self.port,'GET','/external-directory/'+os.path.basename(outside.name),key=None)[0],404)
+            self.assertEqual(request(self.port,'GET','/../private',key=None)[0],404)
+        finally:
+            os.unlink(outside.name)
+
     def test_health_and_console(self):
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
         page=request(self.port,'GET','/',key=None)[2]
@@ -143,6 +165,12 @@ class Integration(unittest.TestCase):
             status,headers,_=request(self.port,'GET',js.group(1).decode(),key=None)
             self.assertEqual(status,200); self.assertIn('javascript',headers['Content-Type'])
         self.assertEqual(request(self.port,'GET','/../etc/passwd',key=None)[0],404)
+    def test_unrecognized_paths_never_disclose_query_values_in_response(self):
+        secret='a-private-token-never-log'
+        status,_,body=request(self.port,'GET','/v1/unknown/'+secret+'?key='+secret)
+        self.assertIn(status,(400,404))
+        self.assertNotIn(secret.encode(),body)
+
     def test_auth_and_status(self):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)
@@ -176,6 +204,22 @@ class Integration(unittest.TestCase):
         self.assertEqual(data['responses_requests'],int(data['responses_requests']))
         self.assertNotIn(b'secret-prompt',body)
         self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
+
+    def test_capabilities_contract_does_not_confuse_gateway_with_model_support(self):
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        self.assertEqual(status,200,body)
+        caps=json.loads(body)
+        self.assertEqual(caps['object'],'gateway.capabilities')
+        self.assertEqual(caps['routing']['configured_routes'],1)
+        self.assertFalse(caps['routing']['fallback_enabled'])
+        self.assertFalse(caps['protocols']['responses']['web_search'])
+        self.assertFalse(caps['protocols']['responses']['stateful'])
+        self.assertFalse(caps['protocols']['anthropic_messages']['multimodal'])
+        self.assertTrue(caps['protocols']['anthropic_messages']['streaming'])
+        self.assertEqual(caps['limits']['max_body_bytes'],1024*1024)
+        self.assertNotIn(b'route-secret',body)
+        self.assertNotIn(b'127.0.0.1',body)
+        self.assertEqual(request(self.port,'GET','/api/capabilities',key=None)[0],401)
 
     def test_provider_reachability_checks_do_not_disclose_secrets(self):
         for payload in [{},{'model':'routed-model'}]:
@@ -236,6 +280,33 @@ class Integration(unittest.TestCase):
     def test_malformed_framing(self):
         s=socket.create_connection(('127.0.0.1',self.port)); s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\nx'); self.assertIn(b'400',s.recv(1024));s.close()
         s=socket.create_connection(('127.0.0.1',self.port));s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n');self.assertIn(b'400',s.recv(1024));s.close()
+    def test_invalid_header_names_are_rejected(self):
+        for extra in [b'Content-Length : 1',b'X Token: test',b'X\\x01Bad: test']:
+            s=socket.create_connection(('127.0.0.1',self.port),timeout=2)
+            try:
+                s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\n'
+                          b'Authorization: Bearer '+KEY.encode()+b'\r\n'+extra+b'\r\n\r\n')
+                self.assertIn(b'400',s.recv(1024),extra)
+            finally:s.close()
+
+    def test_expect_100_continue_after_authentication(self):
+        payload=b'{"model":"response-echo","messages":[{"role":"user","content":"ok"}]}'
+        def exchange(key,expect):
+            s=socket.create_connection(('127.0.0.1',self.port),timeout=3)
+            try:
+                s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\n'
+                    b'Authorization: Bearer '+key+b'\r\n'
+                    b'Expect: '+expect+b'\r\nContent-Length: '+str(len(payload)).encode()+b'\r\n\r\n')
+                reply=s.recv(1024)
+                if reply.startswith(b'HTTP/1.1 100'):
+                    s.sendall(payload)
+                    reply=s.recv(2048)
+                return reply
+            finally:s.close()
+        self.assertIn(b'200',exchange(KEY.encode(),b'100-continue'))
+        self.assertIn(b'401',exchange(b'wrong',b'100-continue'))
+        self.assertIn(b'417',exchange(KEY.encode(),b'invalid'))
+
     def test_size_limit(self):
         s=socket.create_connection(('127.0.0.1',self.port))
         s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 1048577\r\n\r\n')
