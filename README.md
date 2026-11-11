@@ -214,6 +214,7 @@ Read once at startup. Restart to apply.
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
 | `YAG_MODEL_CAPABILITIES` | empty | JSON array (≤32) of `{model,features,context_window?}`. Features: streaming, function_tools, json_schema, reasoning, vision, audio. Operator assertions only, not probed. |
+| `YAG_ENFORCE_MODEL_CAPABILITIES` | `0` | Opt-in (`1`) early HTTP 422 rejection if a declared model lacks requested tools, streaming, reasoning or JSON schema; unknown models are not presumed compatible. |
 | `YAG_FALLBACK_TO_DEFAULT` | `0` | Opt-in (`1`) retry on DNS or connection errors only, before an upstream HTTP response; never on timeouts or HTTP errors. |
 | `YAG_CIRCUIT_THRESHOLD` | `0` | 0 disables the circuit breaker; 1–20 upstream failures trip it for routed models. |
 | `YAG_CIRCUIT_COOLDOWN_SECONDS` | `30` | Cooldown for a tripped route, 1–3600. One half-open request probes recovery. |

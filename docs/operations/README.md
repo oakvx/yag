@@ -40,6 +40,18 @@ the bounded observer; this affects only usage accounting, not data forwarding.
 The second endpoint lists operator declarations, never inferred model
 capabilities. Every entry is explicitly `verified:false`.
 
+## Optional model capability admission guard
+
+Set `YAG_ENFORCE_MODEL_CAPABILITIES=1` to fail early with HTTP 422
+when a model has an operator declaration but lacks a requested capability:
+function tools, streaming, reasoning or JSON-schema output. With
+`YAG_ENFORCE_MODEL_CAPABILITIES=0` (default), model requests behave as
+before; only upstream and adapter validations apply.
+
+A declaration is **not an automated model capability test**. Any model
+without a declaration remains subject to the backend's own behavior;
+the guard does not reject it as unsupported.
+
 ## Scoped API keys
 
 Additional static keys can be narrowed to one or more operations. The
