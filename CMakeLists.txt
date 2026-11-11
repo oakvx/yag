@@ -37,3 +37,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME circuit_breaker COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/circuit_breaker.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME http_fuzz COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/http_fuzz.py $<TARGET_FILE:yag>)
+endif()
