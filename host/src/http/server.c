@@ -261,6 +261,10 @@ static void handle(int fd,yag_config *c) {
         int key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
+        if(key_index>0 && c->extra_inference_only[key_index-1]
+            && !strncmp(uri,"/api/",5)) {
+            error(fd,403,"Key scope does not allow gateway administration");goto done;
+        }
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
     }
     /* Send 100 Continue only AFTER authenticating and checking request size. */
