@@ -13,6 +13,11 @@ typedef struct {
 } yag_provider_stats;
 typedef struct {
     char *model;
+    unsigned feature_mask,context_window;
+    int has_context_window;
+} yag_model_capability;
+typedef struct {
+    char *model;
     char *url;
     const char *key;
     yag_provider_stats stats;
@@ -24,6 +29,8 @@ typedef struct {
     size_t extra_key_count;
     yag_route routes[16];
     size_t route_count;
+    yag_model_capability capabilities[32];
+    size_t capability_count;
     long timeout;
     time_t started;
     pthread_mutex_t lock;
@@ -53,6 +60,7 @@ void anthropic_stream_handle(int fd,const yag_config *target,const char *model,c
 void models_handle(int fd, const yag_config *c);
 void provider_check_handle(int fd,const yag_config *cfg,const char *body,size_t len);
 void providers_status_handle(int fd,yag_config *cfg);
+void model_capabilities_handle(int fd,const yag_config *cfg);
 int send_all(int fd, const void *data, size_t len);
 void reply(int fd, int status, const char *type, const char *body);
 #endif
