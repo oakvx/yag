@@ -183,7 +183,11 @@ class Integration(unittest.TestCase):
     def test_route_inventory_does_not_leak_secrets(self):
         status,_,data=request(self.port,'GET','/api/routes')
         self.assertEqual(status,200,data)
-        self.assertEqual(json.loads(data)['data'],[{'model':'routed-model'}])
+        routes=json.loads(data)['data']
+        self.assertEqual(len(routes),1)
+        self.assertEqual(routes[0]['model'],'routed-model')
+        self.assertFalse(routes[0]['circuit_open'])
+        self.assertEqual(routes[0]['consecutive_connect_failures'],0)
         self.assertNotIn(b'route-secret',data)
         self.assertEqual(request(self.port,'GET','/api/routes',key=None)[0],401)
     def test_model_routes_to_separate_backend(self):
