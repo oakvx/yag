@@ -23,9 +23,8 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
   native-sanitizers:
-    name: Native ASan / UBSan qualification (informational)
+    name: Native ASan / UBSan regression tests
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install native dependencies
