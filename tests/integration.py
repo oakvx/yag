@@ -264,6 +264,33 @@ class Integration(unittest.TestCase):
     def test_malformed_framing(self):
         s=socket.create_connection(('127.0.0.1',self.port)); s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 1\r\nContent-Length: 1\r\n\r\nx'); self.assertIn(b'400',s.recv(1024));s.close()
         s=socket.create_connection(('127.0.0.1',self.port));s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n');self.assertIn(b'400',s.recv(1024));s.close()
+    def test_invalid_header_names_are_rejected(self):
+        for extra in [b'Content-Length : 1',b'X Token: test',b'X\\x01Bad: test']:
+            s=socket.create_connection(('127.0.0.1',self.port),timeout=2)
+            try:
+                s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\n'
+                          b'Authorization: Bearer '+KEY.encode()+b'\r\n'+extra+b'\r\n\r\n')
+                self.assertIn(b'400',s.recv(1024),extra)
+            finally:s.close()
+
+    def test_expect_100_continue_after_authentication(self):
+        payload=b'{"model":"response-echo","messages":[{"role":"user","content":"ok"}]}'
+        def exchange(key,expect):
+            s=socket.create_connection(('127.0.0.1',self.port),timeout=3)
+            try:
+                s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\n'
+                    b'Authorization: Bearer '+key+b'\r\n'
+                    b'Expect: '+expect+b'\r\nContent-Length: '+str(len(payload)).encode()+b'\r\n\r\n')
+                reply=s.recv(1024)
+                if reply.startswith(b'HTTP/1.1 100'):
+                    s.sendall(payload)
+                    reply=s.recv(2048)
+                return reply
+            finally:s.close()
+        self.assertIn(b'200',exchange(KEY.encode(),b'100-continue'))
+        self.assertIn(b'401',exchange(b'wrong',b'100-continue'))
+        self.assertIn(b'417',exchange(KEY.encode(),b'invalid'))
+
     def test_size_limit(self):
         s=socket.create_connection(('127.0.0.1',self.port))
         s.sendall(b'POST /v1/chat/completions HTTP/1.1\r\nHost: x\r\nContent-Length: 1048577\r\n\r\n')

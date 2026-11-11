@@ -170,10 +170,25 @@ static void handle(int fd,yag_config *c) {
         else fprintf(stderr,"YAG request method=%s route=other has_query=%d\n",
             method,strchr(uri,'?')!=NULL);
     }
-    size_t length=0; int have_length=0,have_auth=0,have_native_key=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
-    while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0; char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
+    size_t length=0; int have_length=0,have_auth=0,have_native_key=0,have_expect=0,expect_continue=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
+    while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0;
+        /* RFC 9110 field names contain token characters only; rejecting whitespace
+         * before ':' avoids proxy/backend framing disagreements. */
+        for(char *p=line;*p;p++) {
+            unsigned char ch=(unsigned char)*p;
+            if(!isalnum(ch) && !strchr("!#$%&'*+-.^_`|~",ch)) {
+                error(fd,400,"Invalid header name");goto done;
+            }
+        }
+        char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
         else if(!strcasecmp(line,"Transfer-Encoding")) transfer_encoding=1;
+        else if(!strcasecmp(line,"Expect")) {
+            if(have_expect++ || strcasecmp(v,"100-continue")) {
+                error(fd,417,"Unsupported expectation");goto done;
+            }
+            expect_continue=1;
+        }
         else if(!strcasecmp(line,"Authorization")) { if(have_auth++){error(fd,400,"Duplicate authorization");goto done;} auth=v; }
         else if(!strcasecmp(line,"X-API-Key")) { if(have_native_key++){error(fd,400,"Duplicate API key");goto done;} native_key=v; }
         line=end+2;
@@ -190,6 +205,11 @@ static void handle(int fd,yag_config *c) {
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
+    }
+    /* Send 100 Continue only AFTER authenticating and checking request size. */
+    if(expect_continue && !strcmp(method,"POST") && used-header_len<length) {
+        static const char interim[]="HTTP/1.1 100 Continue\r\n\r\n";
+        if(send_all(fd,interim,sizeof interim-1))goto done;
     }
     /* Header-only connections allocate ~16 KiB instead of 1 MiB each.
      * Authentication and rate checks run before expanding the request buffer. */
