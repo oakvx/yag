@@ -1,0 +1,25 @@
+services:
+  yag:
+    build: .
+    image: yag:local
+    init: true
+    restart: unless-stopped
+    environment:
+      YAG_API_KEY: ${YAG_API_KEY:?Set a long random YAG_API_KEY in the shell}
+      YAG_UPSTREAM_URL: ${YAG_UPSTREAM_URL:-http://host.docker.internal:8000/v1}
+      YAG_UPSTREAM_KEY: ${YAG_UPSTREAM_KEY:-}
+      YAG_MODEL_ROUTES: ${YAG_MODEL_ROUTES:-}
+      YAG_MODEL_CAPABILITIES: ${YAG_MODEL_CAPABILITIES:-}
+      YAG_FALLBACK_TO_DEFAULT: ${YAG_FALLBACK_TO_DEFAULT:-0}
+      YAG_CIRCUIT_THRESHOLD: ${YAG_CIRCUIT_THRESHOLD:-0}
+      YAG_CIRCUIT_COOLDOWN_SECONDS: ${YAG_CIRCUIT_COOLDOWN_SECONDS:-30}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:8080:8080"
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    pids_limit: 128
