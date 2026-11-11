@@ -6,6 +6,8 @@
 typedef struct {
     unsigned long attempts,successes,failures,bypassed,fallthroughs;
     unsigned long latency_ms;
+    unsigned long long prompt_tokens, completion_tokens;
+    unsigned long usage_samples;
     unsigned consecutive_failures;
     time_t open_until;
     int half_open_probe;
