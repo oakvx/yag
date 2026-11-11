@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <errno.h>
+#include <time.h>
 
 typedef struct { int fd, sent; long status; char content_type[128]; yag_upstream_write callback; void *context; } transfer;
 static void start(transfer *t) {
@@ -89,18 +90,79 @@ int upstream_perform(const yag_config *c, const char *path, const char *body, si
 done:
     free(auth); curl_slist_free_all(list); if(curl) curl_easy_cleanup(curl); free(url); return result;
 }
-/* Only transport-level connection setup failures are retryable. Never retry
- * after an upstream replied or when completion is ambiguous (timeouts, 5xx). */
-int upstream_for_model(const yag_config *c,const char *model,const char *path,
+/* Transport outcomes and coarse latency are metadata only: no payload, tokens
+ * or per-key identity is captured. Time is monotonic for duration math. */
+static unsigned long elapsed_ms(const struct timespec *start) {
+    struct timespec now;
+    if(clock_gettime(CLOCK_MONOTONIC,&now))return 0;
+    long sec=now.tv_sec-start->tv_sec,ns=now.tv_nsec-start->tv_nsec;
+    long long ms=(long long)sec*1000+ns/1000000;
+    return ms>0?(unsigned long)ms:0;
+}
+static void record_attempt(const yag_config *cfg,int rc,long status,unsigned long ms) {
+    yag_config *c=(yag_config *)cfg;
+    pthread_mutex_lock(&c->lock);
+    c->upstream_attempts++;
+    c->upstream_total_latency_ms+=ms;
+    if(rc!=CURLE_OK)c->upstream_transport_failures++;
+    else if(status>=400 || status<200)c->upstream_http_errors++;
+    else c->upstream_successes++;
+    pthread_mutex_unlock(&c->lock);
+}
+static int tracked_perform(const yag_config *root,const yag_config *target,
+    const char *path,const char *body,size_t len,yag_upstream_write cb,
+    void *ctx,long *status,int fd) {
+    struct timespec start={0};
+    clock_gettime(CLOCK_MONOTONIC,&start);
+    int result=upstream_perform(target,path,body,len,cb,ctx,status,fd);
+    record_attempt(root,result,status?*status:0,elapsed_ms(&start));
+    return result;
+}
+/* An open circuit prevents repeated connection attempts only for a configured
+ * route. Failover is opt-in; never retry after an upstream responded or timed out.
+ * A route becomes eligible again when the cooldown expires. */
+int upstream_for_model(const yag_config *cfg,const char *model,const char *path,
         const char *body,size_t len,yag_upstream_write cb,void *ctx,long *status,int cancel_fd) {
+    yag_config *c=(yag_config *)cfg;
     yag_config selected={0};
-    const yag_config *target=config_for_model(c,model,&selected);
-    int rc=upstream_perform(target,path,body,len,cb,ctx,status,cancel_fd);
-    if(c->fallback_to_default && target!=c
-        && (!status || !*status)
-        && (rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)) {
+    const yag_config *target=config_for_model(cfg,model,&selected);
+    yag_route *route=NULL;
+    if(target!=cfg && model)
+        for(size_t i=0;i<c->route_count;i++)
+            if(!strcmp(c->routes[i].model,model)){route=&c->routes[i];break;}
+    int blocked=0;
+    if(route && c->circuit_failure_threshold) {
+        pthread_mutex_lock(&c->lock);
+        time_t now=time(NULL);
+        blocked=route->circuit_open_until>now;
+        if(blocked)c->circuit_rejections++;
+        pthread_mutex_unlock(&c->lock);
+    }
+    if(blocked) {
         if(status)*status=0;
-        return upstream_perform(c,path,body,len,cb,ctx,status,cancel_fd);
+        if(c->fallback_to_default)
+            return tracked_perform(cfg,c,path,body,len,cb,ctx,status,cancel_fd);
+        return CURLE_COULDNT_CONNECT;
+    }
+    int rc=tracked_perform(cfg,target,path,body,len,cb,ctx,status,cancel_fd);
+    int connection_failure=(rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)
+        && (!status || !*status);
+    if(route && c->circuit_failure_threshold) {
+        pthread_mutex_lock(&c->lock);
+        if(connection_failure) {
+            if(route->consecutive_connect_failures<c->circuit_failure_threshold)
+                route->consecutive_connect_failures++;
+            if(route->consecutive_connect_failures>=c->circuit_failure_threshold)
+                route->circuit_open_until=time(NULL)+c->circuit_cooldown_seconds;
+        } else if(rc==CURLE_OK) {
+            route->consecutive_connect_failures=0;
+            route->circuit_open_until=0;
+        }
+        pthread_mutex_unlock(&c->lock);
+    }
+    if(c->fallback_to_default && target!=cfg && connection_failure) {
+        if(status)*status=0;
+        return tracked_perform(cfg,c,path,body,len,cb,ctx,status,cancel_fd);
     }
     return rc;
 }
