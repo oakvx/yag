@@ -24,7 +24,7 @@ static int permitted(yyjson_val *object,const char *const *names) {
 }
 static void anthropic_error(int fd,int status) {
     if(status==400)reply(fd,400,"application/json",
-        "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Unsupported Messages input: only non-streaming text is supported\"}}");
+        "{\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"Unsupported Messages input: request contains fields or content not supported by this gateway\"}}");
     else if(status==429)reply(fd,429,"application/json",
         "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"Upstream rate limit\"}}");
     else if(status==504)reply(fd,504,"application/json",
@@ -417,11 +417,51 @@ static void convert_response(int fd,yyjson_val *root,yyjson_val *model) {
     else anthropic_error(fd,502);
     free(json);yyjson_mut_doc_free(doc);
 }
+/* Optional local-only rejection diagnostics. Print static protocol field names,
+ * never user-supplied values, arbitrary field names or prompt/tool text. */
+static void diagnostic_shape(yyjson_val *root) {
+    const char *trace=getenv("YAG_TRACE_ANTHROPIC_SHAPE");
+    if(!trace || strcmp(trace,"1"))return;
+    if(!yyjson_is_obj(root)){fprintf(stderr,"YAG Anthropic shape: invalid_root\n");return;}
+    const char *const named[]={"model","messages","max_tokens","system","stream",
+        "temperature","top_p","top_k","stop_sequences","tools","tool_choice",
+        "metadata","thinking","output_config","context_management","service_tier",
+        "speed","betas",NULL};
+    fprintf(stderr,"YAG Anthropic shape: top=");
+    yyjson_obj_iter it=yyjson_obj_iter_with(root);yyjson_val *key;
+    while((key=yyjson_obj_iter_next(&it))) {
+        const char *name="other";
+        for(int i=0;named[i];i++)if(yyjson_equals_str(key,named[i])){name=named[i];break;}
+        fprintf(stderr,"%s,",name);
+    }
+    yyjson_val *messages=yyjson_obj_get(root,"messages");
+    fprintf(stderr," messages=%zu",yyjson_arr_size(messages));
+    size_t i,n;yyjson_val *message;
+    yyjson_arr_foreach(messages,i,n,message) {
+        yyjson_val *content=yyjson_obj_get(message,"content");
+        if(i>=3)break;
+        fprintf(stderr," m%zu=",i);
+        if(yyjson_is_str(content))fprintf(stderr,"string");
+        else if(yyjson_is_arr(content)) {
+            size_t j,c;yyjson_val *block;
+            yyjson_arr_foreach(content,j,c,block) {
+                const char *type="other";
+                const char *const known[]={"text","tool_result","tool_use","image",
+                    "document","thinking","redacted_thinking","server_tool_use",NULL};
+                yyjson_val *value=yyjson_obj_get(block,"type");
+                for(int k=0;known[k];k++)if(yyjson_equals_str(value,known[k])){type=known[k];break;}
+                fprintf(stderr,"%s,",type);
+                if(j>=5)break;
+            }
+        } else fprintf(stderr,"other");
+    }
+    fprintf(stderr," tools=%zu\n",yyjson_arr_size(yyjson_obj_get(root,"tools")));
+}
 void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,size_t size) {
     yyjson_doc *request=yyjson_read(body,size,0);
     yyjson_val *root=request?yyjson_doc_get_root(request):NULL;
     yyjson_mut_doc *translated=convert_request(root);
-    if(!translated){anthropic_error(fd,400);yyjson_doc_free(request);return;}
+    if(!translated){diagnostic_shape(root);anthropic_error(fd,400);yyjson_doc_free(request);return;}
     char *json=yyjson_mut_write(translated,0,NULL);
     yyjson_mut_doc_free(translated);
     if(!json){anthropic_error(fd,502);yyjson_doc_free(request);return;}
