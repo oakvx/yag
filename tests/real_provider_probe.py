@@ -1,99 +1,131 @@
 #!/usr/bin/env python3
-"""Opt-in real-model interoperability probe. Does not dump prompt bodies or keys.
+"""Opt-in real-model gateway probe, with a temporary isolated local YAG host.
 
-Requirements:
-  YAG_REAL_UPSTREAM_URL (OpenAI-compatible /v1 base)
-  YAG_REAL_MODEL (an actual model served by that backend)
-  YAG_REAL_UPSTREAM_KEY (optional)
-Use --tools only for backends that claim Chat function tools. This test
-runs locally; it is intentionally NOT part of mock-only CI.
+No mocked inference: a real OpenAI-compatible upstream must be running and
+YAG_REAL_UPSTREAM_URL and YAG_REAL_MODEL must be provided. Calls may cost money.
+No model output, prompt, credentials or provider URLs are written to logs.
 """
 import argparse
-import json
 import os
+import secrets
 import socket
 import subprocess
 import sys
 import time
-from integration import KEY, request
+from urllib.parse import urlsplit
+from urllib.request import ProxyHandler, build_opener
 
-parser=argparse.ArgumentParser()
-parser.add_argument('--host',required=True)
-parser.add_argument('--tools',action='store_true')
-args=parser.parse_args()
-upstream=os.environ.get('YAG_REAL_UPSTREAM_URL')
-model=os.environ.get('YAG_REAL_MODEL')
-if not upstream or not model:
-    parser.error('Set YAG_REAL_UPSTREAM_URL and YAG_REAL_MODEL explicitly')
-if not upstream.startswith(('http://','https://')):
-    parser.error('YAG_REAL_UPSTREAM_URL must be HTTP(S)')
-if upstream.endswith('/'):
-    parser.error('YAG_REAL_UPSTREAM_URL must not have trailing slash')
-with socket.socket() as s:
-    s.bind(('127.0.0.1',0))
-    port=s.getsockname()[1]
-env=dict(os.environ,YAG_BIND='127.0.0.1',YAG_PORT=str(port),
-         YAG_API_KEY=KEY,YAG_UPSTREAM_URL=upstream,
-         YAG_UPSTREAM_KEY=os.environ.get('YAG_REAL_UPSTREAM_KEY',''),
-         YAG_TIMEOUT='60')
-gateway=subprocess.Popen([os.path.abspath(args.host)],env=env,
-                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-try:
-    for _ in range(150):
-        if gateway.poll() is not None:
-            raise AssertionError('Gateway terminated before readiness')
-        try:
-            if request(port,'GET','/health',key=None)[0]==200:break
-        except OSError:time.sleep(.04)
-    else:raise AssertionError('Gateway startup timed out')
+from live_model import exercise
 
-    print('Checking real model Chat Completions nonstreaming response...',flush=True)
-    payload={'model':model,'messages':[{'role':'user',
-            'content':'Reply with exactly OK.'}],'max_tokens':64}
-    status,_,body=request(port,'POST','/v1/chat/completions',payload)
-    if status!=200:
-        raise AssertionError(f'Chat nonstreaming HTTP {status}; check model support')
-    obj=json.loads(body)
-    choices=obj.get('choices',[])
-    if not choices or not isinstance(choices[0].get('message',{}).get('content'),str):
-        raise AssertionError('Chat response is not a text assistant message')
+PROTOCOLS = {
+    'chat': 'chat/completions',
+    'responses': 'responses',
+    'anthropic': 'messages',
+}
 
-    print('Checking real model streaming responses...',flush=True)
-    payload['stream']=True
-    status,headers,data=request(port,'POST','/v1/chat/completions',payload)
-    if status!=200 or 'text/event-stream' not in headers.get('Content-Type',''):
-        raise AssertionError(f'Chat streaming HTTP {status} with unexpected MIME')
-    if b'[DONE]' not in data:
-        raise AssertionError('Chat SSE stream did not terminate with [DONE]')
+def validate_upstream_url(raw):
+    """Avoid ambiguous hosts, embedded secrets and accidental plaintext remote use."""
+    if not raw or any(ch.isspace() for ch in raw):
+        raise ValueError('Upstream URL is missing or contains whitespace')
+    try:
+        url = urlsplit(raw)
+        port = url.port  # raises ValueError for malformed ports
+    except ValueError as exc:
+        raise ValueError('Malformed upstream URL') from None
+    if (url.scheme not in ('http','https') or not url.hostname
+        or url.username is not None or url.password is not None
+        or url.query or url.fragment or url.path != '/v1'
+        or (port is not None and port == 0)):
+        raise ValueError('Upstream URL must be a clean HTTP(S) origin ending in /v1')
+    if url.scheme == 'http' and url.hostname not in ('localhost','127.0.0.1','::1'):
+        raise ValueError('Remote inference backends must use HTTPS')
+    return raw
 
-    print('Checking Responses adapter against the real model...',flush=True)
-    status,_,body=request(port,'POST','/v1/responses',
-        {'model':model,'input':'Reply with OK.','max_output_tokens':64})
-    if status!=200 or json.loads(body).get('object')!='response':
-        raise AssertionError(f'Responses adapter HTTP {status} or invalid object')
+def local_port():
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1',0))
+        return sock.getsockname()[1]
 
-    if args.tools:
-        print('Checking real model function tool selection...',flush=True)
-        tools=[{'type':'function','function':{
-            'name':'return_temperature',
-            'description':'Return the requested temperature for a city',
-            'parameters':{'type':'object','properties':{
-                'city':{'type':'string'}},'required':['city']}}}]
-        status,_,body=request(port,'POST','/v1/chat/completions',{
-            'model':model,'messages':[{'role':'user',
-              'content':'Call return_temperature for Rome.'}],
-            'tools':tools,'tool_choice':{'type':'function',
-              'function':{'name':'return_temperature'}},'max_tokens':128})
-        if status!=200:raise AssertionError(f'Tool selection HTTP {status}')
-        choices=json.loads(body).get('choices',[])
-        calls=choices[0].get('message',{}).get('tool_calls',[]) if choices else []
-        if not calls or calls[0].get('function',{}).get('name')!='return_temperature':
-            raise AssertionError('Real model failed to select required function tool')
+def qualify(host,upstream,model,upstream_key,protocol='all',tools=False,stream=False):
+    validate_upstream_url(upstream)
+    if not model or len(model)>256 or any(ch.isspace() for ch in model):
+        raise ValueError('A valid upstream model identifier is required')
+    if not os.path.isfile(host):
+        raise ValueError('The YAG binary does not exist')
+    port=local_port()
+    gateway_key=secrets.token_hex(24)
+    env=dict(os.environ)
+    env.update(
+        YAG_BIND='127.0.0.1',YAG_PORT=str(port),YAG_API_KEY=gateway_key,
+        YAG_UPSTREAM_URL=upstream,YAG_UPSTREAM_KEY=upstream_key,
+        YAG_MODEL_ROUTES='',YAG_MODEL_CAPABILITIES='',
+        YAG_EXTRA_API_KEYS='',YAG_EXTRA_KEY_SCOPES='',
+        YAG_FALLBACK_TO_DEFAULT='0',YAG_CIRCUIT_THRESHOLD='0',
+        YAG_ENFORCE_MODEL_CAPABILITIES='0',YAG_RATE_LIMIT_PER_MINUTE='0',
+        YAG_TIMEOUT='90',NO_PROXY='localhost,127.0.0.1,::1',
+        no_proxy='localhost,127.0.0.1,::1')
+    child=subprocess.Popen([os.path.abspath(host)],env=env,
+        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    base=f'http://127.0.0.1:{port}'
+    opener=build_opener(ProxyHandler({}))
+    try:
+        deadline=time.monotonic()+8
+        while time.monotonic()<deadline:
+            if child.poll() is not None:
+                raise RuntimeError('Gateway exited before readiness')
+            try:
+                with opener.open(base+'/health',timeout=0.5) as response:
+                    if response.status==200:break
+            except OSError:
+                time.sleep(0.05)
+        else:
+            raise RuntimeError('Gateway did not start on localhost')
+        names=list(PROTOCOLS.values()) if protocol=='all' else [PROTOCOLS[protocol]]
+        failed=0
+        for name in names:
+            try:
+                exercise(base,gateway_key,model,name,tools,False)
+                if stream:
+                    exercise(base,gateway_key,model,name,False,True)
+            except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
+                print('[FAIL]',name,type(exc).__name__,file=sys.stderr,flush=True)
+                failed+=1
+        if failed:
+            print('Real-model qualification failed for',failed,'protocol(s)',file=sys.stderr)
+        else:
+            print('Real-model qualification passed for selected checks')
+        return 1 if failed else 0
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)
 
-    print('PASS: requested real-model integration probe checks',flush=True)
-finally:
-    gateway.terminate()
-    try:gateway.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        gateway.kill()
-        gateway.wait(timeout=5)
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--host',required=True,help='Path to an existing YAG executable')
+    parser.add_argument('--protocol',choices=['all','chat','responses','anthropic'],
+                        default='all')
+    parser.add_argument('--tools',action='store_true',
+                        help='Require real model function-tool and result-replay cycles')
+    parser.add_argument('--stream',action='store_true',
+                        help='Also verify terminal SSE events')
+    args=parser.parse_args()
+    upstream=os.environ.get('YAG_REAL_UPSTREAM_URL','')
+    model=os.environ.get('YAG_REAL_MODEL','')
+    if not upstream or not model:
+        parser.error('Set YAG_REAL_UPSTREAM_URL and YAG_REAL_MODEL explicitly')
+    try:
+        return qualify(args.host,upstream,model,
+            os.environ.get('YAG_REAL_UPSTREAM_KEY',''),args.protocol,
+            args.tools,args.stream)
+    except (ValueError,RuntimeError) as exc:
+        # All error strings above are static and do not include secrets or URLs.
+        print('[FAIL]',type(exc).__name__,str(exc),file=sys.stderr)
+        return 1
+
+if __name__=='__main__':
+    sys.exit(main())
