@@ -222,6 +222,12 @@ int config_load(yag_config *c) {
     }
     c->header_deadline_seconds=(unsigned)hv;
     c->body_deadline_seconds=(unsigned)bv;
+    const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
+    if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
+        fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");
+        return -1;
+    }
+    c->enforce_model_capabilities=!strcmp(enforce,"1");
     if (load_routes(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;

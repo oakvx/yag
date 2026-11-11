@@ -188,6 +188,46 @@ static int recv_before_deadline(int fd,char *dst,size_t cap,
         return got>0?(int)got:-1;
     }
 }
+/* Optional fail-fast guard over *declared* operator capability hints.
+ * Unknown model IDs are not presumed capable or incapable; downstream
+ * validation remains authoritative. This is not feature discovery. */
+static int capability_rejected(int fd,const yag_config *cfg,yyjson_val *request) {
+    if(!cfg->enforce_model_capabilities || !yyjson_is_obj(request))return 0;
+    yyjson_val *name=yyjson_obj_get(request,"model");
+    if(!yyjson_is_str(name) || !yyjson_get_len(name)
+        || strlen(yyjson_get_str(name))!=yyjson_get_len(name))return 0;
+    const yag_model_capability *cap=NULL;
+    for(size_t i=0;i<cfg->capability_count;i++)
+        if(yyjson_equals_str(name,cfg->capabilities[i].model)) {
+            cap=&cfg->capabilities[i];break;
+        }
+    if(!cap)return 0;
+    yyjson_val *tools=yyjson_obj_get(request,"tools");
+    yyjson_val *stream=yyjson_obj_get(request,"stream");
+    yyjson_val *thinking=yyjson_obj_get(request,"thinking");
+    yyjson_val *reasoning=yyjson_obj_get(request,"reasoning");
+    yyjson_val *effort=yyjson_obj_get(request,"reasoning_effort");
+    yyjson_val *format=yyjson_obj_get(yyjson_obj_get(request,"text"),"format");
+    if(yyjson_is_arr(tools) && yyjson_arr_size(tools)
+        && !(cap->feature_mask&(1u<<1))) {
+        error(fd,422,"Declared model lacks function_tools");return 1;
+    }
+    if(yyjson_is_true(stream) && !(cap->feature_mask&1u)) {
+        error(fd,422,"Declared model lacks streaming");return 1;
+    }
+    int needs_reasoning=(thinking
+        && !yyjson_equals_str(yyjson_obj_get(thinking,"type"),"disabled"))
+        || (reasoning && !yyjson_equals_str(yyjson_obj_get(reasoning,"effort"),"none"))
+        || (effort && !yyjson_equals_str(effort,"none"));
+    if(needs_reasoning && !(cap->feature_mask&(1u<<3))) {
+        error(fd,422,"Declared model lacks reasoning");return 1;
+    }
+    if(yyjson_equals_str(yyjson_obj_get(format,"type"),"json_schema")
+        && !(cap->feature_mask&(1u<<2))) {
+        error(fd,422,"Declared model lacks json_schema");return 1;
+    }
+    return 0;
+}
 static void handle(int fd,yag_config *c) {
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     struct timespec header_start={0};clock_gettime(CLOCK_MONOTONIC,&header_start);
@@ -321,15 +361,22 @@ static void handle(int fd,yag_config *c) {
         increment(c,&c->chat_requests);
         yyjson_doc *doc=yyjson_read(body,length,0); yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
-        else upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
+        else if(!capability_rejected(fd,c,root))
+            upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) {
         increment(c,&c->responses_requests);
-        responses_handle(fd,c,body,length);
+        yyjson_doc *parsed=yyjson_read(body,length,0);
+        if(!capability_rejected(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+            responses_handle(fd,c,body,length);
+        yyjson_doc_free(parsed);
     }
     else if(!strcmp(uri,"/v1/messages") && !strcmp(method,"POST")) {
         increment(c,&c->anthropic_requests);
-        anthropic_messages_handle(fd,c,body,length);
+        yyjson_doc *parsed=yyjson_read(body,length,0);
+        if(!capability_rejected(fd,c,parsed?yyjson_doc_get_root(parsed):NULL))
+            anthropic_messages_handle(fd,c,body,length);
+        yyjson_doc_free(parsed);
     }
     else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
     else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
