@@ -75,3 +75,5 @@ jobs:
         run: npm install --global @anthropic-ai/claude-code@latest
       - name: Probe real Claude Code with isolated mock gateway
         run: python3 tests/claude_probe.py --host ./build/yag
+      - name: Probe Claude Code local Read tool execution and result replay
+        run: python3 tests/claude_probe.py --host ./build/yag --tool-cycle
