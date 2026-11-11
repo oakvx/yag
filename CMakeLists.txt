@@ -33,3 +33,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME shutdown COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/shutdown.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME model_capabilities COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/capabilities.py $<TARGET_FILE:yag>)
+endif()
