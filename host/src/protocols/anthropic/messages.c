@@ -455,7 +455,34 @@ static void diagnostic_shape(yyjson_val *root) {
             }
         } else fprintf(stderr,"other");
     }
-    fprintf(stderr," tools=%zu\n",yyjson_arr_size(yyjson_obj_get(root,"tools")));
+    yyjson_val *thinking=yyjson_obj_get(root,"thinking");
+    yyjson_val *kind=yyjson_obj_get(thinking,"type");
+    const char *thinking_type=yyjson_equals_str(kind,"enabled")?"enabled":
+        yyjson_equals_str(kind,"disabled")?"disabled":
+        yyjson_equals_str(kind,"adaptive")?"adaptive":"other";
+    yyjson_val *context=yyjson_obj_get(root,"context_management");
+    yyjson_val *edits=yyjson_obj_get(context,"edits");
+    fprintf(stderr," tools=%zu thinking=%s context_edits=%zu",
+        yyjson_arr_size(yyjson_obj_get(root,"tools")),thinking_type,yyjson_arr_size(edits));
+    const char *const type_names[]={"clear_tool_uses_20250919","clear_thinking_20251015",NULL};
+    yyjson_val *edit=yyjson_arr_get(edits,0),*etype=yyjson_obj_get(edit,"type");
+    for(int i=0;type_names[i];i++)if(yyjson_equals_str(etype,type_names[i]))
+        fprintf(stderr," edit_type=%s",type_names[i]);
+    yyjson_val *tools=yyjson_obj_get(root,"tools");
+    yyjson_val *first=yyjson_arr_get(tools,0);
+    const char *const known[]={"name","description","input_schema","cache_control",
+        "type","strict","defer_loading","eager_input_streaming","input_examples",NULL};
+    fprintf(stderr," tool_fields=");
+    if(yyjson_is_obj(first)) {
+        yyjson_obj_iter ti=yyjson_obj_iter_with(first);yyjson_val *tk;
+        while((tk=yyjson_obj_iter_next(&ti))) {
+            const char *label="other";
+            for(int i=0;known[i];i++)if(yyjson_equals_str(tk,known[i]))
+                {label=known[i];break;}
+            fprintf(stderr,"%s,",label);
+        }
+    }
+    fprintf(stderr,"\n");
 }
 void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,size_t size) {
     yyjson_doc *request=yyjson_read(body,size,0);
