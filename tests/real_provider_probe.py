@@ -80,13 +80,16 @@ def qualify(host,upstream,model,upstream_key,protocol='all',tools=False,stream=F
                 time.sleep(0.05)
         else:
             raise RuntimeError('Gateway did not start on localhost')
+        # Never allow a caller's HTTP_PROXY/HTTPS_PROXY environment to redirect
+        # ephemeral local gateway traffic (and its generated bearer key).
+        direct_http=build_opener(ProxyHandler({})).open
         names=list(PROTOCOLS.values()) if protocol=='all' else [PROTOCOLS[protocol]]
         failed=0
         for name in names:
             try:
-                exercise(base,gateway_key,model,name,tools,False)
+                exercise(base,gateway_key,model,name,tools,False,opener=direct_http)
                 if stream:
-                    exercise(base,gateway_key,model,name,False,True)
+                    exercise(base,gateway_key,model,name,False,True,opener=direct_http)
             except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
                 print('[FAIL]',name,type(exc).__name__,file=sys.stderr,flush=True)
                 failed+=1
