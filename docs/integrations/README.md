@@ -36,7 +36,7 @@ Claude Code may authenticate with `ANTHROPIC_AUTH_TOKEN` (sent as `Authorization
 
 ## Real-model validation
 
-Run the [opt-in real-model qualification script](live-model.md) against a running YAG gateway and a model you control. Text, SSE and tool-result replay can be checked individually; no real-model checks are executed in the default CI.
+Run the [opt-in real-model qualification script](live-model.md) or the [isolated-host probe](real-model.md) against a running YAG gateway and a model you control. Text, SSE and tool-result replay can be checked individually; no real-model checks are executed in the default CI.
 
 ## Codex and Claude Code — mock CLI tool cycles verified
 
