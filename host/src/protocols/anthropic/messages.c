@@ -210,13 +210,62 @@ static int add_tool_results(yyjson_mut_doc *d,yyjson_mut_val *messages,yyjson_va
     }
     return 2;
 }
+/* Map thinking intent to Chat's coarser reasoning_effort knob. The exact
+ * Anthropic budget and native thinking blocks cannot be preserved. */
+static int thinking_valid(yyjson_val *thinking,const char **effort) {
+    *effort=NULL;
+    if(!thinking)return 1;
+    const char *const fields[]={"type","budget_tokens",NULL};
+    yyjson_val *type=yyjson_obj_get(thinking,"type");
+    yyjson_val *budget=yyjson_obj_get(thinking,"budget_tokens");
+    if(!permitted(thinking,fields))return 0;
+    if(yyjson_equals_str(type,"disabled"))return budget==NULL;
+    if(yyjson_equals_str(type,"adaptive")) {
+        if(budget)return 0;
+        *effort="medium";return 1;
+    }
+    if(yyjson_equals_str(type,"enabled") && yyjson_is_int(budget)
+        && yyjson_get_sint(budget)>0) {
+        *effort="high";return 1;
+    }
+    return 0;
+}
+/* The gateway has no reasoning blocks in its replay representation, so a
+ * clear_thinking-only request is already satisfied without editing content.
+ * Tool-result clearing would change history and must remain unsupported. */
+static int context_valid(yyjson_val *context) {
+    if(!context)return 1;
+    const char *const fields[]={"edits",NULL},*const edit_fields[]={"type","keep",NULL};
+    yyjson_val *edits=yyjson_obj_get(context,"edits");
+    if(!permitted(context,fields) || !yyjson_is_arr(edits) || yyjson_arr_size(edits)>4)return 0;
+    size_t i,n;yyjson_val *edit;
+    yyjson_arr_foreach(edits,i,n,edit) {
+        yyjson_val *keep=yyjson_obj_get(edit,"keep");
+        if(!permitted(edit,edit_fields)
+            || !yyjson_equals_str(yyjson_obj_get(edit,"type"),"clear_thinking_20251015"))
+            return 0;
+        if(keep && !yyjson_equals_str(keep,"all")) {
+            const char *const keep_fields[]={"type","value",NULL};
+            yyjson_val *value=yyjson_obj_get(keep,"value");
+            if(!permitted(keep,keep_fields)
+                || !yyjson_equals_str(yyjson_obj_get(keep,"type"),"thinking_turns")
+                || !yyjson_is_int(value) || yyjson_get_sint(value)<=0)return 0;
+        }
+    }
+    return 1;
+}
 static yyjson_mut_doc *convert_request(yyjson_val *root) {
     const char *const allowed[]={"model","messages","max_tokens","system",
-        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",NULL};
+        "stream","temperature","top_p","stop_sequences","tools","tool_choice","metadata",
+        "thinking","context_management",NULL};
     yyjson_val *model=yyjson_obj_get(root,"model"),*items=yyjson_obj_get(root,"messages");
     yyjson_val *max=yyjson_obj_get(root,"max_tokens"),*sys=yyjson_obj_get(root,"system");
     yyjson_val *stream=yyjson_obj_get(root,"stream"),*temp=yyjson_obj_get(root,"temperature");
     yyjson_val *top=yyjson_obj_get(root,"top_p"),*stops=yyjson_obj_get(root,"stop_sequences");
+    yyjson_val *thinking=yyjson_obj_get(root,"thinking");
+    yyjson_val *context=yyjson_obj_get(root,"context_management");
+    const char *reasoning_effort=NULL;
+    if(!thinking_valid(thinking,&reasoning_effort) || !context_valid(context))return NULL;
     yyjson_val *metadata=yyjson_obj_get(root,"metadata");
     const char *const meta_fields[]={"user_id",NULL};
     yyjson_val *user_id=yyjson_obj_get(metadata,"user_id");
@@ -238,6 +287,7 @@ static yyjson_mut_doc *convert_request(yyjson_val *root) {
     if(!yyjson_mut_obj_add_val(doc,chat,"model",yyjson_val_mut_copy(doc,model))
         || !yyjson_mut_obj_add_val(doc,chat,"max_tokens",yyjson_val_mut_copy(doc,max))
         || !yyjson_mut_obj_add_bool(doc,chat,"stream",stream && yyjson_get_bool(stream)))goto fail;
+    if(reasoning_effort && !yyjson_mut_obj_add_str(doc,chat,"reasoning_effort",reasoning_effort))goto fail;
     if(sys) {
         char *value=system_text(sys);
         if(!value)goto fail;
