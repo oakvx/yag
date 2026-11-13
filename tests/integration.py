@@ -416,6 +416,42 @@ class Integration(unittest.TestCase):
         self.assertEqual(models['routed-model']['owned_by'],'yag-configured-route')
         self.assertNotIn('route-secret',body.decode())
 
+    def test_embeddings_proxy_and_route_selection(self):
+        payload={'model':'glm-test','input':['first','second'],
+                 'encoding_format':'float'}
+        status,headers,body=request(self.port,'POST','/v1/embeddings',payload)
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertEqual(response['object'],'list')
+        self.assertEqual(response['data'][0]['embedding'],[0.125,-0.25,0.5])
+        self.assertEqual(response['request'],payload)
+        self.assertEqual(response['usage']['total_tokens'],2)
+        self.assertIn('application/json',headers['Content-Type'])
+        routed={'model':'routed-model','input':'test'}
+        status,_,body=request(self.port,'POST','/v1/embeddings',routed)
+        self.assertEqual(status,200,body)
+        self.assertTrue(json.loads(body)['routed'])
+        self.assertEqual(json.loads(body)['received'],routed)
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            {'model':'bad','input':'hello'})[0],429)
+
+    def test_embeddings_require_valid_payload_and_inference_scope(self):
+        invalid=[{},[],{'model':'glm-test'},{'model':'','input':'hello'},
+                 {'model':'glm-test','input':''},
+                 {'model':'glm-test','input':[]},
+                 {'model':'glm-test','input':17},
+                 {'model':12,'input':'hello'}]
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                self.assertEqual(request(self.port,'POST','/v1/embeddings',
+                    payload)[0],400)
+        valid={'model':'glm-test','input':'hello'}
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            valid,key=None)[0],401)
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            valid,key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'GET','/v1/embeddings')[0],404)
+
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload); self.assertEqual(status,200); obj=json.loads(body);self.assertEqual(obj['request'],payload);self.assertEqual(obj['choices'][0]['message']['tool_calls'][0]['id'],'call_1')
