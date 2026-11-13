@@ -184,6 +184,30 @@ Ollama model weights**. Export those separately from their Docker volume
 when a full inference-server restore is required, and verify restores on
 an isolated host before relying on them.
 
+### Offline backup verification and private staging
+
+On a trusted offline recovery machine with the age identity available:
+
+```sh
+python scripts/lan.py backup-check --archive /safe/snapshot.tar.gz.age --identity /offline/age-identity.txt
+python scripts/lan.py backup-stage --archive /safe/snapshot.tar.gz.age --identity /offline/age-identity.txt --output-dir /safe/new-stage
+```
+
+`backup-check` decrypts into a private temporary directory, validates the
+TAR structure, the expected member allowlist, member types and total sizes,
+and removes the cleartext temporary archive afterward. It prints only
+filenames and byte counts. The stage operation performs the same validation,
+then writes to a **new** private output directory (0700 with 0600 files on
+POSIX); it never overwrites an existing directory or live credentials. It can
+run even when no `.env.lan` exists, such as on a replacement machine.
+
+**Staging is not a live Docker restore.** Private CA key files, runtime client
+registry and configuration must be applied only after stopping the relevant
+services, checking certificates, volume ownership and planned key rotation.
+Do not blindly import client credentials or Caddy private keys onto an
+existing server. Verify the recovered service and client TLS trust before
+accepting LAN traffic again. Model weights are separate.
+
 Updates pull the Caddy image (and managed Ollama image, if enabled) and
 rebuild YAG from the locally checked-out repository. They preserve named
 volumes; they **do not automatically fetch unreviewed Git commits** or
