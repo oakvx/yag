@@ -31,8 +31,9 @@ class LanComposeTest(unittest.TestCase):
             cmd.extend(["config", "--format", "json"])
             env = {k: v for k, v in os.environ.items()
                    if not k.startswith("YAG_")}
-            result = subprocess.run(cmd, cwd=ROOT, env=env, check=True,
+            result = subprocess.run(cmd, cwd=ROOT, env=env, check=False,
                                     capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
             config = json.loads(result.stdout)
             services = config["services"]
             yag = services["yag"]
