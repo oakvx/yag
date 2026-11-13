@@ -10,7 +10,12 @@ Client → bounded HTTP/1.x listener → bearer authentication → route validat
 
 Each accepted connection has one detached worker, subject to a 32-connection limit. Receive/send timeouts and a total upstream timeout bound work. The request buffer belongs to the worker and is freed when the connection closes. libcurl owns its transfer state until the adapter returns; response data is sent directly to the socket. Configuration is immutable after startup except counters guarded by a mutex. The backend URL and credentials are host-side configuration. Logs contain startup information only, not prompt bodies.
 
-Model-specific upstream routes can be provided as a bounded JSON environment variable; route selection is exact model ID matching, with the original single upstream as the default. Route credentials are read from dedicated host environment variables; routing has on-demand HTTP `/models` probes, passive per-provider counters, an opt-in circuit breaker with a single half-open probe, and opt-in fallback restricted to pre-response connection/DNS failures or pre-request admission bypass. It does not select models by capabilities or continuously poll route health. The Chat Completions adapter remains a **transparent proxy**, not a canonical representation. The JSON parser checks only a top-level model string and messages array; all other parameters, tools, messages and upstream response data are passed unchanged. This preserves supported fields but does not check or translate backend capabilities. In particular, compatibility depends on the actual upstream. Model discovery merges the default upstream model list with statically configured model route identifiers; route entries identify configuration, not backend availability or capability.
+Model-specific upstream routes can be provided as a bounded JSON environment variable; route selection is exact model ID matching, with the original single upstream as the default. Route credentials are read from dedicated host environment variables; routing has on-demand HTTP `/models` probes, passive per-provider counters, an opt-in circuit breaker with a single half-open probe, and opt-in fallback restricted to pre-response connection/DNS failures or pre-request admission bypass. It does not select models by capabilities or continuously poll route health. The Chat Completions adapter remains a **transparent proxy**, not a canonical representation. The JSON parser checks only a top-level model string and messages array; all other parameters, tools, messages and upstream response data are passed unchanged. This preserves supported fields but does not check or translate backend capabilities. In particular, compatibility depends on the actual upstream. Model discovery merges the default upstream model list with statically configured model route identifiers. `GET /v1/models/{id}` resolves exact model IDs from that merged inventory and returns 404 for unknown IDs; it requires the `models` scope. Route entries identify configuration, not backend availability or capability.
+
+The listener rejects noncanonical request-line whitespace, invalid control
+bytes in header values, duplicate/empty Host headers, and mixed bearer/native
+credential headers to minimize ambiguous HTTP/1.x interpretations. The raw
+malformed-input test matrix exercises these decisions byte-for-byte.
 
 The custom POSIX socket server is a small foundation and has not undergone a security audit or production hardening. Console assets now use `openat` with per-component symlink rejection; request-body memory is allocated after header authentication. It supports authenticated `Expect: 100-continue`, and SIGTERM/SIGINT drain active workers before libcurl cleanup. It is not portable ISO C alone: it relies on POSIX sockets and pthreads. It uses one request per connection, does not accept chunked request bodies, and has no keep-alive. Upstream redirects are disabled. SIGTERM/SIGINT close the listener and drain active workers before global curl cleanup. Headers and bodies have independent absolute monotonic receive deadlines. A bounded deterministic malformed-header corpus and concurrent localhost smoke suite run under CTest. Chat Completions and Responses check for client EOF in libcurl's progress callback and the transport's 100 ms multi-poll loop, including when an upstream is silent, so cancelled requests release the transfer promptly. This requires clients to keep their write side open while awaiting a response. A Chat Completions upstream can send an arbitrarily long stream until the timeout. No request payload is persisted by YAG.
 
@@ -30,6 +35,48 @@ Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB 
 
 The `POST /v1/messages` adapter accepts text-only messages with optional SSE streaming, optional string or text-block-array system prompt (cache hints validated but not applied), `max_tokens`, temperature, `top_p` and stop sequences. Non-streaming requests require upstream token counts; streaming messages translate Chat SSE into Anthropic `message_start`, content-block, delta, stop and `message_stop` events. Tool input JSON is reconstructed from accumulated Chat function-argument fragments before emitting a `tool_use` block. It accepts tool declarations and maps their JSON input schemas to Chat function tools. Upstream Chat function calls are mapped into Anthropic `tool_use` content blocks (including parsed JSON object arguments), but assistant `tool_use` blocks can be replayed as Chat function calls. Result-only user messages with string `tool_result` content are mapped to Chat tool messages, completing the basic non-streaming tool call/result replay cycle. User tool results can include string or text-block-array content, optional `is_error` (marked in the Chat tool content), and trailing text blocks after results; nontext tool content is rejected. It accepts validated `thinking.enabled` and `thinking.adaptive` as best-effort Chat `reasoning_effort` mapping (high/medium), **without** exact thinking budget enforcement or native thinking blocks. `context_management` is accepted only for `clear_thinking_20251015` with validated `keep` because replayed thinking blocks are not supported in YAG; clearing past tool results is explicitly rejected. It still does **not** support `count_tokens`, images/audio or built-in server tools. A real Claude Code CLI has completed streaming text and client-side Read-tool cycles against the deterministic mock backend, but no real inference model has been qualified. See [Claude Code](../integrations/claude-code.md). Clients can authenticate to YAG using bearer or `x-api-key` headers; upstream keys stay private.
 
+## Central AI control plane (LAN profile)
+
+The LAN stack now has a local-only operator Console with six new bounded
+features. The runtime key registry persists managed clients and allows the
+primary administrator to issue, rename, disable and permanently revoke
+managed credentials without restarting. Native Ollama model inventory,
+loaded models, asynchronous pull/update and deletion are available only
+through explicitly configured trusted native Ollama admin URLs.
+The Caddy LAN reverse proxy blocks `/api/admin/*`; host-loopback
+administration still requires the primary key.
+
+The FIFO inference admission queue enforces optional global/per-key
+concurrency and a finite waiting deadline; it does **not** reserve or
+schedule GPU VRAM. The default pool can balance across up to eight
+additional OpenAI-compatible replicas by least in-flight requests and
+suppresses repeatedly failing replicas for 30 seconds. Optional explicit model allowlists restrict which replicas may serve a given
+model ID; an unrestricted replica retains the legacy equivalent-inventory
+assumption. Model semantics and inventories remain operator-asserted, never
+verified automatically, and active requests are not migrated.
+
+Resource telemetry distinguishes **gateway container scope** (cgroup memory)
+from Linux kernel-visible /proc CPU deltas, load averages and host RAM.
+Linux DRM sysfs exposes optional per-GPU utilization, VRAM and temperature
+where drivers and container mounts provide those sensors. Missing data is
+not inferred. NVIDIA NVML, Apple/Windows GPU telemetry and comprehensive
+hardware inventory remain unsupported. Ollama-reported loaded-model VRAM
+is separate from physical GPU VRAM utilization.
+
+The operator CLI can change the replica configuration (including model
+allowlists), pull model images,
+perform controlled image updates and write encrypted `age` configuration
+backups (credentials and available Caddy CA materials). Backups do not
+contain Ollama model weights and do not constitute a tested disaster-recovery
+solution. See [Control Plane operations](../operations/control-plane.md).
+
+An experimental image-generation OpenAI-compatible endpoint and binary
+text-to-speech passthrough are available for backends that implement them.
+The gateway does not generate images/audio itself, does not implement
+multipart audio transcription, and does not imply Ollama provides these
+endpoints. The inbound JSON body limit remains bounded (default 1 MiB
+standalone, 4 MiB in the LAN profile, maximum 8 MiB).
+
 ## Operations, configuration, packaging
 
 - `GET /api/providers/status` exposes per-provider attempts, successes/failures, circuit states, bypass counts, fallback count and reported token/latency aggregates. It does not include prompts, upstream addresses, provider keys, request histories or inferred token estimates. All counters reset on restart.
@@ -40,12 +87,80 @@ The `POST /v1/messages` adapter accepts text-only messages with optional SSE str
 
 ## Not implemented
 
-- A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime provider editing, scheduled health polling and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
+- A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime editing of static exact-model routes, unattended health polling, automatic capability discovery and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
-- Identity-aware API key administration, dynamic revocation/issuance without restart, network-level abuse protection, configured CORS, native TLS, encrypted secret storage and structured/audit logs. Additional static bearer keys can have `inference`, `models`, `monitor`, `inference+models` or `all` scopes; they still require restart to revoke. The per-key fixed-window quota does not protect unauthenticated connection admission.
-- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
+- A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and comprehensive structured request logs. An optional private admin-response JSONL audit trail exists, but it is not tamper-evident or a replacement for external security auditing. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
+- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring on all drivers, full backend settings and editing of static model routes in the Console. LAN replica CRUD, declared-model restrictions, priority tie-breaking and bounded model-list probes are available through the local Provider Manager when enabled. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
+## Increment: model-aware pool and Linux sensor visibility
+
+- Pool replicas can declare an exact-match list of supported model IDs, validated
+  at startup and configurable using repeated `lan.py providers add --model`
+  options. Primary routing still depends on the original upstream, and this
+  declaration is not an inventory probe or automatic capability verification.
+- `GET /api/providers/pool` exposes each replica's declared model names
+  without revealing upstream URLs or credentials.
+- `GET /api/system/resources` now adds CPU utilization sampled across
+  requests, kernel-visible RAM, and available DRM/sysfs GPU metrics (including
+  temperature where present). These sensors are optional and not a universal
+  NVIDIA/Windows/macOS exporter; an unavailable sensor is never reported as
+  0% utilization.
+- The React Console labels scope explicitly and displays the available
+  metrics. Mock integration and LAN CLI regression tests enforce the
+  new interfaces.
+
+## Increment: privacy-preserving admin event audit
+
+Operators may enable `YAG_ADMIN_AUDIT_FILE` to append private JSONL events
+for administrative HTTP status responses (including authentication
+failures). Events use fixed route/method labels and numeric status codes,
+never request or response bodies, API keys or client identities. File
+permissions and ownership are validated at startup, and the LAN profile
+supports using the state volume. This is an event trail, not a complete
+tamper-evident identity audit or persistent inference-request history.
+See [admin audit operations](../operations/admin-audit.md).
+
+## Increment: private LAN Provider Manager
+
+- The local-only Console can list, create, edit, enable, disable, reprioritize
+  and delete pool replicas with a primary administrator key. The private
+  `YAG_PROVIDER_STORE` preserves a validated registry across restarts and
+  overrides `YAG_UPSTREAM_POOL` after the first successful edit.
+- Each entry uses a bounded URL, exact model allowlist, optional `key_env`
+  alias (`YAG_POOL_KEY_1`–`YAG_POOL_KEY_8`), enable flag and priority
+  (tie-breaker after least in-flight load). No raw upstream secrets are
+  accepted from the browser or serialized to the provider store.
+- Live replacement is serialized under the gateway configuration mutex and
+  refused with HTTP 409 while any pooled inference is active. Requests
+  already in flight are not migrated, retried or terminated for reconfig.
+- Configured upstreams can be probed for advertised model IDs through
+  a bounded `/models` query. The browser checks these every 60 seconds
+  while its Control page remains open; this does not verify model
+  capabilities or provide unattended health polling.
+- Exact-model static routes and the primary upstream are still configured
+  through private environment settings; editing those live is outside
+  this increment. A full identity/security audit remains outstanding.
+## Increment: resource-budget admission
+
+- Pool replicas can specify `max_inflight`, `vram_budget_mb` and
+  `vram_reservation_mb` (all optional; 0 disables a resource limit).
+  VRAM values are operator-declared *per-inference reservations*, not
+  measured GPU memory or verified model memory footprints.
+- Optional `YAG_PRIMARY_MAX_INFLIGHT` limits primary concurrent inference.
+  Optional `YAG_POOL_WAIT_MS` bounds how long a saturated pool waits for
+  resources. Capacity exhaustion is distinguished from upstream failure
+  and reported as HTTP 503 with resource saturation counters.
+- Reservations and admission slots are held through an upstream request,
+  including streaming, then released. The pool uses a condition variable
+  to wake bounded waiting workers; live provider edits are refused while
+  pool work is active or waiting.
+- The LAN CLI and React Console can configure replica policies. Monitoring
+  shows reservations, skips, waiting and capacity rejections, while
+  explicitly identifying VRAM metrics as operator estimates.
+- No verified host-level free-VRAM telemetry, GPU runtime integration,
+  measured per-model memory requirements, or automatic workload sizing is
+  provided. Other processes on the machine are not represented.
 ## Intended next increments
 
 1. Qualify the exact intended runtime and model using [live-model tests](../integrations/live-model.md), then expand the tool-cycle matrix. CLI tests against mocks do not verify real-model capability.

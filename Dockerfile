@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4 ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 --system yag
+RUN mkdir -p /opt/yag/state && chown -R 10001:10001 /opt/yag/state
 COPY --from=compile /src/build/yag /usr/local/bin/yag
 COPY --from=ui /src/console/dist /opt/yag/console/dist
 WORKDIR /opt/yag

@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client'
 import ReactMarkdown from 'react-markdown'
 import { Activity, ArrowDownLeft, ArrowUpRight, Box, Braces, Check, ChevronDown, CircleHelp, Clipboard, Clock3, Code2, Cpu, ExternalLink, KeyRound, Layers3, LayoutDashboard, LockKeyhole, Menu, MessageSquare, RefreshCw, Send, Server, Settings2, ShieldCheck, Square, Terminal, X } from 'lucide-react'
 import './styles.css'
+import ControlPlane from './ControlPlane'
 
-type Page = 'Overview' | 'Playground' | 'Models' | 'Integrations' | 'Requests' | 'Settings'
+type Page = 'Overview' | 'Playground' | 'Models' | 'Control' | 'Integrations' | 'Requests' | 'Settings'
 type Model = { id: string; owned_by?: string }
 type Route = { model: string }
 type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;successes:number;
@@ -13,11 +14,12 @@ type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;suc
     last_http_status:number;circuit:'closed'|'open'|'half_open_ready';retry_after_seconds:number}
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
-type Metrics = { chat_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type Metrics = { chat_requests:number; completions_requests:number; embeddings_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type ClientUsage = {id:string;scope:string;accepted_requests:number;rate_limited_requests:number}
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
-  { title: 'GATEWAY', items: [{ name: 'Integrations', icon: Braces }, { name: 'Requests', icon: Activity }, { name: 'Settings', icon: Settings2 }] },
+  { title: 'GATEWAY', items: [{ name: 'Control', icon: Server }, { name: 'Integrations', icon: Braces }, { name: 'Requests', icon: Activity }, { name: 'Settings', icon: Settings2 }] },
 ]
 const api = async (path: string, key: string, options: RequestInit = {}) => {
   const res = await fetch(path, { ...options, headers: { Authorization: `Bearer ${key}`, ...options.headers } })
@@ -67,7 +69,8 @@ function App() {
         {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
         {page === 'Models' && <Models apiKey={key} models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
-        {page === 'Requests' && <Requests status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
+        {page === 'Control' && <ControlPlane apiKey={key} onUseModel={name => {setModel(name);go('Playground')}}/>}
+        {page === 'Requests' && <Requests apiKey={key} status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
       </div><footer><span>YAG <span className="footer-sep">/</span> ONE HOST. MULTIPLE MODELS. EVERY INTERFACE.</span><span>SELF-HOSTED INFERENCE GATEWAY</span></footer>
     </main>
@@ -187,13 +190,17 @@ function Playground({apiKey,models,model,setModel}: {apiKey: string; models: Mod
 }
 function CopyBlock({text}: {text: string}) { const [copied,setCopied]=useState(false); return <div className="code-block"><button onClick={async () => {try {await navigator.clipboard.writeText(text);setCopied(true);setTimeout(() => setCopied(false),2000)} catch { setCopied(false) }}} title="Copy to clipboard">{copied?<Check size={15}/>:<Clipboard size={15}/>} {copied?'Copied':'Copy'}</button><pre>{text}</pre></div> }
 function Integrations({model}: {model: string}) {
-  const [protocol,setProtocol]=useState<'chat'|'responses'|'anthropic'>('chat')
+  const [protocol,setProtocol]=useState<'chat'|'completions'|'embeddings'|'responses'|'anthropic'>('chat')
   const base=window.location.origin
   const shell=(s:string)=>"'"+s.replace(/'/g,"'\\''")+"'"
   const chosen=model||'YOUR_MODEL'
   const samples={
     chat:{title:'Chat Completions',path:'/v1/chat/completions',body:{
       model:chosen,messages:[{role:'user',content:'Hello'}],stream:false}},
+    completions:{title:'Text Completions',path:'/v1/completions',body:{
+      model:chosen,prompt:'Hello',stream:false}},
+    embeddings:{title:'Embeddings',path:'/v1/embeddings',body:{
+      model:'YOUR_EMBEDDING_MODEL',input:'Hello'}},
     responses:{title:'Responses API',path:'/v1/responses',body:{
       model:chosen,input:'Hello',store:false,stream:false}},
     anthropic:{title:'Anthropic Messages',path:'/v1/messages',body:{
@@ -217,7 +224,7 @@ function Integrations({model}: {model: string}) {
         <div className="endpoint"><code>{base}/v1</code><span>YAG GATEWAY</span></div>
         <p>Authenticate with a YAG gateway key. The upstream credential stays server-side.</p>
         <div className="protocol-tabs" role="group" aria-label="Protocol sample">
-          {(['chat','responses','anthropic'] as const).map(p=>
+          {(['chat','completions','embeddings','responses','anthropic'] as const).map(p=>
             <button type="button" key={p} aria-pressed={protocol===p}
               className={protocol===p?'selected':''} onClick={()=>setProtocol(p)}>
               {samples[p].title}
@@ -225,13 +232,17 @@ function Integrations({model}: {model: string}) {
         </div>
         <div className="field-caption">EXAMPLE REQUEST</div>
         <CopyBlock text={curl}/>
-        <p className="tiny-note">A discovered model is selected when available. Replace the example key with your gateway key. Protocol translation and model features may differ.</p>
+        <p className="tiny-note">A discovered model is selected for generation when available. Embeddings require a separately installed embedding-capable model. Replace the example key with your gateway key; model capabilities vary by backend.</p>
       </div></section>
       <section className="panel integration-side">
         <div className="panel-head"><div><h2>Protocol support</h2>
           <p>Gateway-level capabilities, not model guarantees.</p></div></div>
         <div className="protocol-row"><div><b>Chat Completions</b>
           <small>OpenAI-compatible upstream passthrough</small></div><span className="tag green">AVAILABLE</span></div>
+        <div className="protocol-row"><div><b>Text Completions</b>
+          <small>Legacy OpenAI-compatible upstream passthrough</small></div><span className="tag green">AVAILABLE</span></div>
+        <div className="protocol-row"><div><b>Embeddings</b>
+          <small>Vector generation requires an embedding-capable upstream model</small></div><span className="tag green">AVAILABLE</span></div>
         <div className="protocol-row"><div><b>Responses API</b>
           <small>Codex CLI text and shell-tool cycle verified on mock</small></div><span className="tag">PARTIAL</span></div>
         <div className="protocol-row"><div><b>Anthropic Messages</b>
@@ -243,11 +254,13 @@ function Integrations({model}: {model: string}) {
         </div>
       </section></div></>
 }
-function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
+function Requests({apiKey,status,metrics,metricsError,lastUpdated,refresh}: {apiKey:string;status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
   return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Aggregate in-memory request counts without storing prompts or responses."
     action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
     <div className="metrics">
       <div className="metric"><div className="metric-label">CHAT COMPLETIONS <MessageSquare size={15}/></div><div className="metric-value">{metrics?metrics.chat_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Chat requests</div></div>
+      <div className="metric"><div className="metric-label">TEXT COMPLETIONS <Terminal size={15}/></div><div className="metric-value">{metrics?metrics.completions_requests.toLocaleString():'—'}</div><div className="metric-detail">Legacy completion requests</div></div>
+      <div className="metric"><div className="metric-label">EMBEDDINGS <Layers3 size={15}/></div><div className="metric-value">{metrics?metrics.embeddings_requests.toLocaleString():'—'}</div><div className="metric-detail">Vector embedding requests</div></div>
       <div className="metric"><div className="metric-label">RESPONSES API <Code2 size={15}/></div><div className="metric-value">{metrics?metrics.responses_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Responses requests</div></div>
       <div className="metric"><div className="metric-label">ANTHROPIC MESSAGES <Braces size={15}/></div><div className="metric-value">{metrics?metrics.anthropic_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Messages requests</div></div>
     </div>
@@ -256,9 +269,46 @@ function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Sta
       <div className="setting-row"><div><b>Provider probes</b><small>POST /api/provider/check requests</small></div><b>{metrics?metrics.provider_check_requests.toLocaleString():'—'}</b></div>
       <div className="setting-row"><div><b>Active HTTP connections</b><small>Includes the status poll itself</small></div><b>{status?status.active_connections.toLocaleString():'—'}</b></div>
     </section>
+    <ClientUsagePanel apiKey={apiKey}/>
     {metricsError && <div className="info-block"><CircleHelp size={16}/><span>{metricsError}</span></div>}
     <div className="info-block"><LockKeyhole size={16}/><span>No prompt text, response bodies or request histories are persisted. Metrics are counts of accepted API requests, including ones that later fail. {lastUpdated ? 'Last refreshed '+lastUpdated.toLocaleTimeString() : ''}</span></div>
   </>
+}
+function ClientUsagePanel({apiKey}: {apiKey:string}) {
+  const [rows,setRows]=useState<ClientUsage[]>([])
+  const [limit,setLimit]=useState(0)
+  const [err,setErr]=useState('')
+  const reload=useCallback(async()=>{
+    if(!apiKey){setRows([]);setErr('');return}
+    try {
+      const response=await api('/api/clients',apiKey)
+      const data=await response.json()
+      if(!Array.isArray(data.data))throw new Error('Invalid client usage response')
+      setRows(data.data)
+      setLimit(data.rate_limit_per_minute)
+      setErr('')
+    } catch(e) {
+      setRows([])
+      setErr((e as Error).message)
+    }
+  },[apiKey])
+  useEffect(()=>{
+    void reload()
+    const timer=setInterval(()=>void reload(),30000)
+    return ()=>clearInterval(timer)
+  },[reload])
+  return <section className="panel"><div className="panel-head">
+    <div><h2>LAN client usage</h2><p>Request counts by API key slot, without storing client IPs, prompts or secrets.</p></div>
+    <button className="outline-button small" onClick={()=>void reload()}>Refresh</button></div>
+    <div className="operations-meta">Per-key request limit: {limit ? limit+'/minute' : 'disabled'} · Counters reset on restart</div>
+    {rows.length ? <div className="provider-table-wrap"><table className="provider-table">
+      <thead><tr><th>CLIENT</th><th>PERMISSIONS</th><th>ACCEPTED</th><th>RATE LIMITED</th></tr></thead>
+      <tbody>{rows.map(row=><tr key={row.id}><td><b>{row.id}</b></td>
+        <td>{row.scope}</td><td>{row.accepted_requests.toLocaleString()}</td>
+        <td>{row.rate_limited_requests.toLocaleString()}</td></tr>)}</tbody>
+    </table></div> : <div className="tiny-note">{err || 'Add a monitoring-enabled API key to view client usage.'}</div>}
+    <div className="tiny-note">Client labels correspond to the order of YAG_EXTRA_API_KEYS. Counts include authenticated requests accepted before any upstream outcome; they are not token or GPU usage.</div>
+  </section>
 }
 function Settings({keyDraft,setKeyDraft,saveKey,connected}: {keyDraft:string;setKeyDraft:(s:string)=>void;saveKey:(e:React.FormEvent)=>void;connected:boolean}) { return <><PageHead eyebrow="CONFIGURATION" title="Settings" description="Manage your Console connection to the gateway."/><div className="settings-layout"><section className="panel"><div className="panel-head"><div><h2>API authentication</h2><p>Use the API key configured on your YAG Host.</p></div><KeyRound size={17} className="muted"/></div><form className="settings-form" onSubmit={saveKey}><label htmlFor="api-key">YAG API KEY</label><input id="api-key" type="password" autoComplete="off" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="Enter your gateway API key"/><p>The key is kept in session storage for this tab and sent only to this gateway. Clear it by saving an empty value.</p><button className="primary-button" type="submit">Save connection</button>{connected && <span className="saved-indicator"><Check size={14}/> Key saved for this session</span>}</form></section><section className="panel"><div className="panel-head"><div><h2>Host configuration</h2><p>Managed on the machine running YAG.</p></div></div><div className="settings-body"><div className="setting-row"><div><b>Network &amp; provider</b><small>Configure via host environment variables</small></div><span className="tag">HOST MANAGED</span></div><div className="setting-row"><div><b>Credentials &amp; access</b><small>Restart the host to rotate the API key</small></div><span className="tag">HOST MANAGED</span></div><div className="security-note"><ShieldCheck size={16}/><span>YAG binds to localhost by default. Use a trusted TLS reverse proxy and firewall before exposing it on your network.</span></div></div></section></div></> }
 

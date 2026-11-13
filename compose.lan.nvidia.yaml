@@ -1,0 +1,7 @@
+# Optional NVIDIA GPU passthrough for Compose-managed Ollama.
+# Requires a working NVIDIA driver, NVIDIA Container Toolkit and a Docker
+# Compose version that supports the 'gpus' service property.
+# Append this file AFTER compose.lan.ollama.yaml in the -f chain.
+services:
+  ollama:
+    gpus: all
