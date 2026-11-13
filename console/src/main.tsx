@@ -13,7 +13,7 @@ type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;suc
     last_http_status:number;circuit:'closed'|'open'|'half_open_ready';retry_after_seconds:number}
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
-type Metrics = { chat_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type Metrics = { chat_requests:number; completions_requests:number; embeddings_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
@@ -187,13 +187,17 @@ function Playground({apiKey,models,model,setModel}: {apiKey: string; models: Mod
 }
 function CopyBlock({text}: {text: string}) { const [copied,setCopied]=useState(false); return <div className="code-block"><button onClick={async () => {try {await navigator.clipboard.writeText(text);setCopied(true);setTimeout(() => setCopied(false),2000)} catch { setCopied(false) }}} title="Copy to clipboard">{copied?<Check size={15}/>:<Clipboard size={15}/>} {copied?'Copied':'Copy'}</button><pre>{text}</pre></div> }
 function Integrations({model}: {model: string}) {
-  const [protocol,setProtocol]=useState<'chat'|'responses'|'anthropic'>('chat')
+  const [protocol,setProtocol]=useState<'chat'|'completions'|'embeddings'|'responses'|'anthropic'>('chat')
   const base=window.location.origin
   const shell=(s:string)=>"'"+s.replace(/'/g,"'\\''")+"'"
   const chosen=model||'YOUR_MODEL'
   const samples={
     chat:{title:'Chat Completions',path:'/v1/chat/completions',body:{
       model:chosen,messages:[{role:'user',content:'Hello'}],stream:false}},
+    completions:{title:'Text Completions',path:'/v1/completions',body:{
+      model:chosen,prompt:'Hello',stream:false}},
+    embeddings:{title:'Embeddings',path:'/v1/embeddings',body:{
+      model:'YOUR_EMBEDDING_MODEL',input:'Hello'}},
     responses:{title:'Responses API',path:'/v1/responses',body:{
       model:chosen,input:'Hello',store:false,stream:false}},
     anthropic:{title:'Anthropic Messages',path:'/v1/messages',body:{
@@ -217,7 +221,7 @@ function Integrations({model}: {model: string}) {
         <div className="endpoint"><code>{base}/v1</code><span>YAG GATEWAY</span></div>
         <p>Authenticate with a YAG gateway key. The upstream credential stays server-side.</p>
         <div className="protocol-tabs" role="group" aria-label="Protocol sample">
-          {(['chat','responses','anthropic'] as const).map(p=>
+          {(['chat','completions','embeddings','responses','anthropic'] as const).map(p=>
             <button type="button" key={p} aria-pressed={protocol===p}
               className={protocol===p?'selected':''} onClick={()=>setProtocol(p)}>
               {samples[p].title}
@@ -225,13 +229,17 @@ function Integrations({model}: {model: string}) {
         </div>
         <div className="field-caption">EXAMPLE REQUEST</div>
         <CopyBlock text={curl}/>
-        <p className="tiny-note">A discovered model is selected when available. Replace the example key with your gateway key. Protocol translation and model features may differ.</p>
+        <p className="tiny-note">A discovered model is selected for generation when available. Embeddings require a separately installed embedding-capable model. Replace the example key with your gateway key; model capabilities vary by backend.</p>
       </div></section>
       <section className="panel integration-side">
         <div className="panel-head"><div><h2>Protocol support</h2>
           <p>Gateway-level capabilities, not model guarantees.</p></div></div>
         <div className="protocol-row"><div><b>Chat Completions</b>
           <small>OpenAI-compatible upstream passthrough</small></div><span className="tag green">AVAILABLE</span></div>
+        <div className="protocol-row"><div><b>Text Completions</b>
+          <small>Legacy OpenAI-compatible upstream passthrough</small></div><span className="tag green">AVAILABLE</span></div>
+        <div className="protocol-row"><div><b>Embeddings</b>
+          <small>Vector generation requires an embedding-capable upstream model</small></div><span className="tag green">AVAILABLE</span></div>
         <div className="protocol-row"><div><b>Responses API</b>
           <small>Codex CLI text and shell-tool cycle verified on mock</small></div><span className="tag">PARTIAL</span></div>
         <div className="protocol-row"><div><b>Anthropic Messages</b>
@@ -248,6 +256,8 @@ function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Sta
     action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
     <div className="metrics">
       <div className="metric"><div className="metric-label">CHAT COMPLETIONS <MessageSquare size={15}/></div><div className="metric-value">{metrics?metrics.chat_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Chat requests</div></div>
+      <div className="metric"><div className="metric-label">TEXT COMPLETIONS <Terminal size={15}/></div><div className="metric-value">{metrics?metrics.completions_requests.toLocaleString():'—'}</div><div className="metric-detail">Legacy completion requests</div></div>
+      <div className="metric"><div className="metric-label">EMBEDDINGS <Layers3 size={15}/></div><div className="metric-value">{metrics?metrics.embeddings_requests.toLocaleString():'—'}</div><div className="metric-detail">Vector embedding requests</div></div>
       <div className="metric"><div className="metric-label">RESPONSES API <Code2 size={15}/></div><div className="metric-value">{metrics?metrics.responses_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Responses requests</div></div>
       <div className="metric"><div className="metric-label">ANTHROPIC MESSAGES <Braces size={15}/></div><div className="metric-value">{metrics?metrics.anthropic_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Messages requests</div></div>
     </div>

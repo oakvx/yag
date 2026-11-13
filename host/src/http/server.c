@@ -87,9 +87,11 @@ static void metrics(int fd,yag_config *cfg) {
     pthread_mutex_lock(&cfg->lock);
     int n=snprintf(out,sizeof out,
         "{\"object\":\"gateway.metrics\",\"chat_requests\":%lu,"
+        "\"completions_requests\":%lu,\"embeddings_requests\":%lu,"
         "\"responses_requests\":%lu,\"anthropic_requests\":%lu,"
         "\"model_list_requests\":%lu,\"provider_check_requests\":%lu}",
-        cfg->chat_requests,cfg->responses_requests,cfg->anthropic_requests,
+        cfg->chat_requests,cfg->completions_requests,cfg->embeddings_requests,
+        cfg->responses_requests,cfg->anthropic_requests,
         cfg->model_list_requests,cfg->provider_check_requests);
     pthread_mutex_unlock(&cfg->lock);
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
@@ -136,6 +138,8 @@ static void capabilities(int fd,const yag_config *cfg) {
         "\"routing\":{\"configured_routes\":%zu,\"fallback_enabled\":%s},"
         "\"protocols\":{"
         "\"chat_completions\":{\"streaming\":true,\"tool_calls\":\"upstream_passthrough\"},"
+        "\"completions\":{\"streaming\":true,\"mode\":\"upstream_passthrough\"},"
+        "\"embeddings\":{\"mode\":\"upstream_passthrough\"},"
         "\"responses\":{\"streaming\":true,\"function_tools\":true,"
             "\"namespace_functions\":true,\"stateful\":false,\"web_search\":false},"
         "\"anthropic_messages\":{\"streaming\":true,\"function_tools\":true,"
@@ -182,6 +186,8 @@ static const char *trace_route(const char *uri) {
     if(!strcmp(uri,"/v1/messages/count_tokens"))return "messages-count";
     if(!strcmp(uri,"/v1/responses"))return "responses";
     if(!strcmp(uri,"/v1/chat/completions"))return "chat";
+    if(!strcmp(uri,"/v1/completions"))return "completions";
+    if(!strcmp(uri,"/v1/embeddings"))return "embeddings";
     if(!strncmp(uri,"/api/",5))return "admin";
     return "other";
 }
@@ -412,6 +418,35 @@ static void handle(int fd,yag_config *c) {
         if(!yyjson_is_obj(root) || !yyjson_is_str(yyjson_obj_get(root,"model")) || !yyjson_is_arr(yyjson_obj_get(root,"messages"))) error(fd,400,"Expected JSON object with model string and messages array");
         else if(!capability_rejected(fd,c,root))
             upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
+        yyjson_doc_free(doc);
+    } else if(!strcmp(uri,"/v1/completions") && !strcmp(method,"POST")) {
+        increment(c,&c->completions_requests);
+        yyjson_doc *doc=yyjson_read(body,length,0);
+        yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+        yyjson_val *model=yyjson_obj_get(root,"model");
+        yyjson_val *prompt=yyjson_obj_get(root,"prompt");
+        int valid_model=yyjson_is_str(model) && yyjson_get_len(model)>0
+            && strlen(yyjson_get_str(model))==yyjson_get_len(model);
+        int valid_prompt=(yyjson_is_str(prompt) && yyjson_get_len(prompt)>0)
+            || (yyjson_is_arr(prompt) && yyjson_arr_size(prompt)>0);
+        if(!yyjson_is_obj(root) || !valid_model || !valid_prompt)
+            error(fd,400,"Expected JSON object with model and nonempty completion prompt");
+        else if(!capability_rejected(fd,c,root))
+            upstream_request(fd,c,"/completions",body,length,yyjson_get_str(model));
+        yyjson_doc_free(doc);
+    } else if(!strcmp(uri,"/v1/embeddings") && !strcmp(method,"POST")) {
+        increment(c,&c->embeddings_requests);
+        yyjson_doc *doc=yyjson_read(body,length,0);
+        yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+        yyjson_val *model=yyjson_obj_get(root,"model");
+        yyjson_val *input=yyjson_obj_get(root,"input");
+        int valid_model=yyjson_is_str(model) && yyjson_get_len(model)>0
+            && strlen(yyjson_get_str(model))==yyjson_get_len(model);
+        int valid_input=(yyjson_is_str(input) && yyjson_get_len(input)>0)
+            || (yyjson_is_arr(input) && yyjson_arr_size(input)>0);
+        if(!yyjson_is_obj(root) || !valid_model || !valid_input)
+            error(fd,400,"Expected JSON object with model and nonempty embedding input");
+        else upstream_request(fd,c,"/embeddings",body,length,yyjson_get_str(model));
         yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/responses") && !strcmp(method,"POST")) {
         increment(c,&c->responses_requests);
