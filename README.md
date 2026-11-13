@@ -122,6 +122,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/status` | key | Host status. |
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
+| `GET` | `/api/clients` | monitor key | Per-key accepted/throttled request counts, positional labels and scopes. No secrets or prompts. |
 | `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
 | `GET` | `/api/models/capabilities` | key | Operator-declared model capabilities (never marked verified). |
 | `GET` | `/api/providers/status` | key | In-memory per-provider attempts, failures, circuit state, latency and reported tokens. |
