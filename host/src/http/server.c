@@ -87,9 +87,11 @@ static void metrics(int fd,yag_config *cfg) {
     pthread_mutex_lock(&cfg->lock);
     int n=snprintf(out,sizeof out,
         "{\"object\":\"gateway.metrics\",\"chat_requests\":%lu,"
+        "\"completions_requests\":%lu,\"embeddings_requests\":%lu,"
         "\"responses_requests\":%lu,\"anthropic_requests\":%lu,"
         "\"model_list_requests\":%lu,\"provider_check_requests\":%lu}",
-        cfg->chat_requests,cfg->responses_requests,cfg->anthropic_requests,
+        cfg->chat_requests,cfg->completions_requests,cfg->embeddings_requests,
+        cfg->responses_requests,cfg->anthropic_requests,
         cfg->model_list_requests,cfg->provider_check_requests);
     pthread_mutex_unlock(&cfg->lock);
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
