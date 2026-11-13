@@ -272,6 +272,42 @@ function Requests({apiKey,status,metrics,metricsError,lastUpdated,refresh}: {api
     <div className="info-block"><LockKeyhole size={16}/><span>No prompt text, response bodies or request histories are persisted. Metrics are counts of accepted API requests, including ones that later fail. {lastUpdated ? 'Last refreshed '+lastUpdated.toLocaleTimeString() : ''}</span></div>
   </>
 }
+function ClientUsagePanel({apiKey}: {apiKey:string}) {
+  const [rows,setRows]=useState<ClientUsage[]>([])
+  const [limit,setLimit]=useState(0)
+  const [err,setErr]=useState('')
+  const reload=useCallback(async()=>{
+    if(!apiKey){setRows([]);setErr('');return}
+    try {
+      const response=await api('/api/clients',apiKey)
+      const data=await response.json()
+      if(!Array.isArray(data.data))throw new Error('Invalid client usage response')
+      setRows(data.data)
+      setLimit(data.rate_limit_per_minute)
+      setErr('')
+    } catch(e) {
+      setRows([])
+      setErr((e as Error).message)
+    }
+  },[apiKey])
+  useEffect(()=>{
+    void reload()
+    const timer=setInterval(()=>void reload(),30000)
+    return ()=>clearInterval(timer)
+  },[reload])
+  return <section className="panel"><div className="panel-head">
+    <div><h2>LAN client usage</h2><p>Request counts by API key slot, without storing client IPs, prompts or secrets.</p></div>
+    <button className="outline-button small" onClick={()=>void reload()}>Refresh</button></div>
+    <div className="operations-meta">Per-key request limit: {limit ? limit+'/minute' : 'disabled'} · Counters reset on restart</div>
+    {rows.length ? <div className="provider-table-wrap"><table className="provider-table">
+      <thead><tr><th>CLIENT</th><th>PERMISSIONS</th><th>ACCEPTED</th><th>RATE LIMITED</th></tr></thead>
+      <tbody>{rows.map(row=><tr key={row.id}><td><b>{row.id}</b></td>
+        <td>{row.scope}</td><td>{row.accepted_requests.toLocaleString()}</td>
+        <td>{row.rate_limited_requests.toLocaleString()}</td></tr>)}</tbody>
+    </table></div> : <div className="tiny-note">{err || 'Add a monitoring-enabled API key to view client usage.'}</div>}
+    <div className="tiny-note">Client labels correspond to the order of YAG_EXTRA_API_KEYS. Counts include authenticated requests accepted before any upstream outcome; they are not token or GPU usage.</div>
+  </section>
+}
 function Settings({keyDraft,setKeyDraft,saveKey,connected}: {keyDraft:string;setKeyDraft:(s:string)=>void;saveKey:(e:React.FormEvent)=>void;connected:boolean}) { return <><PageHead eyebrow="CONFIGURATION" title="Settings" description="Manage your Console connection to the gateway."/><div className="settings-layout"><section className="panel"><div className="panel-head"><div><h2>API authentication</h2><p>Use the API key configured on your YAG Host.</p></div><KeyRound size={17} className="muted"/></div><form className="settings-form" onSubmit={saveKey}><label htmlFor="api-key">YAG API KEY</label><input id="api-key" type="password" autoComplete="off" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="Enter your gateway API key"/><p>The key is kept in session storage for this tab and sent only to this gateway. Clear it by saving an empty value.</p><button className="primary-button" type="submit">Save connection</button>{connected && <span className="saved-indicator"><Check size={14}/> Key saved for this session</span>}</form></section><section className="panel"><div className="panel-head"><div><h2>Host configuration</h2><p>Managed on the machine running YAG.</p></div></div><div className="settings-body"><div className="setting-row"><div><b>Network &amp; provider</b><small>Configure via host environment variables</small></div><span className="tag">HOST MANAGED</span></div><div className="setting-row"><div><b>Credentials &amp; access</b><small>Restart the host to rotate the API key</small></div><span className="tag">HOST MANAGED</span></div><div className="security-note"><ShieldCheck size={16}/><span>YAG binds to localhost by default. Use a trusted TLS reverse proxy and firewall before exposing it on your network.</span></div></div></section></div></> }
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>)
