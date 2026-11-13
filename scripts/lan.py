@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
+from lan_ops import configure_provider, encrypted_backup
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env.lan"
@@ -199,6 +200,18 @@ def main(argv=None):
         actions.add_parser(name, help=help_text)
     models = actions.add_parser("model", help="Pull a model into managed Ollama")
     models.add_argument("model_id", help="e.g. llama3.2")
+    remove_model = actions.add_parser("model-remove",
+        help="Remove a model installed in the managed Ollama container")
+    remove_model.add_argument("model_id", help="Exact installed Ollama model ID")
+    actions.add_parser("models", help="List Ollama models from the managed container")
+    providers = actions.add_parser("providers", help="Manage OpenAI-compatible LAN replicas")
+    providers.add_argument("operation", choices=("list", "add", "remove"))
+    providers.add_argument("--url", help="OpenAI-compatible endpoint ending in /v1")
+    providers.add_argument("--key-env", help="Name of a configured private upstream key")
+    backup = actions.add_parser("backup", help="Create an encrypted LAN configuration snapshot")
+    backup.add_argument("--recipient", required=True, help="Public age recipient (age1...)")
+    backup.add_argument("--output-dir", default="backups", help="Private backup directory")
+    actions.add_parser("update", help="Pull updated container images and rebuild YAG")
     args = parser.parse_args(argv)
     try:
         if args.action == "init":
@@ -217,24 +230,45 @@ def main(argv=None):
         if args.action == "ca":
             export_ca(config)
             return 0
+        if args.action == "providers":
+            configure_provider(ENV_PATH, args.operation, args.url, args.key_env)
+            return 0
+        if args.action == "backup":
+            require_docker(config)
+            encrypted_backup(ROOT, config, compose_command, invoke,
+                             args.recipient, args.output_dir)
+            return 0
         if args.action == "up":
             doctor(config)
+            command = compose_command(config, "up", "--build", "-d")
+        elif args.action == "update":
+            doctor(config)
+            updates = compose_command(config, "pull", "caddy")
+            if managed(config):
+                updates.append("ollama")
+            result = invoke(updates)
+            if result.returncode:
+                raise SetupError("Could not pull updated service images; deployment unchanged")
             command = compose_command(config, "up", "--build", "-d")
         elif args.action == "down":
             command = compose_command(config, "down")
         elif args.action == "status":
             command = compose_command(config, "ps")
-        elif args.action == "model":
+        elif args.action in ("model", "model-remove", "models"):
             if not managed(config):
-                raise SetupError("Model pull is only available with --managed-ollama")
-            if not MODEL_PATTERN.fullmatch(args.model_id):
-                raise SetupError("Invalid Ollama model ID")
-            command = compose_command(config, "exec", "-T", "ollama", "ollama",
-                                      "pull", args.model_id)
+                raise SetupError("Model CLI is only available with --managed-ollama")
+            if args.action == "models":
+                command = compose_command(config, "exec", "-T", "ollama", "ollama",
+                                          "list")
+            else:
+                if not MODEL_PATTERN.fullmatch(args.model_id):
+                    raise SetupError("Invalid Ollama model ID")
+                command = compose_command(config, "exec", "-T", "ollama", "ollama",
+                    "pull" if args.action == "model" else "rm", args.model_id)
         else:
             raise SetupError("Unsupported action")
         return invoke(command).returncode
-    except SetupError as exc:
+    except (SetupError, ValueError) as exc:
         print("LAN setup error:", exc, file=sys.stderr)
         return 1
 
