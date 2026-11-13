@@ -48,16 +48,20 @@ static int authenticated_key(const yag_config *c,const char *authorization) {
     return authenticated_raw_key(c,authorization+7);
 }
 static int rate_permit(yag_config *c,int key_index,unsigned *retry_after) {
-    if(!c->rate_limit_per_minute)return 1;
-    time_t now=time(NULL);
+    int permit=1;
     pthread_mutex_lock(&c->lock);
-    if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
-        c->rate_windows[key_index]=now;
-        c->rate_counts[key_index]=0;
+    if(c->rate_limit_per_minute) {
+        time_t now=time(NULL);
+        if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
+            c->rate_windows[key_index]=now;
+            c->rate_counts[key_index]=0;
+        }
+        permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
+        if(permit)c->rate_counts[key_index]++;
+        else *retry_after=(unsigned)(60-(now-c->rate_windows[key_index]));
     }
-    int permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
-    if(permit)c->rate_counts[key_index]++;
-    else *retry_after=(unsigned)(60-(now-c->rate_windows[key_index]));
+    if(permit)c->key_accepted_requests[key_index]++;
+    else c->key_rate_limited_requests[key_index]++;
     pthread_mutex_unlock(&c->lock);
     return permit;
 }
