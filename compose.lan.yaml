@@ -9,6 +9,7 @@ services:
       YAG_EXTRA_KEY_SCOPES: ${YAG_EXTRA_KEY_SCOPES:?Run scripts/lan_bootstrap.py first}
       YAG_RATE_LIMIT_PER_MINUTE: ${YAG_RATE_LIMIT_PER_MINUTE:-120}
       YAG_CLIENT_STORE: /opt/yag/state/clients.json
+      YAG_PROVIDER_STORE: /opt/yag/state/providers.json
       YAG_ADMIN_AUDIT_FILE: ${YAG_ADMIN_AUDIT_FILE:-}
       YAG_OLLAMA_ADMIN_URL: ${YAG_OLLAMA_ADMIN_URL:-http://host.docker.internal:11434}
       YAG_MAX_INFERENCE: ${YAG_MAX_INFERENCE:-6}
