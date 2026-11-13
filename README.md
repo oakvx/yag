@@ -200,6 +200,27 @@ rules for Responses live in the [status doc](docs/architecture/STATUS.md).
 > If a stream dies after the headers are sent, the connection just closes — the HTTP
 > status cannot be changed retroactively. Clients must detect incomplete streams.
 
+## Ollama / Colibri quickstart
+
+If Ollama is installed on the same machine as YAG, point the default upstream
+at `http://127.0.0.1:11434/v1`. If it runs on Colibri on a **private LAN**,
+use `http://colibri:11434/v1` only after securing Ollama's network access.
+
+```sh
+export YAG_API_KEY="$(openssl rand -hex 32)"
+export YAG_UPSTREAM_URL="http://127.0.0.1:11434/v1"
+./build/yag
+```
+
+Your applications connect to `http://127.0.0.1:8080/v1` with the YAG key
+and select an installed model from `GET /v1/models`. Embedding clients use
+`POST /v1/embeddings` with an embedding-capable model. The Ollama native
+`/api` endpoints are not exposed.
+
+**For another PC, IDE, automation or private-network device**, follow
+[the Colibri / Ollama universal integration guide](docs/integrations/ollama-colibri.md).
+Do not expose YAG or Ollama directly to the public internet.
+
 ## Configuration
 
 Read once at startup. Restart to apply.
@@ -213,7 +234,6 @@ Read once at startup. Restart to apply.
 | `YAG_BIND` | `127.0.0.1` | Listen address. `0.0.0.0` only if you mean it. |
 | `YAG_PORT` | `8080` | Listen port. |
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base. No trailing slash, query or fragment. |
-| *Ollama on Colibri* | *set `YAG_UPSTREAM_URL`* | Example: `http://colibri:11434/v1` on a trusted private LAN; no native Ollama API is exposed by YAG. |
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
 | `YAG_MODEL_CAPABILITIES` | empty | JSON array (≤32) of `{model,features,context_window?}`. Features: streaming, function_tools, json_schema, reasoning, vision, audio. Operator assertions only, not probed. |
