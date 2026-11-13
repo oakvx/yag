@@ -127,6 +127,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/providers/status` | key | In-memory per-provider attempts, failures, circuit state, latency and reported tokens. |
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
+| `GET` | `/v1/models/{id}` | key | Fetch an exact model ID from the merged inventory; 404 if unknown. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
 | `POST` | `/v1/completions` | key | Legacy text completions passthrough, SSE if supported upstream. |
 | `POST` | `/v1/embeddings` | key | Vector embeddings passthrough; requires upstream embedding model. |
