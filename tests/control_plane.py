@@ -54,6 +54,8 @@ class ReplicaMock(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_POST(self):
         request_body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if request_body.get('model')=='slow':
+            time.sleep(2)
         data=json.dumps({'source':'replica','request':request_body}).encode()
         self.send_response(200)
         self.send_header('Content-Type','application/json')
