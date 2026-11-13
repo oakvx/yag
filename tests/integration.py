@@ -33,6 +33,11 @@ class Backend(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get('Authorization') != 'Bearer '+UPKEY: return self.send(401, {'error': {'message':'bad upstream key'}})
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path=='/v1/images/generations':
+            return self.send(200,{'created':123,'data':[{'b64_json':'aW1hZ2U='}],
+                                  'request':data})
+        if self.path=='/v1/audio/speech':
+            return self.send(200,b'ID3'+bytes([0,1,2,3]),'audio/mpeg')
         if self.path=='/v1/embeddings':
             if data['model']=='bad':
                 return self.send(429,{'error':{'message':'embedding backend limit'}})
@@ -528,6 +533,35 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'POST','/v1/completions',
             valid,key='models-only-key-123456')[0],403)
         self.assertEqual(request(self.port,'GET','/v1/completions')[0],404)
+
+    def test_image_and_speech_generation_passthrough(self):
+        image={'model':'glm-test','prompt':'A small green tree','size':'256x256'}
+        status,headers,body=request(self.port,'POST','/v1/images/generations',image)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['request'],image)
+        self.assertEqual(json.loads(body)['data'][0]['b64_json'],'aW1hZ2U=')
+        speech={'model':'glm-test','input':'Hello','voice':'alloy',
+                'response_format':'mp3'}
+        status,headers,body=request(self.port,'POST','/v1/audio/speech',speech)
+        self.assertEqual(status,200,body)
+        self.assertIn('audio/mpeg',headers['Content-Type'])
+        self.assertEqual(body,b'ID3'+bytes([0,1,2,3]))
+        for path,payload in [
+            ('/v1/images/generations',{'model':'glm-test'}),
+            ('/v1/images/generations',{'model':'','prompt':'hello'}),
+            ('/v1/audio/speech',{'model':'glm-test','input':'hello'}),
+            ('/v1/audio/speech',{'model':'glm-test','input':'','voice':'alloy'}),
+        ]:
+            with self.subTest(path=path,payload=payload):
+                self.assertEqual(request(self.port,'POST',path,payload)[0],400)
+        self.assertEqual(request(self.port,'POST','/v1/images/generations',image,
+                                 key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'POST','/v1/audio/speech',speech,
+                                 key=None)[0],401)
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        protocols=json.loads(body)['protocols']
+        self.assertIn('image_generations',protocols)
+        self.assertIn('audio_speech',protocols)
 
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
