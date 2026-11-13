@@ -68,7 +68,9 @@ export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 
 - `inference` permits `POST /v1/chat/completions`, `POST /v1/responses`
   and `POST /v1/messages`.
-- `models` permits `GET /v1/models`.
+- `models` permits `GET /v1/models` and `GET /v1/models/{id}`.
+  The latter resolves exact IDs from the merged model inventory; unknown IDs
+  return 404.
 - `monitor` permits read-only `/api/*` inventory, status and metrics.
 - Only `all` can call active provider reachability checks.
 - Any denied scope returns 403; invalid credentials return 401.
@@ -82,6 +84,10 @@ export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 
 Header deadline defaults to 10 seconds and body deadline to 30 seconds
 (`YAG_HEADER_DEADLINE_SECONDS` and `YAG_BODY_DEADLINE_SECONDS`).
+When per-key rate limiting is enabled, rejected requests return HTTP 429
+with `Retry-After` in seconds (1–60) until the fixed window resets. The
+header is computed per key and reveals no credential or quota counters.
+
 A single request body is capped at 1 MiB; only HTTP/1.x with Content-Length
 is supported. Limits and POSIX socket code are **not** a security audit.
 Use a TLS proxy, firewall, and dedicated access controls for remote use.
