@@ -222,45 +222,96 @@ static int measured_upstream(yag_config *cfg,const yag_config *target,
     free(cap.bytes);
     return rc;
 }
-/* Replica pool: default upstream is slot zero. Optional explicit per-replica
- * model allowlists prevent requests being routed to unsupported replicas.
- * Empty allowlist (legacy config) means operator-asserted equivalent models.
- * Least-inflight selection and passive health cooldown apply afterward.
- * No ambiguous request is ever replayed. */
-static int pool_choose(yag_config *cfg,const char *model) {
+/* Per-request VRAM reservations are operator estimates, NOT measured physical
+ * GPU usage. Admission only controls traffic passing through this gateway. */
+#define MAX_POOL_WAITERS 24
+static int pool_choose_locked(yag_config *cfg,const char *model,int *saturated) {
     int chosen=-1;
     unsigned lowest=0xffffffffu,best_priority=101u;
     time_t now=time(NULL);
-    pthread_mutex_lock(&cfg->lock);
     size_t total=cfg->pool_count+1;
+    *saturated=0;
     for(size_t offset=0;offset<total;offset++) {
         size_t index=(cfg->pool_cursor+offset)%total;
-        unsigned active=index==0?cfg->default_pool_active:
-            cfg->pool[index-1].active;
+        yag_pool_backend *backend=index==0?NULL:&cfg->pool[index-1];
+        unsigned active=index==0?cfg->default_pool_active:backend->active;
         time_t until=index==0?cfg->default_pool_unavailable_until:
-            cfg->pool[index-1].unavailable_until;
+            backend->unavailable_until;
         if(until>now && (index!=0 || cfg->pool_count))continue;
-        if(index>0 && !cfg->pool[index-1].enabled)continue;
-        if(index>0 && cfg->pool[index-1].model_count) {
+        if(backend && !backend->enabled)continue;
+        if(backend && backend->model_count) {
             int supported=0;
-            for(size_t j=0;j<cfg->pool[index-1].model_count;j++)
-                if(model && !strcmp(model,cfg->pool[index-1].models[j])) {
+            for(size_t j=0;j<backend->model_count;j++)
+                if(model && !strcmp(model,backend->models[j])) {
                     supported=1;break;
                 }
             if(!supported)continue;
         }
-        unsigned priority=index==0?50u:cfg->pool[index-1].priority;
+        unsigned limit=backend?backend->max_inflight:cfg->primary_max_inflight;
+        if(limit && active>=limit) {
+            *saturated=1;
+            if(backend)backend->admission_capacity_skips++;
+            continue;
+        }
+        if(backend && backend->vram_budget_mb &&
+           backend->vram_reserved_mb >
+               backend->vram_budget_mb-backend->vram_reservation_mb) {
+            *saturated=1;
+            backend->admission_capacity_skips++;
+            continue;
+        }
+        unsigned priority=backend?backend->priority:50u;
         if(active<lowest || (active==lowest && priority<best_priority)) {
             lowest=active;best_priority=priority;chosen=(int)index;
         }
     }
     if(chosen>=0) {
         if(chosen==0)cfg->default_pool_active++;
-        else cfg->pool[chosen-1].active++;
+        else {
+            yag_pool_backend *backend=&cfg->pool[chosen-1];
+            backend->active++;
+            backend->vram_reserved_mb+=backend->vram_reservation_mb;
+        }
         cfg->pool_cursor=((unsigned)chosen+1u)%(unsigned)total;
     }
-    pthread_mutex_unlock(&cfg->lock);
     return chosen;
+}
+static int pool_choose(yag_config *cfg,const char *model) {
+    pthread_mutex_lock(&cfg->lock);
+    int saturated=0;
+    int index=pool_choose_locked(cfg,model,&saturated);
+    if(index<0 && saturated && cfg->pool_wait_ms &&
+       cfg->pool_waiting<MAX_POOL_WAITERS) {
+        struct timespec until={0};
+        if(!clock_gettime(CLOCK_REALTIME,&until)) {
+            until.tv_sec+=(time_t)(cfg->pool_wait_ms/1000);
+            until.tv_nsec+=(long)(cfg->pool_wait_ms%1000)*1000000L;
+            if(until.tv_nsec>=1000000000L){
+                until.tv_sec++;until.tv_nsec-=1000000000L;
+            }
+            cfg->pool_waiting++;
+            for(;;) {
+                int rc=pthread_cond_timedwait(&cfg->pool_available,&cfg->lock,&until);
+                index=pool_choose_locked(cfg,model,&saturated);
+                if(index>=0 || !saturated || rc==ETIMEDOUT || rc!=0)break;
+            }
+            cfg->pool_waiting--;
+        }
+    }
+    if(index<0 && saturated)cfg->pool_capacity_rejections++;
+    pthread_mutex_unlock(&cfg->lock);
+    return index>=0?index:(saturated?-2:-1);
+}
+static int pool_primary_fallback_acquire(yag_config *cfg) {
+    int ok=0;
+    pthread_mutex_lock(&cfg->lock);
+    if(!cfg->primary_max_inflight ||
+       cfg->default_pool_active<cfg->primary_max_inflight) {
+        cfg->default_pool_active++;
+        ok=1;
+    } else cfg->pool_capacity_rejections++;
+    pthread_mutex_unlock(&cfg->lock);
+    return ok;
 }
 static void pool_complete(yag_config *cfg,int index,int rc,long status) {
     int unstable=status>=500 || (status==0 && rc!=CURLE_OK
@@ -273,6 +324,13 @@ static void pool_complete(yag_config *cfg,int index,int rc,long status) {
     time_t *until=index==0?&cfg->default_pool_unavailable_until:
         &cfg->pool[index-1].unavailable_until;
     if(*active)(*active)--;
+    if(index>0) {
+        yag_pool_backend *backend=&cfg->pool[index-1];
+        if(backend->vram_reserved_mb>=backend->vram_reservation_mb)
+            backend->vram_reserved_mb-=backend->vram_reservation_mb;
+        else backend->vram_reserved_mb=0;
+    }
+    pthread_cond_broadcast(&cfg->pool_available);
     if(unstable) {
         if(*failures<1000000)(*failures)++;
         if(*failures>=2)*until=time(NULL)+30;
@@ -346,7 +404,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         int index=pool_choose(state,model);
         if(index<0) {
             if(status)*status=0;
-            return CURLE_COULDNT_CONNECT;
+            return index==-2?CURLE_AGAIN:CURLE_COULDNT_CONNECT;
         }
         const yag_config *replica=c;
         if(index>0) {
@@ -367,8 +425,11 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
             entry->fallthroughs++;
             pthread_mutex_unlock(&state->lock);
             if(status)*status=0;
-            return measured_upstream(state,c,&state->default_provider_stats,
+            if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+            rc=measured_upstream(state,c,&state->default_provider_stats,
                 path,body,len,cb,ctx,status,cancel_fd);
+            pool_complete(state,0,rc,status?*status:0);
+            return rc;
         }
         return rc;
     }
@@ -404,6 +465,9 @@ static size_t proxy_write(void *ctx,long status,const char *type,const char *dat
 void upstream_request(int fd, const yag_config *c, const char *path, const char *body, size_t len, const char *model) {
     transfer t={.fd=fd}; long status=0;
     int res=upstream_for_model(c,model,path,body,len,proxy_write,&t,&status,fd);
-    if(res!=CURLE_OK && !t.sent) reply(fd,res==CURLE_OPERATION_TIMEDOUT?504:502,"application/json","{\"error\":{\"message\":\"Inference backend unavailable or timed out\",\"type\":\"upstream_error\"}}");
+    if(res==CURLE_AGAIN && !t.sent)
+        reply(fd,503,"application/json",
+            "{\"error\":{\"message\":\"Inference pool at configured resource capacity\",\"type\":\"resource_capacity\"}}");
+    else if(res!=CURLE_OK && !t.sent) reply(fd,res==CURLE_OPERATION_TIMEDOUT?504:502,"application/json","{\"error\":{\"message\":\"Inference backend unavailable or timed out\",\"type\":\"upstream_error\"}}");
     else if(!t.sent) { t.status=status; start(&t); }
 }
