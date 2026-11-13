@@ -45,9 +45,9 @@ class Backend(BaseHTTPRequestHandler):
         if self.path=='/v1/completions':
             if data.get('stream'):
                 payload=(b'data: {"object":"text_completion","choices":'
-                         b'[{"index":0,"text":"Hello","finish_reason":null}]}\\n\\n'
-                         b'data: [DONE]\\n\\n')
-                return self.send(200,payload.replace(b'\\\\n',b'\\n'),'text/event-stream')
+                         b'[{"index":0,"text":"Hello","finish_reason":null}]}'
+                         +bytes([10,10])+b'data: [DONE]'+bytes([10,10]))
+                return self.send(200,payload,'text/event-stream')
             return self.send(200,{'object':'text_completion','model':data['model'],
                 'choices':[{'text':'Hello','index':0,'finish_reason':'stop'}],
                 'request':data})
