@@ -138,6 +138,19 @@ int config_load(yag_config *c) {
                 fprintf(stderr,"YAG_EXTRA_API_KEYS requires 1..16 comma-separated keys of at least 16 characters, without empty entries or newlines\n");
                 return -1;
             }
+            /* Authentication selects the last matching extra-key index.
+             * Duplicate secrets with different scopes could silently change
+             * the effective privilege level. Reject ambiguous key mappings. */
+            if(!strcmp(start,c->api_key)) {
+                fprintf(stderr,"YAG_EXTRA_API_KEYS must not duplicate the primary key\n");
+                return -1;
+            }
+            for(size_t i=0;i<c->extra_key_count;i++) {
+                if(!strcmp(start,c->extra_keys[i])) {
+                    fprintf(stderr,"YAG_EXTRA_API_KEYS must contain unique keys\n");
+                    return -1;
+                }
+            }
             c->extra_keys[c->extra_key_count++]=start;
             if (!comma) break;
             start=comma+1;
