@@ -103,18 +103,21 @@ upstream is always a candidate; pool selection uses least concurrent
 requests and a passive 30-second cooldown after two backend failures.
 It does not duplicate requests after timeouts or HTTP responses.
 
-**Every pool replica must serve the same exact model IDs and API semantics.**
-YAG discovers models from the primary upstream; it does not dynamically
-merge the inventories of all replicas or migrate active inference between
-machines. Static per-model routes still take precedence over pooled
-default inference. Each provider remains private, and `GET
-/api/providers/pool` returns only index, role, request counters and
-cooldown — never URLs or upstream secrets.
+A replica may optionally declare an explicit `models` allowlist of 1–32
+model IDs. Only requests whose model ID exactly matches that list are
+eligible for that replica; the default upstream always remains eligible.
+Replicas without an allowlist retain the previous assumption of equivalent
+inventories. **Operators must still verify that identical model IDs have
+compatible API semantics.** YAG does not automatically discover a replica's
+model inventory, dynamically merge it into `/v1/models`, or migrate a
+running request. Static per-model routes take precedence over the pool.
+`GET /api/providers/pool` exposes declared model names and health counters,
+but never URLs, backend secrets or client credentials.
 
 From the **central machine**:
 
 ```sh
-python scripts/lan.py providers add --url http://colibri2:11434/v1
+python scripts/lan.py providers add --url http://colibri2:11434/v1 --model llama3.2 --model qwen2.5
 python scripts/lan.py providers list
 python scripts/lan.py up            # apply the updated configuration
 python scripts/lan.py providers remove --url http://colibri2:11434/v1
@@ -126,6 +129,21 @@ and reference it with `--key-env YAG_POOL_KEY_1`. The key passes to YAG
 through Compose environment, not through JSON or an API response. Pool
 changes currently require redeployment via `lan.py up`; no unsafe
 hot-editing of live libcurl destination pointers is provided.
+
+### Resource telemetry caveats
+
+`GET /api/system/resources` retains cgroup v2 RAM usage and limits.
+Linux `/proc/stat` CPU utilization is calculated between successive reads
+(the first sample has no percentage); load average is separate. Host-visible
+RAM total and available bytes are read from `/proc/meminfo` and explicitly
+labeled `proc_meminfo`: in containers these values may represent the host,
+not the gateway memory limit. For supported Linux DRM drivers, `gpu.devices`
+reports only counters exposed by `/sys/class/drm/card*/device/` and hwmon
+(usage, VRAM used/total, temperature). NVIDIA systems that require NVML,
+Windows, macOS and unmounted sysfs typically return an empty device list.
+Missing sensors are not interpreted as zero or inferred from Ollama's model
+allocation. API responses do not disclose GPU device nodes, upstream URLs or
+private keys.
 
 ## 6. Images, speech and bounded multimodal passthrough
 
