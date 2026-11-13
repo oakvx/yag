@@ -54,6 +54,20 @@ typedef struct {
     unsigned rate_counts[17];
     unsigned long key_accepted_requests[17];
     unsigned long key_rate_limited_requests[17];
+    /* Bounded, fair per-credential inference admission control. */
+    unsigned max_inference, max_per_key, queue_wait_ms;
+    unsigned inference_active, inference_waiting;
+    unsigned inference_inflight[17];
+    struct yag_waiter *inference_head, *inference_tail;
+    pthread_cond_t inference_available;
+
+    /* Runtime-managed client keys; static ENV keys occupy first slots. */
+    const char *client_store;
+    size_t static_key_count;
+    unsigned char key_enabled[16], key_managed[16];
+    char *key_labels[16];
+    char *managed_key_secrets[16];
+
 } yag_config;
 int config_load(yag_config *c);
 void config_free(yag_config *c);
