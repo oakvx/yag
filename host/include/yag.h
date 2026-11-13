@@ -1,5 +1,7 @@
 #ifndef YAG_H
 #define YAG_H
+/* Internal error outside libcurl's nonnegative CURLcode namespace. */
+#define YAG_RESOURCE_BUSY (-2)
 #include <stddef.h>
 #include <time.h>
 #include <pthread.h>
