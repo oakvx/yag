@@ -289,9 +289,7 @@ class Handler(BaseHTTPRequestHandler):
             with self.scheduler.slot(principal["id"], principal["priority"],
                                      principal["max_parallel"]):
                 # A revoked key must not acquire an inference slot while queued.
-                if not principal["admin"] and not self.state.db().execute(
-                        "SELECT 1 FROM clients WHERE id=? AND enabled=1",
-                        (principal["id"],)).fetchone():
+                if not principal["admin"] and not self.state.is_enabled(principal["id"]):
                     self._error(403, "client access revoked")
                     return
                 node = self.scheduler.choose_node(self.state.list_nodes(), model) if path in DIRECT_NODE else None
