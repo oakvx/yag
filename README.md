@@ -95,7 +95,7 @@ flowchart LR
 
 ## ✅ What works today
 
-- **Host.** Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys, with optional read-only/scoped access for extra keys. HTTP header/body deadlines and connection caps are enforced.
+- **Host.** Strict request-line spacing and control-byte checks; duplicate Host and competing auth headers are rejected. Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys, with optional read-only/scoped access for extra keys. HTTP header/body deadlines and connection caps are enforced.
 - **Chat Completions.** `GET /v1/models`, `GET /v1/models/{id}` and `POST /v1/chat/completions`, including transparent upstream SSE streaming and tool-call structures. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
 - **Responses subset (stateless).** Text, function calls and tool results (including namespaced function tools), semantic SSE events and explicitly rejected unsupported features. A pinned Codex CLI completed mock text and shell-tool cycles; see [Responses support](docs/architecture/STATUS.md).
 - **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
