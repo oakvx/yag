@@ -47,7 +47,7 @@ static int authenticated_key(const yag_config *c,const char *authorization) {
     if(!authorization || strncmp(authorization,"Bearer ",7))return -1;
     return authenticated_raw_key(c,authorization+7);
 }
-static int rate_permit(yag_config *c,int key_index) {
+static int rate_permit(yag_config *c,int key_index,unsigned *retry_after) {
     if(!c->rate_limit_per_minute)return 1;
     time_t now=time(NULL);
     pthread_mutex_lock(&c->lock);
@@ -57,8 +57,25 @@ static int rate_permit(yag_config *c,int key_index) {
     }
     int permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
     if(permit)c->rate_counts[key_index]++;
+    else *retry_after=(unsigned)(60-(now-c->rate_windows[key_index]));
     pthread_mutex_unlock(&c->lock);
     return permit;
+}
+/* Fixed-window limits expose the earliest retry time without revealing
+ * credential identity or another key's rate counter. */
+static void rate_limited(int fd,unsigned retry_after) {
+    static const char body[]="{\"error\":{\"message\":\"Rate limit exceeded\"}}";
+    char header[512];
+    int n=snprintf(header,sizeof header,
+        "HTTP/1.1 429 Too Many Requests\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %zu\r\n"
+        "Cache-Control: no-store\r\n"
+        "X-Content-Type-Options: nosniff\r\n"
+        "Retry-After: %u\r\n"
+        "Connection: close\r\n\r\n",sizeof(body)-1,retry_after);
+    if(n>0 && (size_t)n<sizeof header && !send_all(fd,header,(size_t)n))
+        send_all(fd,body,sizeof(body)-1);
 }
 static void increment(yag_config *cfg,unsigned long *counter) {
     pthread_mutex_lock(&cfg->lock);
@@ -302,7 +319,10 @@ static void handle(int fd,yag_config *c) {
             (!strcmp(uri,"/v1/models") || !strncmp(uri,"/v1/models/",11))?2u:!strncmp(uri,"/v1/",4)?1u:4u;
         unsigned scope=key_index==0?15u:c->extra_key_scopes[key_index-1];
         if(!(scope&required)){error(fd,403,"Insufficient API key scope");goto done;}
-        if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
+        unsigned retry_after=0;
+        if(!rate_permit(c,key_index,&retry_after)){
+            rate_limited(fd,retry_after);goto done;
+        }
     }
     /* Send 100 Continue only AFTER authenticating and checking request size. */
     if(expect_continue && !strcmp(method,"POST") && used-header_len<length) {
