@@ -122,6 +122,42 @@ def exercise(base, key, model, protocol, tools, stream, opener=urlopen):
         if second['type']!='message':raise RuntimeError('Anthropic tool replay failed')
     print('[PASS]',protocol,'tool-replay',flush=True)
 
+def exercise_optional_endpoint(base, key, model, endpoint, payload, opener=urlopen):
+    """Opt-in live compatibility check; never print model output or credentials."""
+    headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+    request=Request(base+'/v1/'+endpoint,
+                    data=json.dumps(dict(payload,model=model)).encode(),
+                    headers=headers,method='POST')
+    try:
+        with opener(request,timeout=90) as response:
+            raw=response.read(8*1024*1024+1)
+            if len(raw)>8*1024*1024:
+                raise RuntimeError('Response exceeded 8 MiB')
+            result=json.loads(raw)
+    except HTTPError as exc:
+        raise RuntimeError('HTTP '+str(exc.code)+' at '+endpoint) from None
+    except URLError as exc:
+        raise RuntimeError('Connection error at '+endpoint+': '+
+                           type(exc.reason).__name__) from None
+    if endpoint=='embeddings':
+        data=result.get('data')
+        if result.get('object')!='list' or not isinstance(data,list) or not data:
+            raise RuntimeError('Embedding result missing data list')
+        vector=data[0].get('embedding')
+        if not isinstance(vector,list) or not vector or not all(
+            isinstance(value,(int,float)) and not isinstance(value,bool)
+            for value in vector):
+            raise RuntimeError('Embedding result missing numeric vector')
+    elif endpoint=='completions':
+        if result.get('object')!='text_completion' or not result.get('choices'):
+            raise RuntimeError('Completion result missing choices')
+        if not isinstance(result['choices'][0].get('text'),str):
+            raise RuntimeError('Completion result missing text')
+    else:
+        raise ValueError('Unsupported optional protocol')
+    print('[PASS]',endpoint,'text' if endpoint=='completions' else 'vector',
+          flush=True)
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url',default='http://127.0.0.1:8080')
