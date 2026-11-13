@@ -4,6 +4,8 @@
 !host/**
 !third_party/
 !third_party/**
+!hub/
+!hub/**
 !console/
 !console/package.json
 !console/package-lock.json
