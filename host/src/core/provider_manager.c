@@ -84,6 +84,13 @@ static int safe_url(const char *url) {
         return (v>>24)==10 || (v>>24)==127 ||
                (v>>20)==0xac1 || (v>>16)==0xc0a8;
     }
+    /* Reject numeric but non-canonical IPv4 encodings (e.g. integer hosts).
+     * Otherwise some DNS/URL parsers can interpret public IPv4 addresses. */
+    int has_letter=0;
+    for(size_t i=0;i<hostlen;i++)
+        if((hostname[i]>='a'&&hostname[i]<='z') ||
+           (hostname[i]>='A'&&hostname[i]<='Z'))has_letter=1;
+    if(!has_letter)return 0;
     /* A DNS name with an external/public suffix is not allowed over HTTP. */
     const char *dot=strchr(hostname,'.');
     if(!dot)return 1;
@@ -122,6 +129,7 @@ static int parse_replicas(const char *json,size_t length,
             (models && (!yyjson_is_arr(models) ||
                 yyjson_arr_size(models)>32)) ||
             (key && (!yyjson_is_str(key) ||
+                yyjson_get_len(key)!=strlen(yyjson_get_str(key)) ||
                 !private_key_reference(yyjson_get_str(key)))) ||
             (enabled && !yyjson_is_bool(enabled)) ||
             (priority && (!yyjson_is_uint(priority) ||
@@ -316,6 +324,10 @@ static void apply_providers(int fd,yag_config *cfg,const char *body,size_t len) 
     }
     char *json=serialize_pool(candidate,count);
     if(!json){provider_pool_free(candidate,count);fail(fd,500,"Out of memory");return;}
+    if(strlen(json)>PROVIDER_STORE_MAX) {
+        provider_pool_free(candidate,count);free(json);
+        fail(fd,413,"Provider configuration exceeds persistent store limit");return;
+    }
     pthread_mutex_lock(&cfg->lock);
     int busy=cfg->default_pool_active!=0;
     for(size_t i=0;i<cfg->pool_count;i++)if(cfg->pool[i].active)busy=1;
