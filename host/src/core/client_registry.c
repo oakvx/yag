@@ -98,7 +98,7 @@ static int save_locked(const yag_config *cfg) {
             && yyjson_mut_obj_add_bool(d,entry,"managed",cfg->key_managed[i]!=0)
             && yyjson_mut_obj_add_bool(d,entry,"enabled",cfg->key_enabled[i]!=0)
             && yyjson_mut_obj_add_str(d,entry,"scope",scope_name(cfg->extra_key_scopes[i]))
-            && yyjson_mut_obj_add_str(d,entry,"name",
+            && yyjson_mut_obj_add_strcpy(d,entry,"name",
                  cfg->key_labels[i]?cfg->key_labels[i]:fallback)
             && (!cfg->key_managed[i]
                 || yyjson_mut_obj_add_str(d,entry,"key",cfg->extra_keys[i]))
@@ -230,7 +230,7 @@ static int serialize_list(int fd,yag_config *cfg) {
         snprintf(fallback,sizeof fallback,"client-%02zu",i+1);
         ok=item
             && yyjson_mut_obj_add_uint(d,item,"id",i+1)
-            && yyjson_mut_obj_add_str(d,item,"name",cfg->key_labels[i]?
+            && yyjson_mut_obj_add_strcpy(d,item,"name",cfg->key_labels[i]?
                cfg->key_labels[i]:fallback)
             && yyjson_mut_obj_add_str(d,item,"scope",
                scope_name(cfg->extra_key_scopes[i]))
