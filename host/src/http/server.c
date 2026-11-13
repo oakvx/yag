@@ -48,16 +48,20 @@ static int authenticated_key(const yag_config *c,const char *authorization) {
     return authenticated_raw_key(c,authorization+7);
 }
 static int rate_permit(yag_config *c,int key_index,unsigned *retry_after) {
-    if(!c->rate_limit_per_minute)return 1;
-    time_t now=time(NULL);
+    int permit=1;
     pthread_mutex_lock(&c->lock);
-    if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
-        c->rate_windows[key_index]=now;
-        c->rate_counts[key_index]=0;
+    if(c->rate_limit_per_minute) {
+        time_t now=time(NULL);
+        if(now<c->rate_windows[key_index] || now-c->rate_windows[key_index]>=60) {
+            c->rate_windows[key_index]=now;
+            c->rate_counts[key_index]=0;
+        }
+        permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
+        if(permit)c->rate_counts[key_index]++;
+        else *retry_after=(unsigned)(60-(now-c->rate_windows[key_index]));
     }
-    int permit=c->rate_counts[key_index]<c->rate_limit_per_minute;
-    if(permit)c->rate_counts[key_index]++;
-    else *retry_after=(unsigned)(60-(now-c->rate_windows[key_index]));
+    if(permit)c->key_accepted_requests[key_index]++;
+    else c->key_rate_limited_requests[key_index]++;
     pthread_mutex_unlock(&c->lock);
     return permit;
 }
@@ -96,6 +100,51 @@ static void metrics(int fd,yag_config *cfg) {
     pthread_mutex_unlock(&cfg->lock);
     if(n<0 || (size_t)n>=sizeof out)error(fd,500,"Could not serialize metrics");
     else reply(fd,200,"application/json",out);
+}
+/* Aggregate per-key LAN activity. Never serialize credentials, IP addresses,
+ * request bodies, prompts, or token contents. Key labels are positional. */
+static const char *scope_label(unsigned scope) {
+    switch(scope) {
+        case 1: return "inference";
+        case 2: return "models";
+        case 3: return "inference+models";
+        case 4: return "monitor";
+        case 15: return "all";
+        default: return "unknown";
+    }
+}
+static void clients_status(int fd,yag_config *cfg) {
+    yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
+    if(!d){error(fd,500,"Out of memory");return;}
+    yyjson_mut_val *root=yyjson_mut_obj(d);
+    yyjson_mut_val *items=root?yyjson_mut_obj_add_arr(d,root,"data"):NULL;
+    int ok=root && items
+        && yyjson_mut_obj_add_str(d,root,"object","gateway.clients")
+        && yyjson_mut_obj_add_uint(d,root,"rate_limit_per_minute",cfg->rate_limit_per_minute);
+    pthread_mutex_lock(&cfg->lock);
+    for(size_t i=0;ok && i<=cfg->extra_key_count;i++) {
+        char id[32];
+        if(i==0)snprintf(id,sizeof id,"primary");
+        else snprintf(id,sizeof id,"client-%02zu",i);
+        yyjson_mut_val *entry=yyjson_mut_obj(d);
+        unsigned scope=i==0?15u:cfg->extra_key_scopes[i-1];
+        ok=entry
+            && yyjson_mut_obj_add_strcpy(d,entry,"id",id)
+            && yyjson_mut_obj_add_str(d,entry,"scope",scope_label(scope))
+            && yyjson_mut_obj_add_uint(d,entry,"accepted_requests",
+                cfg->key_accepted_requests[i])
+            && yyjson_mut_obj_add_uint(d,entry,"rate_limited_requests",
+                cfg->key_rate_limited_requests[i])
+            && yyjson_mut_arr_add_val(items,entry);
+    }
+    pthread_mutex_unlock(&cfg->lock);
+    if(!ok){yyjson_mut_doc_free(d);error(fd,500,"Out of memory");return;}
+    yyjson_mut_doc_set_root(d,root);
+    char *serialized=yyjson_mut_write(d,0,NULL);
+    if(serialized)reply(fd,200,"application/json",serialized);
+    else error(fd,500,"Could not serialize client metrics");
+    free(serialized);
+    yyjson_mut_doc_free(d);
 }
 /* Resolve every asset path component without following symlinks. Merely
  * rejecting ".." is insufficient: an asset-tree symlink can escape its root. */
@@ -380,6 +429,7 @@ static void handle(int fd,yag_config *c) {
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
+    else if(!strcmp(uri,"/api/clients") && !strcmp(method,"GET")) clients_status(fd,c);
     else if(!strcmp(uri,"/api/capabilities") && !strcmp(method,"GET")) capabilities(fd,c);
     else if(!strcmp(uri,"/api/models/capabilities") && !strcmp(method,"GET")) model_capabilities_handle(fd,c);
     else if(!strcmp(uri,"/api/providers/status") && !strcmp(method,"GET")) providers_status_handle(fd,c);

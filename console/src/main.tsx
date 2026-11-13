@@ -14,6 +14,7 @@ type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;suc
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
 type Metrics = { chat_requests:number; completions_requests:number; embeddings_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type ClientUsage = {id:string;scope:string;accepted_requests:number;rate_limited_requests:number}
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
@@ -67,7 +68,7 @@ function App() {
         {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
         {page === 'Models' && <Models apiKey={key} models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
-        {page === 'Requests' && <Requests status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
+        {page === 'Requests' && <Requests apiKey={key} status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
       </div><footer><span>YAG <span className="footer-sep">/</span> ONE HOST. MULTIPLE MODELS. EVERY INTERFACE.</span><span>SELF-HOSTED INFERENCE GATEWAY</span></footer>
     </main>
@@ -251,7 +252,7 @@ function Integrations({model}: {model: string}) {
         </div>
       </section></div></>
 }
-function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
+function Requests({apiKey,status,metrics,metricsError,lastUpdated,refresh}: {apiKey:string;status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
   return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Aggregate in-memory request counts without storing prompts or responses."
     action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
     <div className="metrics">
@@ -266,9 +267,46 @@ function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Sta
       <div className="setting-row"><div><b>Provider probes</b><small>POST /api/provider/check requests</small></div><b>{metrics?metrics.provider_check_requests.toLocaleString():'—'}</b></div>
       <div className="setting-row"><div><b>Active HTTP connections</b><small>Includes the status poll itself</small></div><b>{status?status.active_connections.toLocaleString():'—'}</b></div>
     </section>
+    <ClientUsagePanel apiKey={apiKey}/>
     {metricsError && <div className="info-block"><CircleHelp size={16}/><span>{metricsError}</span></div>}
     <div className="info-block"><LockKeyhole size={16}/><span>No prompt text, response bodies or request histories are persisted. Metrics are counts of accepted API requests, including ones that later fail. {lastUpdated ? 'Last refreshed '+lastUpdated.toLocaleTimeString() : ''}</span></div>
   </>
+}
+function ClientUsagePanel({apiKey}: {apiKey:string}) {
+  const [rows,setRows]=useState<ClientUsage[]>([])
+  const [limit,setLimit]=useState(0)
+  const [err,setErr]=useState('')
+  const reload=useCallback(async()=>{
+    if(!apiKey){setRows([]);setErr('');return}
+    try {
+      const response=await api('/api/clients',apiKey)
+      const data=await response.json()
+      if(!Array.isArray(data.data))throw new Error('Invalid client usage response')
+      setRows(data.data)
+      setLimit(data.rate_limit_per_minute)
+      setErr('')
+    } catch(e) {
+      setRows([])
+      setErr((e as Error).message)
+    }
+  },[apiKey])
+  useEffect(()=>{
+    void reload()
+    const timer=setInterval(()=>void reload(),30000)
+    return ()=>clearInterval(timer)
+  },[reload])
+  return <section className="panel"><div className="panel-head">
+    <div><h2>LAN client usage</h2><p>Request counts by API key slot, without storing client IPs, prompts or secrets.</p></div>
+    <button className="outline-button small" onClick={()=>void reload()}>Refresh</button></div>
+    <div className="operations-meta">Per-key request limit: {limit ? limit+'/minute' : 'disabled'} · Counters reset on restart</div>
+    {rows.length ? <div className="provider-table-wrap"><table className="provider-table">
+      <thead><tr><th>CLIENT</th><th>PERMISSIONS</th><th>ACCEPTED</th><th>RATE LIMITED</th></tr></thead>
+      <tbody>{rows.map(row=><tr key={row.id}><td><b>{row.id}</b></td>
+        <td>{row.scope}</td><td>{row.accepted_requests.toLocaleString()}</td>
+        <td>{row.rate_limited_requests.toLocaleString()}</td></tr>)}</tbody>
+    </table></div> : <div className="tiny-note">{err || 'Add a monitoring-enabled API key to view client usage.'}</div>}
+    <div className="tiny-note">Client labels correspond to the order of YAG_EXTRA_API_KEYS. Counts include authenticated requests accepted before any upstream outcome; they are not token or GPU usage.</div>
+  </section>
 }
 function Settings({keyDraft,setKeyDraft,saveKey,connected}: {keyDraft:string;setKeyDraft:(s:string)=>void;saveKey:(e:React.FormEvent)=>void;connected:boolean}) { return <><PageHead eyebrow="CONFIGURATION" title="Settings" description="Manage your Console connection to the gateway."/><div className="settings-layout"><section className="panel"><div className="panel-head"><div><h2>API authentication</h2><p>Use the API key configured on your YAG Host.</p></div><KeyRound size={17} className="muted"/></div><form className="settings-form" onSubmit={saveKey}><label htmlFor="api-key">YAG API KEY</label><input id="api-key" type="password" autoComplete="off" value={keyDraft} onChange={e => setKeyDraft(e.target.value)} placeholder="Enter your gateway API key"/><p>The key is kept in session storage for this tab and sent only to this gateway. Clear it by saving an empty value.</p><button className="primary-button" type="submit">Save connection</button>{connected && <span className="saved-indicator"><Check size={14}/> Key saved for this session</span>}</form></section><section className="panel"><div className="panel-head"><div><h2>Host configuration</h2><p>Managed on the machine running YAG.</p></div></div><div className="settings-body"><div className="setting-row"><div><b>Network &amp; provider</b><small>Configure via host environment variables</small></div><span className="tag">HOST MANAGED</span></div><div className="setting-row"><div><b>Credentials &amp; access</b><small>Restart the host to rotate the API key</small></div><span className="tag">HOST MANAGED</span></div><div className="security-note"><ShieldCheck size={16}/><span>YAG binds to localhost by default. Use a trusted TLS reverse proxy and firewall before exposing it on your network.</span></div></div></section></div></> }
 
