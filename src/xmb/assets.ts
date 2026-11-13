@@ -13,7 +13,7 @@ export function hasOptionalAsset(path: string): boolean {
 export function publicAsset(path: string): string {
   const clean = path.replace(/^\/+/, "");
   if (window.location.protocol === "file:") return new URL(clean, window.location.href).href;
-  const base = import.meta.env.BASE_URL || "/";
+  const base = import.meta.env.VITE_PUBLIC_BASE || import.meta.env.BASE_URL || "/";
   return new URL(`${base.endsWith("/") ? base : `${base}/`}${clean}`, window.location.origin).href;
 }
 
