@@ -207,6 +207,24 @@ class Integration(unittest.TestCase):
             self.assertNotEqual(outcome.returncode,0,scopes)
             self.assertIn(b'YAG_EXTRA_KEY_SCOPES',outcome.stderr)
 
+    def test_duplicate_api_keys_are_rejected(self):
+        # The same secret must never acquire a different privilege because
+        # it appears again in a later positional scope entry.
+        duplicate_extra='repeated-extra-key-12345'
+        cases=[
+            (KEY,'models'),
+            (f'{duplicate_extra},{duplicate_extra}','models,all'),
+        ]
+        for extra_keys,scopes in cases:
+            with self.subTest(scopes=scopes):
+                env=dict(os.environ,YAG_API_KEY=KEY,
+                    YAG_EXTRA_API_KEYS=extra_keys,
+                    YAG_EXTRA_KEY_SCOPES=scopes)
+                outcome=subprocess.run([sys.argv[1]],env=env,
+                    capture_output=True,timeout=2)
+                self.assertNotEqual(outcome.returncode,0)
+                self.assertIn(b'YAG_EXTRA_API_KEYS',outcome.stderr)
+
     def test_valid_scope_policy_starts_and_enforces_permissions(self):
         # Isolate this subprocess from the fixture gateway's listening port.
         # A valid policy should start, not hang in a test expecting an exit.
