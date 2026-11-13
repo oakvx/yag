@@ -22,6 +22,56 @@ static int valid_url(const char *url) {
     return n && (!strncmp(url,"http://",7) || !strncmp(url,"https://",8))
         && !strpbrk(url,"\r\n?#") && url[n-1]!='/';
 }
+/* All pool backends must expose the SAME model IDs and semantics.
+ * The default upstream remains the model-discovery authority. Optional
+ * replicas receive inference only and are selected by least outstanding
+ * requests with a small passive health cooldown. */
+static int load_pool(yag_config *cfg) {
+    const char *raw=getenv("YAG_UPSTREAM_POOL");
+    if(!raw || !*raw)return 0;
+    yyjson_doc *doc=yyjson_read(raw,strlen(raw),0);
+    yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+    int ok=yyjson_is_arr(root) && yyjson_arr_size(root)<=8;
+    if(ok)for(size_t i=0;i<yyjson_arr_size(root);i++) {
+        yyjson_val *entry=yyjson_arr_get(root,i);
+        yyjson_val *url=yyjson_obj_get(entry,"url");
+        yyjson_val *key=yyjson_obj_get(entry,"key_env");
+        if(!yyjson_is_obj(entry) || !yyjson_is_str(url)
+            || !yyjson_get_len(url) || yyjson_get_len(url)>1024
+            || strlen(yyjson_get_str(url))!=yyjson_get_len(url)
+            || !valid_url(yyjson_get_str(url))
+            || (key && (!yyjson_is_str(key) || !yyjson_get_len(key)
+                || strlen(yyjson_get_str(key))!=yyjson_get_len(key)))
+            || yyjson_obj_size(entry)!=(size_t)(key?2:1)
+            || !strcmp(yyjson_get_str(url),cfg->upstream)) {
+            ok=0;break;
+        }
+        for(size_t j=0;j<cfg->pool_count;j++)
+            if(!strcmp(yyjson_get_str(url),cfg->pool[j].url))ok=0;
+        if(!ok)break;
+        const char *secret="";
+        if(key) {
+            const char *name=yyjson_get_str(key);
+            if(!((*name>='A'&&*name<='Z') ||
+                (*name>='a'&&*name<='z') || *name=='_')){ok=0;break;}
+            for(const char *p=name+1;*p;p++)
+                if(!((*p>='A'&&*p<='Z') || (*p>='a'&&*p<='z')
+                    || (*p>='0'&&*p<='9') || *p=='_'))ok=0;
+            if(!ok)break;
+            secret=getenv(name);
+            if(!secret || strpbrk(secret,"\r\n")){ok=0;break;}
+        }
+        yag_pool_backend *backend=&cfg->pool[cfg->pool_count];
+        backend->url=strdup(yyjson_get_str(url));
+        backend->key=secret;
+        if(!backend->url){ok=0;break;}
+        cfg->pool_count++;
+    }
+    yyjson_doc_free(doc);
+    if(!ok)fprintf(stderr,
+        "YAG_UPSTREAM_POOL requires up to 8 distinct OpenAI-compatible URL replicas and optional key_env\n");
+    return ok?0:-1;
+}
 static int load_routes(yag_config *c) {
     const char *raw=getenv("YAG_MODEL_ROUTES");
     if(!raw || !*raw)return 0;
@@ -265,7 +315,7 @@ int config_load(yag_config *c) {
     c->static_key_count=c->extra_key_count;
     for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
 
-    if (load_routes(c) || load_capabilities(c)) return -1;
+    if (load_routes(c) || load_pool(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
@@ -303,6 +353,7 @@ void config_free(yag_config *c) {
     for(size_t i=0;i<c->route_count;i++) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
+    for(size_t i=0;i<c->pool_count;i++)free(c->pool[i].url);
     free(c->extra_keys_storage);
     free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
