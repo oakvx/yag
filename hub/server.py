@@ -138,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
         if len(auth) != 1 or not auth[0].startswith("Bearer ") or len(auth[0]) > 530:
             return None
         token = auth[0][7:]
-        if hmac.compare_digest(token, self.admin_key):
+        if hmac.compare_digest(token.encode("utf-8"), self.admin_key.encode("utf-8")):
             return {"id": 0, "name": "admin", "priority": 2,
                     "max_parallel": 8, "scope": "all", "admin": True}
         client = self.state.authenticate(token)
