@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>YAG · AI Datacenter</title>
+  <link rel="stylesheet" href="/hub/style.css">
+  <script src="/hub/app.js" defer></script>
+</head>
+<body>
+  <header class="top"><div class="brand"><span class="mark">Y</span><div><strong>YAG CONTROL</strong><small>LOCAL AI DATACENTER</small></div></div>
+    <div class="meta"><span id="connection">Disconnected</span><button id="refresh" class="ghost">Refresh</button><button id="logout" class="ghost">Lock</button></div>
+  </header>
+  <main class="shell">
+    <section class="intro"><div><span class="eyebrow">OPERATIONS / LAN</span><h1>AI Datacenter</h1><p>Models, devices and inference capacity. One central control plane.</p></div><div class="intro-meta">ADMINISTRATOR ONLY <span class="dot"></span> PRIVATE HTTPS</div></section>
+    <section class="login panel" id="login"><div><h2>Administrative access</h2><p>Enter the primary YAG key from <code>.env.lan</code>. Credentials remain in this browser tab only.</p></div><form id="login-form"><label for="admin-key">PRIMARY GATEWAY KEY</label><div class="inline"><input id="admin-key" type="password" required autocomplete="off" placeholder="API key"><button type="submit" class="primary">Connect</button></div></form></section>
+    <section id="workspace" hidden>
+      <div id="banner" role="status" aria-live="polite"></div>
+      <div class="stats" id="stats"><div class="stat"><span>GATEWAY</span><strong>—</strong></div></div>
+      <div class="columns">
+        <section class="panel"><header class="panel-heading"><div><span class="eyebrow">01 · OLLAMA</span><h2>Model inventory</h2><p>Install or remove models on the configured central Ollama runtime.</p></div><button id="reload-models" class="ghost">Refresh</button></header>
+          <form id="pull-model" class="inline actionbar"><input name="model" aria-label="Model name" placeholder="Model ID, e.g. llama3.2" required><button class="primary" type="submit">Pull model</button></form>
+          <div id="models" class="items"><p class="placeholder">Not connected</p></div><div id="jobs" class="hint"></div>
+        </section>
+        <section class="panel"><header class="panel-heading"><div><span class="eyebrow">02 · SECURITY</span><h2>Client registry</h2><p>Issue, rename, enable/disable and revoke keys without restarting YAG.</p></div></header>
+          <form id="add-client" class="actionbar"><label>DEVICE NAME</label><div class="inline"><input name="name" required maxlength="48" placeholder="workstation-04"><button class="primary" type="submit">Create key</button></div></form>
+          <div id="issued-key" hidden><strong>New API key — shown once</strong><code id="issued-token"></code><button id="copy-issued" class="ghost">Copy key</button><p>Save it securely. The key cannot be retrieved again.</p></div>
+          <div id="clients" class="items"><p class="placeholder">Not connected</p></div>
+        </section>
+        <section class="panel"><header class="panel-heading"><div><span class="eyebrow">03 · FLEET</span><h2>Additional nodes</h2><p>Route specific model IDs to private secondary inference hosts.</p></div></header>
+          <form id="add-node" class="actionbar"><label>NODE NAME</label><input name="name" placeholder="gpu-server-02" maxlength="48" required><label>OPENAI API URL · PRIVATE IP ONLY</label><input name="url" placeholder="http://192.168.1.60:11434/v1" required><label>MODEL IDS · COMMA SEPARATED</label><input name="models" placeholder="llama3.2, qwen2.5" required><button class="primary" type="submit">Add node</button></form>
+          <div id="nodes" class="items"><p class="placeholder">Not connected</p></div>
+        </section>
+        <section class="panel"><header class="panel-heading"><div><span class="eyebrow">04 · OPERATIONS</span><h2>Telemetry & backup</h2><p>Bounded concurrency, CPU/RAM and model VRAM footprint.</p></div><button id="backup" class="ghost">Download backup</button></header>
+          <div id="hardware" class="items"><p class="placeholder">Not connected</p></div>
+          <p class="hint">CPU/RAM reflect the host view visible from the container. VRAM reports Ollama's loaded model allocation, not GPU utilization. Counters reset when processes restart.</p>
+          <p class="hint">The backup contains configuration and hashed client keys. Store it securely; the primary administrator key is not included.</p>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer>YAG · AI CONTROL PLANE <span>STREAMS REMAIN PRIVATE · NO PROMPT LOGGING</span></footer>
+</body>
+</html>
