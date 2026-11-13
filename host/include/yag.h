@@ -53,6 +53,7 @@ typedef struct {
     unsigned active;
     unsigned long total;
     unsigned long chat_requests, completions_requests, embeddings_requests;
+    unsigned long image_requests, speech_requests;
     unsigned long responses_requests, anthropic_requests;
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
@@ -60,6 +61,7 @@ typedef struct {
     int enforce_model_capabilities;
     unsigned circuit_threshold, circuit_cooldown_seconds;
     unsigned header_deadline_seconds, body_deadline_seconds;
+    unsigned max_body_bytes;
     yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
