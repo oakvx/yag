@@ -1,6 +1,9 @@
 {
     # LAN stack uses a static config. Do not expose Caddy's admin endpoint.
     admin off
+    # TLS clients connecting to an IP literal often omit SNI. Select the
+    # certificate for our explicit LAN address rather than aborting TLS.
+    default_sni {$YAG_LAN_IP}
 }
 
 # The host publishes TCP 443 ONLY on the explicit private LAN address.
