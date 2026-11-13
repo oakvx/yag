@@ -75,9 +75,12 @@ class ResourcePool(unittest.TestCase):
 
     def launch(self,replica=None,**changes):
         self.stop()
+        if replica is not None and "key_env" not in replica:
+            replica={**replica,"key_env":"YAG_POOL_KEY_1"}
         config={
             "YAG_BIND":"127.0.0.1","YAG_PORT":str(self.port),
             "YAG_API_KEY":KEY,"YAG_UPSTREAM_KEY":UPKEY,
+            "YAG_POOL_KEY_1":UPKEY,
             "YAG_UPSTREAM_URL":self.primary_url,
             "YAG_UPSTREAM_POOL":json.dumps([replica]) if replica else "[]",
             "YAG_PRIMARY_MAX_INFLIGHT":"1",
