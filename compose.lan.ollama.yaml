@@ -1,0 +1,33 @@
+# Optional overlay: run Ollama alongside YAG in the central Docker stack.
+# This mode is preferable for a new server: Ollama has NO published host port.
+# docker compose --env-file .env.lan -f compose.yaml -f compose.lan.yaml \
+#   -f compose.lan.ollama.yaml up -d --build
+services:
+  yag:
+    environment:
+      YAG_UPSTREAM_URL: http://ollama:11434/v1
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ollama:
+    image: ${YAG_OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    volumes:
+      - yag-ollama-models:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 45s
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 1024
+    stop_grace_period: 120s
+
+volumes:
+  yag-ollama-models:
