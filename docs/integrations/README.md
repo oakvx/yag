@@ -1,5 +1,14 @@
 # Integrations
 
+## Ollama on Colibri
+
+For a single local AI exposed to multiple IDEs, scripts and automations,
+follow the [Colibri / Ollama universal gateway guide](ollama-colibri.md).
+YAG accepts OpenAI-compatible Chat, legacy Completions and Embeddings requests
+in addition to its bounded Responses and Anthropic adapters. Use a separate
+embedding-capable model for RAG workloads; chat models are not necessarily
+embedding models.
+
 ## OpenAI-compatible applications
 
 Set the SDK base URL to `http://127.0.0.1:8080/v1` (or the URL of your TLS-protected reverse proxy), set its API key to `YAG_API_KEY`, and choose a model ID returned by `GET /v1/models`. This is a Chat Completions proxy; support for individual request parameters, streaming and tool calls depends on the upstream.
