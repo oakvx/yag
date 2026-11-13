@@ -80,6 +80,15 @@ export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 - Rotating or revoking keys requires process restart; these are **not**
   user accounts or an online identity administration API.
 
+## Strict inbound request parsing
+
+YAG accepts only HTTP/1.0 and HTTP/1.1 with exactly one ASCII space
+between request-line tokens. It rejects ambiguous whitespace, control bytes
+in header values (except horizontal tab), duplicate or empty Host headers,
+and conflicting Authorization / X-API-Key credentials. These checks apply
+before request routing and do not replace a hardened reverse proxy.
+Use standard HTTP clients rather than crafting noncanonical request lines.
+
 ## Hard limits
 
 Header deadline defaults to 10 seconds and body deadline to 30 seconds

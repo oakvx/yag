@@ -41,3 +41,11 @@ Run the [opt-in real-model qualification script](live-model.md) or the [isolated
 ## Codex and Claude Code — mock CLI tool cycles verified
 
 Codex CLI 0.167.0 and Claude Code CLI both completed streaming text and local tool execution cycles against a deterministic mock backend. See [Codex](codex.md) and [Claude Code](claude-code.md) for setup and limitations. These tests do not establish compatibility with real inference models; YAG never executes client tools.
+
+## HTTP request interoperability
+
+Use a single bearer Authorization header for OpenAI-compatible endpoints.
+For Anthropic Messages endpoints, either bearer Authorization or X-API-Key
+may be used, but not both on the same request. HTTP/1.x request-line tokens
+must be separated by exactly one ASCII space; avoid injecting control bytes
+or duplicate Host headers from custom SDK transports.

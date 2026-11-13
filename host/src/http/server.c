@@ -252,7 +252,11 @@ static void handle(int fd,yag_config *c) {
         int n=recv_before_deadline(fd,buf+used,MAX_HEADER-used,&header_start,c->header_deadline_seconds);
         if(n==-2){error(fd,408,"Request headers timed out");goto done;}
         if(n<=0)goto done;
-        used+=(size_t)n;buf[used]=0;
+        used+=(size_t)n;
+        /* Detect NUL before any C-string search. Otherwise a NUL followed
+         * by valid CRLF framing can cause a spurious header timeout. */
+        if(memchr(buf,0,used)){error(fd,400,"Invalid headers");goto done;}
+        buf[used]=0;
         char *p=strstr(buf,"\r\n\r\n");
         if(p){header_len=(size_t)(p-buf)+4;break;}
     }
@@ -260,6 +264,17 @@ static void handle(int fd,yag_config *c) {
     /* Reject NUL and malformed framing to avoid ambiguous request interpretation. */
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
+    /* Accept exactly one SP between request-line tokens. Tabs, controls and
+     * ambiguous whitespace must never be normalized differently by a proxy. */
+    unsigned spaces=0;
+    int invalid_request_line=0;
+    for(const unsigned char *p=(const unsigned char *)buf;*p;p++) {
+        if(*p==' ')spaces++;
+        else if(*p<0x20 || *p==0x7f)invalid_request_line=1;
+    }
+    if(spaces!=2 || invalid_request_line) {
+        error(fd,400,"Invalid request line");goto done;
+    }
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
     /* Claude Code sends POST /v1/messages?beta=true.
      * Match the API path separately and support only the known query marker;
@@ -278,7 +293,7 @@ static void handle(int fd,yag_config *c) {
         else fprintf(stderr,"YAG request method=%s route=other has_query=%d\n",
             method,strchr(uri,'?')!=NULL);
     }
-    size_t length=0; int have_length=0,have_auth=0,have_native_key=0,have_expect=0,expect_continue=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
+    size_t length=0; int have_length=0,have_host=0,have_auth=0,have_native_key=0,have_expect=0,expect_continue=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0;
         /* RFC 9110 field names contain token characters only; rejecting whitespace
          * before ':' avoids proxy/backend framing disagreements. */
@@ -289,6 +304,13 @@ static void handle(int fd,yag_config *c) {
             }
         }
         char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
+        /* Header values may contain HTAB, but never bare CR/LF, DEL or
+         * other control bytes. Reject ambiguous upstream/proxy framing. */
+        for(const unsigned char *q=(const unsigned char *)v;*q;q++) {
+            if((*q<0x20 && *q!='\t') || *q==0x7f) {
+                error(fd,400,"Invalid header value");goto done;
+            }
+        }
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
         else if(!strcasecmp(line,"Transfer-Encoding")) transfer_encoding=1;
         else if(!strcasecmp(line,"Expect")) {
@@ -296,6 +318,9 @@ static void handle(int fd,yag_config *c) {
                 error(fd,417,"Unsupported expectation");goto done;
             }
             expect_continue=1;
+        }
+        else if(!strcasecmp(line,"Host")) {
+            if(have_host++ || !*v){error(fd,400,"Invalid Host header");goto done;}
         }
         else if(!strcasecmp(line,"Authorization")) { if(have_auth++){error(fd,400,"Duplicate authorization");goto done;} auth=v; }
         else if(!strcasecmp(line,"X-API-Key")) { if(have_native_key++){error(fd,400,"Duplicate API key");goto done;} native_key=v; }
@@ -308,7 +333,7 @@ static void handle(int fd,yag_config *c) {
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(api) {
         int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
-        if(is_messages && auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
+        if(auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
         int key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
