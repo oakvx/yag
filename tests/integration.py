@@ -452,6 +452,41 @@ class Integration(unittest.TestCase):
             valid,key='models-only-key-123456')[0],403)
         self.assertEqual(request(self.port,'GET','/v1/embeddings')[0],404)
 
+    def test_legacy_completions_proxy_streaming_and_routing(self):
+        payload={'model':'glm-test','prompt':'Say hello','temperature':0.2}
+        status,_,body=request(self.port,'POST','/v1/completions',payload)
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertEqual(response['object'],'text_completion')
+        self.assertEqual(response['choices'][0]['text'],'Hello')
+        self.assertEqual(response['request'],payload)
+        stream=dict(payload,stream=True)
+        status,headers,body=request(self.port,'POST','/v1/completions',stream)
+        self.assertEqual(status,200,body)
+        self.assertIn('text/event-stream',headers['Content-Type'])
+        self.assertIn(b'data: [DONE]',body)
+        routed={'model':'routed-model','prompt':'Hello'}
+        status,_,body=request(self.port,'POST','/v1/completions',routed)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['received'],routed)
+
+    def test_legacy_completions_validate_and_authenticate(self):
+        invalid=[{}, {'model':'glm-test'}, {'model':'','prompt':'hi'},
+                 {'model':'glm-test','prompt':''},
+                 {'model':'glm-test','prompt':[]},
+                 {'model':'glm-test','prompt':False},
+                 {'model':1,'prompt':'hi'}]
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                self.assertEqual(request(self.port,'POST','/v1/completions',
+                    payload)[0],400)
+        valid={'model':'glm-test','prompt':'Hello'}
+        self.assertEqual(request(self.port,'POST','/v1/completions',
+            valid,key=None)[0],401)
+        self.assertEqual(request(self.port,'POST','/v1/completions',
+            valid,key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'GET','/v1/completions')[0],404)
+
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
         status,_,body=request(self.port,'POST','/v1/chat/completions',payload); self.assertEqual(status,200); obj=json.loads(body);self.assertEqual(obj['request'],payload);self.assertEqual(obj['choices'][0]['message']['tool_calls'][0]['id'],'call_1')
