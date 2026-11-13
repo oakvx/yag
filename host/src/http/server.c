@@ -31,7 +31,7 @@ static void request_stop(int signum) {(void)signum;stop_requested=1;}
 typedef struct { int fd; yag_config *cfg; } client;
 int send_all(int fd,const void *data,size_t len) { const char *p=data; while(len){ ssize_t n=send(fd,p,len,YAG_SEND_FLAGS); if(n<0 && errno==EINTR) continue; if(n<=0) return -1; p+=n; len-=(size_t)n; } return 0; }
 void reply(int fd,int status,const char *type,const char *body) {
-    char h[512]; size_t len=strlen(body); int n=snprintf(h,sizeof h,"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",status,status==200?"OK":"Error",type,len);
+    char h[512]; size_t len=strlen(body); int n=snprintf(h,sizeof h,"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",status,status==200?"OK":status==201?"Created":"Error",type,len);
     if(n>0 && (size_t)n<sizeof h && !send_all(fd,h,(size_t)n)) send_all(fd,body,len);
 }
 static void error(int fd,int status,const char *msg) { char b[512]; snprintf(b,sizeof b,"{\"error\":{\"message\":\"%s\"}}",msg); reply(fd,status,"application/json",b); }
@@ -40,7 +40,8 @@ static int authenticated_raw_key(const yag_config *c,const char *candidate) {
     if(!candidate)return -1;
     int match=key_equal(candidate,c->api_key)?0:-1;
     for(size_t i=0;i<c->extra_key_count;i++)
-        if(key_equal(candidate,c->extra_keys[i]))match=(int)i+1;
+        if(c->extra_keys[i] && c->key_enabled[i]
+            && key_equal(candidate,c->extra_keys[i]))match=(int)i+1;
     return match;
 }
 static int authenticated_key(const yag_config *c,const char *authorization) {
