@@ -239,7 +239,7 @@ static int pool_choose(yag_config *cfg,const char *model) {
             cfg->pool[index-1].active;
         time_t until=index==0?cfg->default_pool_unavailable_until:
             cfg->pool[index-1].unavailable_until;
-        if(until>now)continue;
+        if(until>now && (index!=0 || cfg->pool_count))continue;
         if(index>0 && !cfg->pool[index-1].enabled)continue;
         if(index>0 && cfg->pool[index-1].model_count) {
             int supported=0;
