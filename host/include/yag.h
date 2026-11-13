@@ -90,6 +90,7 @@ void reply(int fd, int status, const char *type, const char *body);
 int scheduler_acquire(yag_config *cfg, int key_index);
 void scheduler_release(yag_config *cfg, int key_index);
 void scheduler_status(int fd, yag_config *cfg);
+void system_resources_handle(int fd);
 int client_registry_load(yag_config *cfg);
 void client_registry_free(yag_config *cfg);
 int client_registry_handle(int fd, yag_config *cfg, const char *method,
