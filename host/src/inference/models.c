@@ -25,7 +25,7 @@ static void fail(int fd,int status,const char *reason) {
     snprintf(body,sizeof body,"{\"error\":{\"message\":\"%s\",\"type\":\"upstream_error\"}}",reason);
     reply(fd,status,"application/json",body);
 }
-void models_handle(int fd,const yag_config *cfg) {
+static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     listing response={0};
     long status=0;
     int rc=upstream_perform(cfg,"/models",NULL,0,collect,&response,&status,fd);
@@ -71,11 +71,34 @@ void models_handle(int fd,const yag_config *cfg) {
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
     char *json=NULL;
+    int missing=0;
     if(good) {
-        yyjson_mut_doc_set_root(d,output);
-        json=yyjson_mut_write(d,0,NULL);
+        if(model_id) {
+            /* Resolve from the merged inventory, so configured route IDs and
+             * default-upstream models behave identically for SDK retrieval. */
+            yyjson_mut_val *entry,*match=NULL;
+            yyjson_mut_arr_foreach(items,i,count,entry) {
+                if(yyjson_mut_equals_str(yyjson_mut_obj_get(entry,"id"),model_id)) {
+                    match=entry;break;
+                }
+            }
+            if(match) {
+                if(!yyjson_mut_obj_get(match,"object"))
+                    good=yyjson_mut_obj_add_str(d,match,"object","model")!=NULL;
+                if(good)yyjson_mut_doc_set_root(d,match);
+            } else missing=1;
+        } else yyjson_mut_doc_set_root(d,output);
+        if(good && !missing)json=yyjson_mut_write(d,0,NULL);
     }
-    if(json)reply(fd,200,"application/json",json);
-    else fail(fd,502,"Model list could not be translated");
+    if(missing)reply(fd,404,"application/json",
+        "{\"error\":{\"message\":\"Model not found\",\"type\":\"not_found_error\"}}");
+    else if(json)reply(fd,200,"application/json",json);
+    else fail(fd,502,"Model inventory could not be translated");
     free(json);yyjson_mut_doc_free(d);yyjson_doc_free(upstream);free(response.bytes);
+}
+void models_handle(int fd,const yag_config *cfg) {
+    models_respond(fd,cfg,NULL);
+}
+void models_handle_detail(int fd,const yag_config *cfg,const char *model_id) {
+    models_respond(fd,cfg,model_id);
 }
