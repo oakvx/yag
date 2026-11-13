@@ -35,6 +35,43 @@ Limits: 4 MiB total upstream data per Responses request, 64 output items, 1 MiB 
 
 The `POST /v1/messages` adapter accepts text-only messages with optional SSE streaming, optional string or text-block-array system prompt (cache hints validated but not applied), `max_tokens`, temperature, `top_p` and stop sequences. Non-streaming requests require upstream token counts; streaming messages translate Chat SSE into Anthropic `message_start`, content-block, delta, stop and `message_stop` events. Tool input JSON is reconstructed from accumulated Chat function-argument fragments before emitting a `tool_use` block. It accepts tool declarations and maps their JSON input schemas to Chat function tools. Upstream Chat function calls are mapped into Anthropic `tool_use` content blocks (including parsed JSON object arguments), but assistant `tool_use` blocks can be replayed as Chat function calls. Result-only user messages with string `tool_result` content are mapped to Chat tool messages, completing the basic non-streaming tool call/result replay cycle. User tool results can include string or text-block-array content, optional `is_error` (marked in the Chat tool content), and trailing text blocks after results; nontext tool content is rejected. It accepts validated `thinking.enabled` and `thinking.adaptive` as best-effort Chat `reasoning_effort` mapping (high/medium), **without** exact thinking budget enforcement or native thinking blocks. `context_management` is accepted only for `clear_thinking_20251015` with validated `keep` because replayed thinking blocks are not supported in YAG; clearing past tool results is explicitly rejected. It still does **not** support `count_tokens`, images/audio or built-in server tools. A real Claude Code CLI has completed streaming text and client-side Read-tool cycles against the deterministic mock backend, but no real inference model has been qualified. See [Claude Code](../integrations/claude-code.md). Clients can authenticate to YAG using bearer or `x-api-key` headers; upstream keys stay private.
 
+## Central AI control plane (LAN profile)
+
+The LAN stack now has a local-only operator Console with six new bounded
+features. The runtime key registry persists managed clients and allows the
+primary administrator to issue, rename, disable and permanently revoke
+managed credentials without restarting. Native Ollama model inventory,
+loaded models, asynchronous pull/update and deletion are available only
+through explicitly configured trusted native Ollama admin URLs.
+The Caddy LAN reverse proxy blocks `/api/admin/*`; host-loopback
+administration still requires the primary key.
+
+The FIFO inference admission queue enforces optional global/per-key
+concurrency and a finite waiting deadline; it does **not** reserve or
+schedule GPU VRAM. The default pool can balance across up to eight
+additional OpenAI-compatible replicas by least in-flight requests and
+suppresses repeatedly failing replicas for 30 seconds. It requires every
+replica to serve equivalent model IDs and semantics; it does not currently
+verify cross-host model inventory or migrate an active request.
+
+Resource telemetry is intentionally labeled **gateway container scope**:
+Linux cgroup memory and /proc load averages, plus Ollama-reported loaded
+model VRAM from the native API. NVIDIA/AMD/Apple GPU utilization, total
+VRAM availability and full host OS telemetry remain unsupported.
+
+The operator CLI can change the replica configuration, pull model images,
+perform controlled image updates and write encrypted `age` configuration
+backups (credentials and available Caddy CA materials). Backups do not
+contain Ollama model weights and do not constitute a tested disaster-recovery
+solution. See [Control Plane operations](../operations/control-plane.md).
+
+An experimental image-generation OpenAI-compatible endpoint and binary
+text-to-speech passthrough are available for backends that implement them.
+The gateway does not generate images/audio itself, does not implement
+multipart audio transcription, and does not imply Ollama provides these
+endpoints. The inbound JSON body limit remains bounded (default 1 MiB
+standalone, 4 MiB in the LAN profile, maximum 8 MiB).
+
 ## Operations, configuration, packaging
 
 - `GET /api/providers/status` exposes per-provider attempts, successes/failures, circuit states, bypass counts, fallback count and reported token/latency aggregates. It does not include prompts, upstream addresses, provider keys, request histories or inferred token estimates. All counters reset on restart.
@@ -47,7 +84,7 @@ The `POST /v1/messages` adapter accepts text-only messages with optional SSE str
 
 - A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime provider editing, scheduled health polling and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
-- Identity-aware API key administration, dynamic revocation/issuance without restart, network-level abuse protection, configured CORS, native TLS, encrypted secret storage and structured/audit logs. Additional static bearer keys can have `inference`, `models`, `monitor`, `inference+models` or `all` scopes; they still require restart to revoke. The per-key fixed-window quota does not protect unauthenticated connection admission.
+- A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and structured/audit logs. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
 - Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
