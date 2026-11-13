@@ -61,6 +61,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME lan_manager COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_manager_test.py)
  add_test(NAME lan_operations COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_ops_test.py)
+ add_test(NAME lan_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_recovery_test.py)
 endif()
 
 if(Python3_Interpreter_FOUND)

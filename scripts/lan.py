@@ -19,6 +19,7 @@ import sys
 
 from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
 from lan_ops import configure_provider, encrypted_backup
+from lan_recovery import inspect_backup
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env.lan"
@@ -213,6 +214,16 @@ def main(argv=None):
     backup = actions.add_parser("backup", help="Create an encrypted LAN configuration snapshot")
     backup.add_argument("--recipient", required=True, help="Public age recipient (age1...)")
     backup.add_argument("--output-dir", default="backups", help="Private backup directory")
+    backup_check = actions.add_parser("backup-check",
+        help="Decrypt and validate an age snapshot without restoring it")
+    backup_check.add_argument("--archive", required=True, help="Encrypted .tar.gz.age file")
+    backup_check.add_argument("--identity", required=True, help="Offline age identity file")
+    backup_stage = actions.add_parser("backup-stage",
+        help="Verify and extract into a NEW private directory, never overwrite live files")
+    backup_stage.add_argument("--archive", required=True, help="Encrypted .tar.gz.age file")
+    backup_stage.add_argument("--identity", required=True, help="Offline age identity file")
+    backup_stage.add_argument("--output-dir", required=True,
+                              help="New private staging directory (must not exist)")
     actions.add_parser("update", help="Pull updated container images and rebuild YAG")
     args = parser.parse_args(argv)
     try:
@@ -222,6 +233,11 @@ def main(argv=None):
             if args.managed_ollama:
                 options.append("--managed-ollama")
             return bootstrap_main(options)
+        # Recovery must work on a new machine before .env.lan exists.
+        if args.action in ("backup-check", "backup-stage"):
+            inspect_backup(args.archive, args.identity,
+                           args.output_dir if args.action == "backup-stage" else None)
+            return 0
         config = read_config()
         if args.action == "doctor":
             doctor(config)
