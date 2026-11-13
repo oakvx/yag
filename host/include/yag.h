@@ -64,6 +64,12 @@ typedef struct {
     /* Runtime-managed client keys; static ENV keys occupy first slots. */
     const char *client_store;
     size_t static_key_count;
+    const char *ollama_admin_url;
+    pthread_cond_t ollama_job_done;
+    unsigned ollama_job_running, ollama_job_state, ollama_job_shutdown;
+    unsigned long ollama_job_sequence;
+    long ollama_job_http_status;
+    char ollama_job_model[256];
     unsigned char key_enabled[16], key_managed[16];
     char *key_labels[16];
     char *managed_key_secrets[16];
@@ -91,6 +97,8 @@ int scheduler_acquire(yag_config *cfg, int key_index);
 void scheduler_release(yag_config *cfg, int key_index);
 void scheduler_status(int fd, yag_config *cfg);
 void system_resources_handle(int fd);
+int ollama_admin_handle(int fd,yag_config *cfg,const char *method,
+                        const char *uri,const char *body,size_t length);
 int client_registry_load(yag_config *cfg);
 void client_registry_free(yag_config *cfg);
 int client_registry_handle(int fd, yag_config *cfg, const char *method,
