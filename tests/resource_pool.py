@@ -165,6 +165,23 @@ class ResourcePool(unittest.TestCase):
             self.assertEqual(second.result(timeout=5)[0],200)
             self.assertEqual(self.status()["resource_waiting"],0)
 
+    def test_static_route_fallback_never_bypasses_primary_limit(self):
+        routes=json.dumps([{"model":"unreachable",
+                            "url":"http://127.0.0.1:1/v1"}])
+        self.launch(YAG_FALLBACK_TO_DEFAULT="1",YAG_MODEL_ROUTES=routes)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            first=executor.submit(self.post)
+            self.wait_for_active(1)
+            code,_,body=request(self.port,"POST","/v1/chat/completions",
+                     {"model":"unreachable","messages":[]})
+            self.assertEqual(code,503,body)
+            self.assertIn(b"resource_capacity",body)
+            self.assertEqual(first.result(timeout=5)[0],200)
+        code,_,body=request(self.port,"POST","/v1/chat/completions",
+                 {"model":"unreachable","messages":[]})
+        self.assertEqual(code,200,body)
+        self.assertEqual(json.loads(body)["source"],"primary")
+
     def test_invalid_estimates_rejected_in_env_and_admin_store(self):
         base={"url":self.replica_url}
         invalid=[
