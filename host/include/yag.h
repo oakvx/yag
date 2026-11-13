@@ -64,6 +64,7 @@ void responses_handle(int fd, const yag_config *c, const char *body, size_t len)
 void anthropic_messages_handle(int fd, const yag_config *c, const char *body, size_t len);
 void anthropic_stream_handle(int fd,const yag_config *target,const char *model,const char *chat_json);
 void models_handle(int fd, const yag_config *c);
+void models_handle_detail(int fd, const yag_config *c, const char *model_id);
 void provider_check_handle(int fd,const yag_config *cfg,const char *body,size_t len);
 void providers_status_handle(int fd,yag_config *cfg);
 void model_capabilities_handle(int fd,const yag_config *cfg);
