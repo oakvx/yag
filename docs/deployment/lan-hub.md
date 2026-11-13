@@ -22,6 +22,21 @@ Only `/v1/*`, `/api/*` and `/health` pass through the LAN proxy.
 YAG enforces bearer authentication and per-key request limits for API
 requests; the reverse proxy terminates TLS.
 
+## New: AI Datacenter management dashboard
+
+The LAN overlay now includes a separate Hub control plane behind Caddy at
+`https://YOUR_LAN_IP/hub/`. It provides live per-PC key issuance/revocation,
+Ollama model administration, inference scheduling, additional private nodes,
+host-visible telemetry and SQLite backup export. The API URL used by PCs
+remains `https://YOUR_LAN_IP/v1` — requests now pass through Hub first.
+
+The original YAG Console remains accessible locally on the central machine
+at `http://127.0.0.1:8080`. Changes to a client in Hub take effect
+immediately **for new LAN requests**; they do not revoke the original
+bootstrap key's direct access from the central host loopback address.
+
+[Complete AI Datacenter administration and security guide](hub-control.md).
+
 ## Cross-platform installer (Windows, Linux, macOS)
 
 The recommended entry point is now the **same Python 3 command on every
