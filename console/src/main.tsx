@@ -13,7 +13,7 @@ type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;suc
     last_http_status:number;circuit:'closed'|'open'|'half_open_ready';retry_after_seconds:number}
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
-type Metrics = { chat_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type Metrics = { chat_requests:number; completions_requests:number; embeddings_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
@@ -256,6 +256,8 @@ function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Sta
     action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
     <div className="metrics">
       <div className="metric"><div className="metric-label">CHAT COMPLETIONS <MessageSquare size={15}/></div><div className="metric-value">{metrics?metrics.chat_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Chat requests</div></div>
+      <div className="metric"><div className="metric-label">TEXT COMPLETIONS <Terminal size={15}/></div><div className="metric-value">{metrics?metrics.completions_requests.toLocaleString():'—'}</div><div className="metric-detail">Legacy completion requests</div></div>
+      <div className="metric"><div className="metric-label">EMBEDDINGS <Layers3 size={15}/></div><div className="metric-value">{metrics?metrics.embeddings_requests.toLocaleString():'—'}</div><div className="metric-detail">Vector embedding requests</div></div>
       <div className="metric"><div className="metric-label">RESPONSES API <Code2 size={15}/></div><div className="metric-value">{metrics?metrics.responses_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Responses requests</div></div>
       <div className="metric"><div className="metric-label">ANTHROPIC MESSAGES <Braces size={15}/></div><div className="metric-value">{metrics?metrics.anthropic_requests.toLocaleString():'—'}</div><div className="metric-detail">Submitted Messages requests</div></div>
     </div>
