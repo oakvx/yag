@@ -65,7 +65,7 @@ def _inspect_tar(plaintext):
     except (tarfile.TarError, EOFError, OSError) as exc:
         raise ValueError("Malformed decrypted TAR archive") from exc
     if ".env.lan" not in seen or b"YAG_API_KEY=" not in seen[".env.lan"] or (
-            b"\\x00" in seen[".env.lan"]):
+            bytes([0]) in seen[".env.lan"]):
         raise ValueError("Backup lacks a valid private LAN configuration")
     return seen
 
