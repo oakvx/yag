@@ -277,7 +277,7 @@ void anthropic_stream_handle(int fd,const yag_config *cfg,const char *model,cons
     if(rc!=CURLE_OK || status<200 || status>=300 || !s->done
         || s->line.n || s->data.n || s->failed) {
         if(s->sent)streaming_error(s,"Upstream stream failed or ended before completion");
-        else reply(fd,rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502,
+        else reply(fd,rc==CURLE_AGAIN?503:rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502,
             "application/json","{\"error\":{\"message\":\"Inference stream unavailable\"}}");
     }
 done:
