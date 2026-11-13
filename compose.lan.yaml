@@ -1,0 +1,37 @@
+# Compose overlay: LAN TLS gateway. Use together with compose.yaml:
+# docker compose --env-file .env.lan -f compose.yaml -f compose.lan.yaml up -d --build
+# YAG remains published on host loopback (for local administration); ONLY
+# Caddy is published to the selected private LAN interface.
+services:
+  yag:
+    environment:
+      YAG_EXTRA_API_KEYS: ${YAG_EXTRA_API_KEYS:?Run scripts/lan_bootstrap.py first}
+      YAG_EXTRA_KEY_SCOPES: ${YAG_EXTRA_KEY_SCOPES:?Run scripts/lan_bootstrap.py first}
+      YAG_RATE_LIMIT_PER_MINUTE: ${YAG_RATE_LIMIT_PER_MINUTE:-120}
+    stop_grace_period: 180s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      YAG_LAN_IP: ${YAG_LAN_IP:?Set the central machine private LAN IPv4 address}
+    ports:
+      - "${YAG_LAN_IP:?Set YAG_LAN_IP}:443:443/tcp"
+    volumes:
+      - ./deploy/lan/Caddyfile:/etc/caddy/Caddyfile:ro
+      - yag-caddy-data:/data
+      - yag-caddy-config:/config
+    depends_on:
+      yag:
+        condition: service_healthy
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    pids_limit: 128
+
+volumes:
+  yag-caddy-data:
+  yag-caddy-config:
