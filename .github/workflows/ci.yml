@@ -13,6 +13,29 @@ permissions:
   contents: read
 
 jobs:
+  lan-platform:
+    name: LAN setup on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check portable setup CLI
+        run: python scripts/lan.py --help
+      - name: Test credentials, ACLs and non-overwrite behavior
+        run: python tests/lan_bootstrap_test.py
+      - name: Test cross-platform lifecycle, Docker commands and TLS verification
+        run: python tests/lan_manager_test.py
+      - name: Test private provider pool configuration and encrypted backups
+        run: python tests/lan_ops_test.py
+      - name: Test offline encrypted backup verification and safe staging
+        run: python tests/lan_recovery_test.py
+
   host:
     name: C17 host and protocol tests
     runs-on: ubuntu-latest
@@ -83,6 +106,8 @@ jobs:
         env:
           YAG_API_KEY: integration-key-dummy-12345
         run: docker compose config --quiet
+      - name: Validate LAN topology for existing and managed Ollama
+        run: python3 tests/lan_compose_test.py
       - name: Run image and check unprivileged process
         run: |
           test "$(docker image inspect --format '{{.Config.User}}' yag:ci)" = "10001:10001"
@@ -97,6 +122,45 @@ jobs:
           done
           docker logs yag-ci-smoke
           exit 1
+
+      - name: Smoke-test LAN HTTPS, certificate trust and client isolation
+        env:
+          YAG_LAN_IP: 127.0.0.1
+          YAG_LAN_HTTPS_PORT: "18443"
+        run: |
+          set -euo pipefail
+          python3 scripts/lan_bootstrap.py --lan-ip 192.168.50.20 --clients 2
+          docker tag yag:ci yag:local
+          compose=(docker compose --env-file .env.lan -f compose.yaml -f compose.lan.yaml)
+          trap '${compose[@]} down --remove-orphans || true' EXIT
+          "${compose[@]}" up --no-build -d yag caddy
+          ready=0
+          for i in $(seq 1 15); do
+            if curl -ksSf https://127.0.0.1:18443/health > /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != 1 ]; then
+            "${compose[@]}" logs --no-color caddy
+            exit 1
+          fi
+          "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt ./lan-root-ca.crt
+          curl --fail --silent --show-error --cacert ./lan-root-ca.crt https://127.0.0.1:18443/health
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt https://127.0.0.1:18443/v1/models)
+          test "$status" = 401
+          client_key=$(sed -n 's/^YAG_EXTRA_API_KEYS=//p' .env.lan | cut -d, -f1)
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt -H "Authorization: Bearer $client_key" \
+            https://127.0.0.1:18443/api/metrics)
+          test "$status" = 403
+          admin_key=$(sed -n 's/^YAG_API_KEY=//p' .env.lan)
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt -H "Authorization: Bearer $admin_key" \
+            https://127.0.0.1:18443/api/admin/clients)
+          test "$status" = 404
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt https://127.0.0.1:18443/)
+          test "$status" = 404
 
   codex-mock-probe:
     name: Codex CLI mock qualification (informational)
