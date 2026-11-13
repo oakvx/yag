@@ -22,6 +22,20 @@ After an HTTP 5xx or ambiguous timeout, **YAG never automatically retries the
 same generation**. This avoids duplicate model or agent side effects.
 A circuit breaker does not perform continuous provider monitoring.
 
+## OpenAI-compatible endpoint coverage
+
+The default upstream may be Ollama's `http://127.0.0.1:11434/v1` endpoint.
+Chat, legacy Completions and Embeddings are passed through without response
+rewriting. Each requires the `inference` scope and uses exact-model routing,
+per-key rate limits, upstream timeouts and the existing circuit breaker.
+The `/api/metrics` endpoint reports aggregate `completions_requests` and
+`embeddings_requests` counters; it does not store embedding vectors or
+generation contents.
+
+Embeddings require an actual embedding model on the selected backend.
+YAG does not convert Chat models into embedding models, nor does it expose
+Ollama's native `/api/*` protocol.
+
 ## Observability
 
 ```sh
@@ -66,8 +80,8 @@ export YAG_EXTRA_API_KEYS='LONG_INFERENCE_KEY_VALUE,LONG_MONITOR_KEY_VALUE'
 export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 ```
 
-- `inference` permits `POST /v1/chat/completions`, `POST /v1/responses`
-  and `POST /v1/messages`.
+- `inference` permits `POST /v1/chat/completions`, `POST /v1/completions`,
+  `POST /v1/embeddings`, `POST /v1/responses` and `POST /v1/messages`.
 - `models` permits `GET /v1/models` and `GET /v1/models/{id}`.
   The latter resolves exact IDs from the merged model inventory; unknown IDs
   return 404.
