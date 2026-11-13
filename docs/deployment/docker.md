@@ -1,5 +1,11 @@
 # Docker / Compose: localhost-only pilot deployment
 
+For a **central server used by multiple PCs on a trusted LAN**, do not
+change the default Compose host port to `0.0.0.0`. Instead, use the
+[LAN AI Hub deployment](lan-hub.md), which adds Caddy internal-CA TLS,
+a private-IP-only HTTPS port, per-PC scoped API keys and an optional
+isolated Ollama container.
+
 The container builds both the C17 gateway and the Console in separate stages.
 The runtime image uses an unprivileged UID, a read-only root filesystem, no
 Linux capabilities, and exposes the service only via an explicit loopback
