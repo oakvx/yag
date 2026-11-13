@@ -78,7 +78,8 @@ class ControlPlane(unittest.TestCase):
             YAG_OLLAMA_ADMIN_URL='http://127.0.0.1:'+str(cls.ollama.server_port),
             YAG_CLIENT_STORE=str(Path(cls.tmp.name)/'clients.json'),
             YAG_UPSTREAM_POOL=json.dumps([{'url':'http://127.0.0.1:'+
-                                           str(cls.replica.server_port)+'/v1'}]),
+                                           str(cls.replica.server_port)+'/v1',
+                                           'models':['glm-test']}]),
             YAG_MAX_INFERENCE='2',YAG_MAX_INFERENCE_PER_KEY='1',
             YAG_INFERENCE_QUEUE_WAIT_MS='500',NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([cls.binary],env=env,
@@ -196,6 +197,25 @@ class ControlPlane(unittest.TestCase):
         self.assertEqual(len(rows),2)
         self.assertGreaterEqual(sum(x['attempts'] for x in rows),6)
         self.assertNotIn(str(self.replica.server_port).encode(),body)
+        self.assertTrue(rows[1]['model_allowlist_enabled'])
+        self.assertEqual(rows[1]['declared_models'],['glm-test'])
+        self.assertFalse(rows[0]['model_allowlist_enabled'])
+        for _ in range(4):
+            status,_,body=request(self.port,'POST','/v1/chat/completions',
+                                  {'model':'unlisted-model','messages':[]})
+            self.assertEqual(status,200,body)
+            self.assertNotEqual(json.loads(body).get('source'),'replica')
+
+    def test_invalid_replica_model_allowlists_fail_closed(self):
+        base={'url':'http://127.0.0.1:29998/v1'}
+        for models in ([], ['glm-test','glm-test'], ['bad\\nname'],
+                       [str(i) for i in range(33)]):
+            env=dict(os.environ,YAG_API_KEY=KEY,
+                     YAG_UPSTREAM_POOL=json.dumps([{**base,'models':models}]))
+            proc=subprocess.run([self.binary],env=env,timeout=5,
+                                stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            self.assertNotEqual(proc.returncode,0,models)
+            self.assertIn(b'YAG_UPSTREAM_POOL',proc.stderr)
 
     def test_scheduler_enforces_per_key_admission(self):
         payload={'model':'slow','messages':[]}
