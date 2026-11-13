@@ -1,0 +1,23 @@
+YAG optional media slots (all files remain external to dist/index.html)
+
+BOOT WORDMARK (font has priority when present; SVG is the fallback)
+  public/brand/boot-logo.svg           exact white vector wordmark
+  public/brand/boot-subtitle.svg       optional subtitle artwork
+  public/fonts/PS4-Logo.otf            font used to typeset "YAG"
+  public/fonts/YAG-Boot-Display.woff2  display font used to typeset "YAG"
+  public/fonts/YAG-Boot-Display.ttf    TrueType alternative
+
+XMB TYPEFACE
+  public/fonts/SCE-PS3-Rodin-LATIN.woff2
+  public/fonts/SCE-PS3-Rodin-LATIN.ttf
+
+AUDIO (all optional; missing files are skipped without console errors)
+  public/audio/start.mp3         boot chime / startup tone
+  public/audio/cursor.mp3        cursor navigation tick
+  public/audio/select.mp3        selection
+  public/audio/cancel.mp3        back / cancel
+  public/audio/trophy.mp3        easter egg
+
+Use only media you have the rights to deploy. The referenced PlayStation 3
+system sounds and PS4 logo typeface are copyrighted third-party assets; this
+repository intentionally ships neither.

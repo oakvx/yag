@@ -22,6 +22,20 @@ After an HTTP 5xx or ambiguous timeout, **YAG never automatically retries the
 same generation**. This avoids duplicate model or agent side effects.
 A circuit breaker does not perform continuous provider monitoring.
 
+## OpenAI-compatible endpoint coverage
+
+The default upstream may be Ollama's `http://127.0.0.1:11434/v1` endpoint.
+Chat, legacy Completions and Embeddings are passed through without response
+rewriting. Each requires the `inference` scope and uses exact-model routing,
+per-key rate limits, upstream timeouts and the existing circuit breaker.
+The `/api/metrics` endpoint reports aggregate `completions_requests` and
+`embeddings_requests` counters; it does not store embedding vectors or
+generation contents.
+
+Embeddings require an actual embedding model on the selected backend.
+YAG does not convert Chat models into embedding models, nor does it expose
+Ollama's native `/api/*` protocol.
+
 ## Observability
 
 ```sh
@@ -66,19 +80,37 @@ export YAG_EXTRA_API_KEYS='LONG_INFERENCE_KEY_VALUE,LONG_MONITOR_KEY_VALUE'
 export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 ```
 
-- `inference` permits `POST /v1/chat/completions`, `POST /v1/responses`
-  and `POST /v1/messages`.
-- `models` permits `GET /v1/models`.
+- `inference` permits `POST /v1/chat/completions`, `POST /v1/completions`,
+  `POST /v1/embeddings`, `POST /v1/responses` and `POST /v1/messages`.
+- `models` permits `GET /v1/models` and `GET /v1/models/{id}`.
+  The latter resolves exact IDs from the merged model inventory; unknown IDs
+  return 404.
 - `monitor` permits read-only `/api/*` inventory, status and metrics.
 - Only `all` can call active provider reachability checks.
 - Any denied scope returns 403; invalid credentials return 401.
+- All API key values must be unique, including the primary key. YAG refuses
+  startup if an extra key duplicates another key, preventing ambiguous
+  permission selection when scopes differ.
 - Rotating or revoking keys requires process restart; these are **not**
   user accounts or an online identity administration API.
+
+## Strict inbound request parsing
+
+YAG accepts only HTTP/1.0 and HTTP/1.1 with exactly one ASCII space
+between request-line tokens. It rejects ambiguous whitespace, control bytes
+in header values (except horizontal tab), duplicate or empty Host headers,
+and conflicting Authorization / X-API-Key credentials. These checks apply
+before request routing and do not replace a hardened reverse proxy.
+Use standard HTTP clients rather than crafting noncanonical request lines.
 
 ## Hard limits
 
 Header deadline defaults to 10 seconds and body deadline to 30 seconds
 (`YAG_HEADER_DEADLINE_SECONDS` and `YAG_BODY_DEADLINE_SECONDS`).
+When per-key rate limiting is enabled, rejected requests return HTTP 429
+with `Retry-After` in seconds (1–60) until the fixed window resets. The
+header is computed per key and reveals no credential or quota counters.
+
 A single request body is capped at 1 MiB; only HTTP/1.x with Content-Length
 is supported. Limits and POSIX socket code are **not** a security audit.
 Use a TLS proxy, firewall, and dedicated access controls for remote use.

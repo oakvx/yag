@@ -552,7 +552,7 @@ void anthropic_messages_handle(int fd,const yag_config *cfg,const char *body,siz
     long status=0;
     int rc=upstream_for_model(cfg,model,"/chat/completions",json,strlen(json),collect_bytes,&data,&status,fd);
     if(rc!=CURLE_OK || status<200 || status>=300)
-        anthropic_error(fd,rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502);
+        anthropic_error(fd,rc==YAG_RESOURCE_BUSY?503:rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502);
     else {
         yyjson_doc *backend=yyjson_read(data.bytes,data.size,0);
         convert_response(fd,backend?yyjson_doc_get_root(backend):NULL,yyjson_obj_get(root,"model"));
