@@ -32,3 +32,11 @@ large `stop_grace_period` based on your actual runtime timeout.
 
 A Docker image build validates packaging, **not** model performance or
 production network security.
+
+## HTTP client compatibility
+
+The listener requires canonical HTTP/1.x request lines (method, target and
+version separated by single ASCII spaces). It does not accept duplicate or
+empty Host headers, control characters in header values, or conflicting
+Authorization and X-API-Key headers. Set the bearer key using a single
+Authorization header when using standard OpenAI-compatible clients.
