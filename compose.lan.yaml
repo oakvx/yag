@@ -14,6 +14,14 @@ services:
       YAG_MAX_INFERENCE_PER_KEY: ${YAG_MAX_INFERENCE_PER_KEY:-2}
       YAG_INFERENCE_QUEUE_WAIT_MS: ${YAG_INFERENCE_QUEUE_WAIT_MS:-15000}
       YAG_UPSTREAM_POOL: ${YAG_UPSTREAM_POOL:-}
+      YAG_POOL_KEY_1: ${YAG_POOL_KEY_1:-}
+      YAG_POOL_KEY_2: ${YAG_POOL_KEY_2:-}
+      YAG_POOL_KEY_3: ${YAG_POOL_KEY_3:-}
+      YAG_POOL_KEY_4: ${YAG_POOL_KEY_4:-}
+      YAG_POOL_KEY_5: ${YAG_POOL_KEY_5:-}
+      YAG_POOL_KEY_6: ${YAG_POOL_KEY_6:-}
+      YAG_POOL_KEY_7: ${YAG_POOL_KEY_7:-}
+      YAG_POOL_KEY_8: ${YAG_POOL_KEY_8:-}
     volumes:
       - yag-state:/opt/yag/state
     stop_grace_period: 180s
