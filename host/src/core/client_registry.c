@@ -91,13 +91,15 @@ static int save_locked(const yag_config *cfg) {
     for(size_t i=0;ok && i<cfg->extra_key_count;i++) {
         if(!cfg->extra_keys[i])continue;
         yyjson_mut_val *entry=yyjson_mut_obj(d);
+        char fallback[24];
+        snprintf(fallback,sizeof fallback,"client-%02zu",i+1);
         ok=entry
             && yyjson_mut_obj_add_uint(d,entry,"index",i+1)
             && yyjson_mut_obj_add_bool(d,entry,"managed",cfg->key_managed[i]!=0)
             && yyjson_mut_obj_add_bool(d,entry,"enabled",cfg->key_enabled[i]!=0)
             && yyjson_mut_obj_add_str(d,entry,"scope",scope_name(cfg->extra_key_scopes[i]))
             && yyjson_mut_obj_add_str(d,entry,"name",
-                 cfg->key_labels[i]?cfg->key_labels[i]:"")
+                 cfg->key_labels[i]?cfg->key_labels[i]:fallback)
             && (!cfg->key_managed[i]
                 || yyjson_mut_obj_add_str(d,entry,"key",cfg->extra_keys[i]))
             && yyjson_mut_arr_add_val(entries,entry);
