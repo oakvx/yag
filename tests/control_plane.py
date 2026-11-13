@@ -208,7 +208,7 @@ class ControlPlane(unittest.TestCase):
 
     def test_invalid_replica_model_allowlists_fail_closed(self):
         base={'url':'http://127.0.0.1:29998/v1'}
-        for models in ([], ['glm-test','glm-test'], ['bad\\nname'],
+        for models in ([], ['glm-test','glm-test'], ['bad\nname'],
                        [str(i) for i in range(33)]):
             env=dict(os.environ,YAG_API_KEY=KEY,
                      YAG_UPSTREAM_POOL=json.dumps([{**base,'models':models}]))
