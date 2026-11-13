@@ -29,14 +29,21 @@ def validate_backend(url):
         parsed.username or parsed.password or parsed.query or parsed.fragment
         or parsed.path != "/v1" or url.endswith("/")):
         raise ValueError("Expected HTTP(S) OpenAI-compatible URL ending in /v1")
-    if parsed.port is not None and not 1 <= parsed.port <= 65535:
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Invalid upstream port") from exc
+    if port is not None and not 1 <= port <= 65535:
         raise ValueError("Invalid port")
     if parsed.scheme == "http":
         hostname = parsed.hostname.lower()
         try:
             address = ipaddress.ip_address(hostname)
-            if not address.is_private:
-                raise ValueError("Unencrypted upstream must use a private IP")
+            networks = [ipaddress.ip_network(v) for v in
+                        ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+            if not isinstance(address, ipaddress.IPv4Address) or not any(
+                    address in block for block in networks):
+                raise ValueError("Unencrypted upstream must use an RFC1918 IPv4 address")
         except ValueError as exc:
             if isinstance(exc, ValueError) and str(exc).startswith("Unencrypted"):
                 raise
@@ -65,7 +72,8 @@ def secure_replace(path, content):
     fd, temp = tempfile.mkstemp(prefix=".yag-lan-", dir=str(path.parent))
     replacement = Path(temp)
     try:
-        os.fchmod(fd, 0o600)
+        if os.name != "nt":
+            os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
             output.write(content)
             output.flush()
@@ -124,8 +132,8 @@ def configure_provider(path, action, url=None, key_env=None):
             raise ValueError("Replica pool full or backend already configured")
         entry = {"url": url}
         if key_env:
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key_env):
-                raise ValueError("Invalid key environment name")
+            if not re.fullmatch(r"YAG_POOL_KEY_[1-8]", key_env):
+                raise ValueError("Use one of YAG_POOL_KEY_1..8 for private replica credentials")
             if not env.get(key_env):
                 raise ValueError("Configured key_env must exist in the private .env.lan")
             entry["key_env"] = key_env
