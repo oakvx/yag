@@ -25,6 +25,13 @@ typedef struct {
     yag_provider_stats stats;
 } yag_route;
 typedef struct {
+    char *url;
+    const char *key;
+    yag_provider_stats stats;
+    unsigned active, consecutive_failures;
+    time_t unavailable_until;
+} yag_pool_backend;
+typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
     char *extra_keys_storage;
     char *extra_scope_storage;
@@ -33,6 +40,10 @@ typedef struct {
     size_t extra_key_count;
     yag_route routes[16];
     size_t route_count;
+    yag_pool_backend pool[8];
+    size_t pool_count;
+    unsigned default_pool_active, default_pool_failures, pool_cursor;
+    time_t default_pool_unavailable_until;
     yag_model_capability capabilities[32];
     size_t capability_count;
     long timeout;
@@ -97,6 +108,7 @@ int scheduler_acquire(yag_config *cfg, int key_index);
 void scheduler_release(yag_config *cfg, int key_index);
 void scheduler_status(int fd, yag_config *cfg);
 void system_resources_handle(int fd);
+void provider_pool_status_handle(int fd,yag_config *cfg);
 int ollama_admin_handle(int fd,yag_config *cfg,const char *method,
                         const char *uri,const char *body,size_t length);
 int client_registry_load(yag_config *cfg);
