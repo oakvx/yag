@@ -57,3 +57,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME lan_bootstrap COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_bootstrap_test.py)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME lan_manager COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_manager_test.py)
+endif()

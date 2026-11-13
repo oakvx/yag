@@ -211,14 +211,18 @@ publishes only the TLS proxy on the server's selected LAN IP and keeps
 the React Console local to the central machine.
 
 ```sh
-python3 scripts/lan_bootstrap.py --lan-ip 192.168.1.50 \
-  --clients 3 --managed-ollama
-docker compose --env-file .env.lan \
-  -f compose.yaml -f compose.lan.yaml -f compose.lan.ollama.yaml \
-  up -d --build
+python scripts/lan.py init --lan-ip 192.168.1.50 --clients 3 --managed-ollama
+python scripts/lan.py doctor
+python scripts/lan.py up
+python scripts/lan.py model llama3.2
+python scripts/lan.py ca
+python scripts/lan.py check
 ```
 
-Replace `192.168.1.50` with your server's actual static LAN IP. Clients
+The manager works on **Windows, Linux and macOS** with Python 3.9+ and
+Docker Compose v2. On Windows use `py -3 scripts\\lan.py`; on Linux/macOS
+use `python3 scripts/lan.py` if `python` is unavailable. Replace
+`192.168.1.50` with your server's actual static LAN IP. Clients
 connect to `https://192.168.1.50/v1` after installing the generated
 private CA root. **Do not skip certificate verification or forward the
 router's ports.** If Ollama already runs on the central host, use the

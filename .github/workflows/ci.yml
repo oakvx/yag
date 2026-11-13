@@ -13,6 +13,25 @@ permissions:
   contents: read
 
 jobs:
+  lan-platform:
+    name: LAN setup on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check portable setup CLI
+        run: python scripts/lan.py --help
+      - name: Test credentials, ACLs and non-overwrite behavior
+        run: python tests/lan_bootstrap_test.py
+      - name: Test cross-platform lifecycle, Docker commands and TLS verification
+        run: python tests/lan_manager_test.py
+
   host:
     name: C17 host and protocol tests
     runs-on: ubuntu-latest
