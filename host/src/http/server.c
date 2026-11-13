@@ -25,11 +25,20 @@
 #define MAX_HEADER 16384
 #define MAX_CONNECTIONS 32
 
+/* A detached worker handles one request, so the audit response context can
+ * be thread-local and never contains user-controlled strings. */
+static _Thread_local yag_config *audit_cfg;
+static _Thread_local const char *audit_resource,*audit_method;
+static _Thread_local int audit_written;
 static volatile sig_atomic_t stop_requested=0;
 static void request_stop(int signum) {(void)signum;stop_requested=1;}
 typedef struct { int fd; yag_config *cfg; } client;
 int send_all(int fd,const void *data,size_t len) { const char *p=data; while(len){ ssize_t n=send(fd,p,len,YAG_SEND_FLAGS); if(n<0 && errno==EINTR) continue; if(n<=0) return -1; p+=n; len-=(size_t)n; } return 0; }
 void reply(int fd,int status,const char *type,const char *body) {
+    if(audit_cfg && audit_resource && !audit_written) {
+        audit_written=1;
+        admin_audit_response(audit_cfg,audit_resource,audit_method,status);
+    }
     char h[512]; size_t len=strlen(body); int n=snprintf(h,sizeof h,"HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n",status,status==200?"OK":status==201?"Created":status==202?"Accepted":"Error",type,len);
     if(n>0 && (size_t)n<sizeof h && !send_all(fd,h,(size_t)n)) send_all(fd,body,len);
 }
@@ -306,6 +315,7 @@ static int capability_rejected(int fd,const yag_config *cfg,yyjson_val *request)
     return 0;
 }
 static void handle(int fd,yag_config *c) {
+    audit_cfg=NULL; audit_resource=NULL; audit_method=NULL; audit_written=0;
     int key_index=-1,scheduler_held=0;
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     struct timespec header_start={0};clock_gettime(CLOCK_MONOTONIC,&header_start);
@@ -345,6 +355,13 @@ static void handle(int fd,yag_config *c) {
         || !strncmp(uri,"/v1/messages/count_tokens?",26))) {
         if(strcmp(question,"?beta=true")){error(fd,400,"Unsupported Messages query parameters");goto done;}
         *question=0;
+    }
+    if(!strncmp(uri,"/api/admin/",11)) {
+        audit_cfg=c;
+        audit_resource=!strncmp(uri,"/api/admin/clients",18)?"clients":
+            !strncmp(uri,"/api/admin/ollama/",18)?"ollama":"other";
+        audit_method=!strcmp(method,"GET")?"GET":
+            !strcmp(method,"POST")?"POST":"OTHER";
     }
     const char *trace=getenv("YAG_TRACE_ROUTES");
     if(trace && !strcmp(trace,"1")) {

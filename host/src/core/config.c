@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 static const char *env(const char *key, const char *fallback) { const char *v=getenv(key); return v && *v ? v : fallback; }
 
 static int env_limit(const char *name,const char *fallback,unsigned max,unsigned *dest) {
@@ -202,8 +205,30 @@ const yag_config *config_for_model(const yag_config *c,const char *model,yag_con
     return c;
 }
 
+/* Explicit opt-in and fail-closed file setup: no symlinks, other-user
+ * read/write access, hardlinks, special files or relative paths. */
+static int open_admin_audit(yag_config *cfg) {
+    const char *path=getenv("YAG_ADMIN_AUDIT_FILE");
+    if(!path || !*path)return 0;
+    if(path[0]!='/' || strlen(path)>1024 || strchr(path,13) || strchr(path,10)) {
+        fputs("YAG_ADMIN_AUDIT_FILE must be an absolute private path",stderr);
+        return -1;
+    }
+    int fd=open(path,O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK,0600);
+    struct stat st;
+    if(fd<0 || fstat(fd,&st) ||
+        !S_ISREG(st.st_mode) || (st.st_mode & 0077) ||
+        st.st_uid!=geteuid() || st.st_nlink!=1) {
+        if(fd>=0)close(fd);
+        fputs("Cannot open YAG_ADMIN_AUDIT_FILE as a private regular file",stderr);
+        return -1;
+    }
+    cfg->admin_audit_fd=fd;
+    return 0;
+}
 int config_load(yag_config *c) {
     memset(c, 0, sizeof(*c));
+    c->admin_audit_fd=-1;
     c->bind=env("YAG_BIND", "127.0.0.1"); c->port=env("YAG_PORT", "8080");
     c->upstream=env("YAG_UPSTREAM_URL", "http://127.0.0.1:8000/v1");
     c->upstream_key=env("YAG_UPSTREAM_KEY", ""); c->api_key=env("YAG_API_KEY", "");
@@ -345,7 +370,8 @@ int config_load(yag_config *c) {
     c->static_key_count=c->extra_key_count;
     for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
 
-    if (load_routes(c) || load_pool(c) || load_capabilities(c)) return -1;
+    if (load_routes(c) || load_pool(c) || load_capabilities(c)
+        || open_admin_audit(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
@@ -390,4 +416,5 @@ void config_free(yag_config *c) {
     free(c->extra_keys_storage);
     free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
+    if(c->admin_audit_fd>=0)close(c->admin_audit_fd);
 }

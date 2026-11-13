@@ -79,6 +79,8 @@ typedef struct {
 
     /* Runtime-managed client keys; static ENV keys occupy first slots. */
     const char *client_store;
+    /* Opt-in write-only audit trail for administrative HTTP responses. */
+    int admin_audit_fd;
     size_t static_key_count;
     const char *ollama_admin_url;
     pthread_cond_t ollama_job_done;
@@ -116,6 +118,8 @@ void system_resources_handle(int fd);
 void provider_pool_status_handle(int fd,yag_config *cfg);
 int ollama_admin_handle(int fd,yag_config *cfg,const char *method,
                         const char *uri,const char *body,size_t length);
+void admin_audit_response(const yag_config *cfg,const char *resource,
+                          const char *method,int status);
 int client_registry_load(yag_config *cfg);
 void client_registry_free(yag_config *cfg);
 int client_registry_handle(int fd, yag_config *cfg, const char *method,
