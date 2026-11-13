@@ -301,6 +301,7 @@ static int capability_rejected(int fd,const yag_config *cfg,yyjson_val *request)
     return 0;
 }
 static void handle(int fd,yag_config *c) {
+    int key_index=-1,scheduler_held=0;
     char *buf=malloc(MAX_HEADER+1); if(!buf){error(fd,500,"Out of memory");return;} size_t used=0,header_len=0;
     struct timespec header_start={0};clock_gettime(CLOCK_MONOTONIC,&header_start);
     while(used<MAX_HEADER){
@@ -389,15 +390,22 @@ static void handle(int fd,yag_config *c) {
     if(api) {
         int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
         if(auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
-        int key_index=auth?authenticated_key(c,auth):
+        pthread_mutex_lock(&c->lock);
+        key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
+        pthread_mutex_unlock(&c->lock);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
         /* Only the primary key may trigger active network probes. A scoped
          * extra key can be restricted to inference, discovery or read-only
          * monitoring without access to provider probe operations. */
+        if(!strncmp(uri,"/api/admin/",11) && key_index!=0) {
+            error(fd,403,"Administrator key required");goto done;
+        }
         unsigned required=!strcmp(uri,"/api/provider/check")?8u:
             (!strcmp(uri,"/v1/models") || !strncmp(uri,"/v1/models/",11))?2u:!strncmp(uri,"/v1/",4)?1u:4u;
+        pthread_mutex_lock(&c->lock);
         unsigned scope=key_index==0?15u:c->extra_key_scopes[key_index-1];
+        pthread_mutex_unlock(&c->lock);
         if(!(scope&required)){error(fd,403,"Insufficient API key scope");goto done;}
         unsigned retry_after=0;
         if(!rate_permit(c,key_index,&retry_after)){
@@ -427,9 +435,21 @@ static void handle(int fd,yag_config *c) {
     char *body=buf+header_len; body[length]=0;
     if(!strcmp(uri,"/health") && !strcmp(method,"GET")){reply(fd,200,"application/json","{\"status\":\"ok\"}");goto done;}
     if(!api){ if(!strcmp(method,"GET"))asset(fd,c,uri);else error(fd,405,"Method not allowed");goto done; }
+    if(!strncmp(uri,"/v1/",4) && !strcmp(method,"POST")) {
+        if(!scheduler_acquire(c,key_index)) {
+            rate_limited(fd,1);
+            goto done;
+        }
+        scheduler_held=1;
+    }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
     else if(!strcmp(uri,"/api/clients") && !strcmp(method,"GET")) clients_status(fd,c);
+    else if(!strcmp(uri,"/api/scheduler") && !strcmp(method,"GET")) scheduler_status(fd,c);
+    else if(!strncmp(uri,"/api/admin/clients",18)) {
+        if(!client_registry_handle(fd,c,method,uri,body,length))
+            error(fd,404,"Not found");
+    }
     else if(!strcmp(uri,"/api/capabilities") && !strcmp(method,"GET")) capabilities(fd,c);
     else if(!strcmp(uri,"/api/models/capabilities") && !strcmp(method,"GET")) model_capabilities_handle(fd,c);
     else if(!strcmp(uri,"/api/providers/status") && !strcmp(method,"GET")) providers_status_handle(fd,c);
@@ -515,7 +535,9 @@ static void handle(int fd,yag_config *c) {
     else if(!strcmp(uri,"/v1/messages/count_tokens")) error(fd,501,"Anthropic token counting not implemented");
     else if(!strcmp(uri,"/v1/messages")) error(fd,405,"Method not allowed");
     else error(fd,404,"Not found");
-done: free(buf);
+done:
+    if(scheduler_held)scheduler_release(c,key_index);
+    free(buf);
 }
 static void *worker(void *arg) { client *cl=arg; int fd=cl->fd; yag_config *c=cl->cfg; free(cl); struct timeval tv={.tv_sec=15}; setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&tv,sizeof tv); setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof tv); handle(fd,c); close(fd); pthread_mutex_lock(&c->lock); c->active--;
     if(!c->active)pthread_cond_broadcast(&c->drained);
