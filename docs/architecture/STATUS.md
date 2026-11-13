@@ -89,7 +89,7 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 
 - A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime provider editing, scheduled health polling and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
-- A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and structured/audit logs. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
+- A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and comprehensive structured request logs. An optional private admin-response JSONL audit trail exists, but it is not tamper-evident or a replacement for external security auditing. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
 - Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring on all drivers, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
@@ -109,6 +109,17 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 - The React Console labels scope explicitly and displays the available
   metrics. Mock integration and LAN CLI regression tests enforce the
   new interfaces.
+
+## Increment: privacy-preserving admin event audit
+
+Operators may enable `YAG_ADMIN_AUDIT_FILE` to append private JSONL events
+for administrative HTTP status responses (including authentication
+failures). Events use fixed route/method labels and numeric status codes,
+never request or response bodies, API keys or client identities. File
+permissions and ownership are validated at startup, and the LAN profile
+supports using the state volume. This is an event trail, not a complete
+tamper-evident identity audit or persistent inference-request history.
+See [admin audit operations](../operations/admin-audit.md).
 
 ## Intended next increments
 
