@@ -61,3 +61,7 @@ endif()
 if(Python3_Interpreter_FOUND)
  add_test(NAME lan_manager COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/lan_manager_test.py)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME hub_control COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/hub_control_test.py)
+endif()
