@@ -112,6 +112,11 @@ class Storage:
                                 FROM clients WHERE secret_hash=?""", (digest(secret),)).fetchone()
             return dict(row) if row and row["enabled"] else None
 
+    def is_enabled(self, identity):
+        with self.db() as db:
+            return db.execute("SELECT 1 FROM clients WHERE id=? AND enabled=1",
+                              (identity,)).fetchone() is not None
+
     def list_clients(self):
         with self.db() as db:
             return [dict(row) for row in db.execute(
