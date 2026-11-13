@@ -1,0 +1,60 @@
+# Compose overlay: LAN TLS gateway. Use together with compose.yaml:
+# docker compose --env-file .env.lan -f compose.yaml -f compose.lan.yaml up -d --build
+# YAG remains published on host loopback (for local administration); ONLY
+# Caddy is published to the selected private LAN interface.
+services:
+  yag:
+    environment:
+      YAG_EXTRA_API_KEYS: ${YAG_EXTRA_API_KEYS:?Run scripts/lan_bootstrap.py first}
+      YAG_EXTRA_KEY_SCOPES: ${YAG_EXTRA_KEY_SCOPES:?Run scripts/lan_bootstrap.py first}
+      YAG_RATE_LIMIT_PER_MINUTE: ${YAG_RATE_LIMIT_PER_MINUTE:-120}
+      YAG_CLIENT_STORE: /opt/yag/state/clients.json
+      YAG_PROVIDER_STORE: /opt/yag/state/providers.json
+      YAG_ADMIN_AUDIT_FILE: ${YAG_ADMIN_AUDIT_FILE:-}
+      YAG_OLLAMA_ADMIN_URL: ${YAG_OLLAMA_ADMIN_URL:-http://host.docker.internal:11434}
+      YAG_MAX_INFERENCE: ${YAG_MAX_INFERENCE:-6}
+      YAG_MAX_INFERENCE_PER_KEY: ${YAG_MAX_INFERENCE_PER_KEY:-2}
+      YAG_INFERENCE_QUEUE_WAIT_MS: ${YAG_INFERENCE_QUEUE_WAIT_MS:-15000}
+      YAG_PRIMARY_MAX_INFLIGHT: ${YAG_PRIMARY_MAX_INFLIGHT:-0}
+      YAG_POOL_WAIT_MS: ${YAG_POOL_WAIT_MS:-0}
+      YAG_MAX_BODY_BYTES: ${YAG_MAX_BODY_BYTES:-4194304}
+      YAG_UPSTREAM_POOL: ${YAG_UPSTREAM_POOL:-}
+      YAG_POOL_KEY_1: ${YAG_POOL_KEY_1:-}
+      YAG_POOL_KEY_2: ${YAG_POOL_KEY_2:-}
+      YAG_POOL_KEY_3: ${YAG_POOL_KEY_3:-}
+      YAG_POOL_KEY_4: ${YAG_POOL_KEY_4:-}
+      YAG_POOL_KEY_5: ${YAG_POOL_KEY_5:-}
+      YAG_POOL_KEY_6: ${YAG_POOL_KEY_6:-}
+      YAG_POOL_KEY_7: ${YAG_POOL_KEY_7:-}
+      YAG_POOL_KEY_8: ${YAG_POOL_KEY_8:-}
+    volumes:
+      - yag-state:/opt/yag/state
+    stop_grace_period: 180s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      YAG_LAN_IP: ${YAG_LAN_IP:?Set the central machine private LAN IPv4 address}
+    ports:
+      - "${YAG_LAN_IP:?Set YAG_LAN_IP}:${YAG_LAN_HTTPS_PORT:-443}:443/tcp"
+    volumes:
+      - ./deploy/lan/Caddyfile:/etc/caddy/Caddyfile:ro
+      - yag-caddy-data:/data
+      - yag-caddy-config:/config
+    depends_on:
+      yag:
+        condition: service_healthy
+    cap_drop: ["ALL"]
+    cap_add: ["NET_BIND_SERVICE"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    pids_limit: 128
+
+volumes:
+  yag-caddy-data:
+  yag-caddy-config:
+
+  yag-state:

@@ -86,6 +86,113 @@ class HttpRobustness(unittest.TestCase):
                     b'HTTP/1.1 '+str(expected).encode()+b' '),reply)
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
 
+    def test_security_parser_matrix(self):
+        """HTTP parser regression matrix: explicit byte-level cases."""
+        auth = b'Authorization: Bearer '+KEY.encode()+b'\r\n'
+        get = b'GET /health HTTP/1.1\r\nHost: local\r\n'
+        post = b'POST /v1/chat/completions HTTP/1.1\r\nHost: local\r\n'+auth
+        cases = [
+            # HTTP_SECURITY_CASES_START
+            ('request-line-01',b' GET /health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-02',b'GET  /health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-03',b'GET /health  HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-04',b'GET /health HTTP/1.1 \r\nHost: local\r\n\r\n',400),
+            ('request-line-05',b'GET\t/health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-06',b'GET /health\tHTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-07',b'GET /health HTTP/1.1\t\r\nHost: local\r\n\r\n',400),
+            ('request-line-08',b'GET\t /health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-09',b'GET \t/health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-10',b'GET /health \tHTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-11',b'GET /health HTTP/1.1\x7f\r\nHost: local\r\n\r\n',400),
+            ('request-line-12',b'GET http://example.test/ HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-13',b'GET https://example.test/ HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-14',b'GET health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-15',b'GET * HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-16',b'GET ?key=1 HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-17',b'GET \\health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-18',b'GET ../health HTTP/1.1\r\nHost: local\r\n\r\n',400),
+            ('request-line-19',b'GET /health HTTP/1.2\r\nHost: local\r\n\r\n',400),
+            ('request-line-20',b'GET /health HTTP/2.0\r\nHost: local\r\n\r\n',400),
+            ('header-control-00',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x00b\r\n\r\n',400),
+            ('header-control-01',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x01b\r\n\r\n',400),
+            ('header-control-02',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x02b\r\n\r\n',400),
+            ('header-control-03',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x03b\r\n\r\n',400),
+            ('header-control-04',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x04b\r\n\r\n',400),
+            ('header-control-05',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x05b\r\n\r\n',400),
+            ('header-control-06',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x06b\r\n\r\n',400),
+            ('header-control-07',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x07b\r\n\r\n',400),
+            ('header-control-08',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x08b\r\n\r\n',400),
+            ('header-control-0a',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0ab\r\n\r\n',400),
+            ('header-control-0b',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0bb\r\n\r\n',400),
+            ('header-control-0c',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0cb\r\n\r\n',400),
+            ('header-control-0d',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0db\r\n\r\n',400),
+            ('header-control-0e',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0eb\r\n\r\n',400),
+            ('header-control-0f',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x0fb\r\n\r\n',400),
+            ('header-control-10',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x10b\r\n\r\n',400),
+            ('header-control-11',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x11b\r\n\r\n',400),
+            ('header-control-12',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x12b\r\n\r\n',400),
+            ('header-control-13',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x13b\r\n\r\n',400),
+            ('header-control-14',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x14b\r\n\r\n',400),
+            ('header-control-15',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x15b\r\n\r\n',400),
+            ('header-control-16',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x16b\r\n\r\n',400),
+            ('header-control-17',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x17b\r\n\r\n',400),
+            ('header-control-1f',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x1fb\r\n\r\n',400),
+            ('header-control-7f',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x7fb\r\n\r\n',400),
+            ('header-name-09',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x09Check: a\r\n\r\n',400),
+            ('header-name-20',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x20Check: a\r\n\r\n',400),
+            ('header-name-22',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x22Check: a\r\n\r\n',400),
+            ('header-name-28',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x28Check: a\r\n\r\n',400),
+            ('header-name-29',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x29Check: a\r\n\r\n',400),
+            ('header-name-2c',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x2cCheck: a\r\n\r\n',400),
+            ('header-name-2f',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x2fCheck: a\r\n\r\n',400),
+            ('header-name-3b',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3bCheck: a\r\n\r\n',400),
+            ('header-name-3c',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3cCheck: a\r\n\r\n',400),
+            ('header-name-3d',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3dCheck: a\r\n\r\n',400),
+            ('header-name-3e',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3eCheck: a\r\n\r\n',400),
+            ('header-name-3f',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3fCheck: a\r\n\r\n',400),
+            ('header-name-40',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x40Check: a\r\n\r\n',400),
+            ('header-name-5b',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x5bCheck: a\r\n\r\n',400),
+            ('header-name-5c',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x5cCheck: a\r\n\r\n',400),
+            ('header-name-5d',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x5dCheck: a\r\n\r\n',400),
+            ('header-name-7b',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x7bCheck: a\r\n\r\n',400),
+            ('header-name-7d',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x7dCheck: a\r\n\r\n',400),
+            ('header-name-7f',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x7fCheck: a\r\n\r\n',400),
+            ('header-name-80',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x80Check: a\r\n\r\n',400),
+            ('invalid-length-01',post+b'Content-Length: \r\n\r\n',400),
+            ('invalid-length-02',post+b'Content-Length: -1\r\n\r\n',400),
+            ('invalid-length-03',post+b'Content-Length: +1\r\n\r\n',400),
+            ('invalid-length-04',post+b'Content-Length: 1 2\r\n\r\n',400),
+            ('invalid-length-05',post+b'Content-Length: 1,2\r\n\r\n',400),
+            ('invalid-length-06',post+b'Content-Length: 1.0\r\n\r\n',400),
+            ('invalid-length-07',post+b'Content-Length: 0x0\r\n\r\n',400),
+            ('invalid-length-08',post+b'Content-Length: 1e2\r\n\r\n',400),
+            ('invalid-length-09',post+b'Content-Length: NaN\r\n\r\n',400),
+            ('invalid-length-10',post+b'Content-Length: Infinity\r\n\r\n',400),
+            ('invalid-length-11',post+b'Content-Length: null\r\n\r\n',400),
+            ('invalid-length-12',post+b'Content-Length: none\r\n\r\n',400),
+            ('invalid-length-13',post+b'Content-Length: 12x\r\n\r\n',400),
+            ('invalid-length-14',post+b'Content-Length: 0/1\r\n\r\n',400),
+            ('invalid-length-15',post+b'Content-Length: 1;2\r\n\r\n',400),
+            ('security-edge-duplicate-host',get+b'Host: second\r\n\r\n',400),
+            ('security-edge-case-insensitive-duplicate-host',get+b'hOsT: second\r\n\r\n',400),
+            ('security-edge-empty-host',b'GET /health HTTP/1.1\r\nHost: \r\n\r\n',400),
+            ('security-edge-duplicate-authorization',post+b'Authorization: Bearer again\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-duplicate-native-key',b'POST /v1/messages HTTP/1.1\r\nX-API-Key: one\r\nX-API-Key: two\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-ambiguous-chat-auth',post+b'X-API-Key: '+KEY.encode()+b'\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-ambiguous-model-auth',b'GET /v1/models HTTP/1.1\r\nHost: local\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nX-API-Key: '+KEY.encode()+b'\r\n\r\n',400),
+            ('security-edge-transfer-chunked',post+b'Transfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-transfer-identity',post+b'Transfer-Encoding: identity\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-unsupported-expect',post+b'Expect: 200-ok\r\nContent-Length: 0\r\n\r\n',417),
+            # HTTP_SECURITY_CASES_END
+        ]
+        for label,payload,expected in cases:
+            with self.subTest(case=label):
+                response=self.raw(payload)
+                self.assertTrue(response.startswith(
+                    b'HTTP/1.1 '+str(expected).encode()+b' '),
+                    (label,response))
+        self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
+
     def test_deterministic_malformed_header_corpus(self):
         rng=random.Random(190283)
         for _ in range(120):

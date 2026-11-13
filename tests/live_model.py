@@ -122,6 +122,42 @@ def exercise(base, key, model, protocol, tools, stream, opener=urlopen):
         if second['type']!='message':raise RuntimeError('Anthropic tool replay failed')
     print('[PASS]',protocol,'tool-replay',flush=True)
 
+def exercise_optional_endpoint(base, key, model, endpoint, payload, opener=urlopen):
+    """Opt-in live compatibility check; never print model output or credentials."""
+    headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+    request=Request(base+'/v1/'+endpoint,
+                    data=json.dumps(dict(payload,model=model)).encode(),
+                    headers=headers,method='POST')
+    try:
+        with opener(request,timeout=90) as response:
+            raw=response.read(8*1024*1024+1)
+            if len(raw)>8*1024*1024:
+                raise RuntimeError('Response exceeded 8 MiB')
+            result=json.loads(raw)
+    except HTTPError as exc:
+        raise RuntimeError('HTTP '+str(exc.code)+' at '+endpoint) from None
+    except URLError as exc:
+        raise RuntimeError('Connection error at '+endpoint+': '+
+                           type(exc.reason).__name__) from None
+    if endpoint=='embeddings':
+        data=result.get('data')
+        if result.get('object')!='list' or not isinstance(data,list) or not data:
+            raise RuntimeError('Embedding result missing data list')
+        vector=data[0].get('embedding')
+        if not isinstance(vector,list) or not vector or not all(
+            isinstance(value,(int,float)) and not isinstance(value,bool)
+            for value in vector):
+            raise RuntimeError('Embedding result missing numeric vector')
+    elif endpoint=='completions':
+        if result.get('object')!='text_completion' or not result.get('choices'):
+            raise RuntimeError('Completion result missing choices')
+        if not isinstance(result['choices'][0].get('text'),str):
+            raise RuntimeError('Completion result missing text')
+    else:
+        raise ValueError('Unsupported optional protocol')
+    print('[PASS]',endpoint,'text' if endpoint=='completions' else 'vector',
+          flush=True)
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url',default='http://127.0.0.1:8080')
@@ -130,6 +166,10 @@ def main():
     parser.add_argument('--tools',action='store_true',
                         help='Require model-driven function calls and subsequent tool-result replay')
     parser.add_argument('--stream',action='store_true',help='Also require SSE completion')
+    parser.add_argument('--embedding-model',default='',
+        help='Optionally validate /v1/embeddings using a real embedding-capable model')
+    parser.add_argument('--completions',action='store_true',
+        help='Optionally validate /v1/completions with the selected text model')
     args=parser.parse_args()
     key=os.environ.get('YAG_API_KEY','')
     if len(key)<16:parser.error('YAG_API_KEY must be set in the environment')
@@ -149,6 +189,19 @@ def main():
                 exercise(args.base_url.rstrip('/'),key,args.model,protocol,False,True)
         except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
             print('[FAIL]',protocol,type(exc).__name__,str(exc)[:200],file=sys.stderr,flush=True)
+            failed+=1
+    for endpoint,model,payload in [
+        ('embeddings',args.embedding_model,{'input':['YAG local embedding fixture']}),
+        ('completions',args.model if args.completions else '',
+         {'prompt':'Reply with a greeting.','stream':False}),
+    ]:
+        if not model:continue
+        try:
+            exercise_optional_endpoint(args.base_url.rstrip('/'),key,model,
+                                       endpoint,payload)
+        except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
+            print('[FAIL]',endpoint,type(exc).__name__,str(exc)[:200],
+                  file=sys.stderr,flush=True)
             failed+=1
     if failed:print('Real-model qualification FAILED for',failed,'protocol(s)',file=sys.stderr)
     else:print('Real-model qualification PASSED for selected checks')

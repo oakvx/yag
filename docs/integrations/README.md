@@ -1,5 +1,14 @@
 # Integrations
 
+## Ollama on Colibri
+
+For a single local AI exposed to multiple IDEs, scripts and automations,
+follow the [Colibri / Ollama universal gateway guide](ollama-colibri.md).
+YAG accepts OpenAI-compatible Chat, legacy Completions and Embeddings requests
+in addition to its bounded Responses and Anthropic adapters. Use a separate
+embedding-capable model for RAG workloads; chat models are not necessarily
+embedding models.
+
 ## OpenAI-compatible applications
 
 Set the SDK base URL to `http://127.0.0.1:8080/v1` (or the URL of your TLS-protected reverse proxy), set its API key to `YAG_API_KEY`, and choose a model ID returned by `GET /v1/models`. This is a Chat Completions proxy; support for individual request parameters, streaming and tool calls depends on the upstream.
@@ -41,3 +50,11 @@ Run the [opt-in real-model qualification script](live-model.md) or the [isolated
 ## Codex and Claude Code — mock CLI tool cycles verified
 
 Codex CLI 0.167.0 and Claude Code CLI both completed streaming text and local tool execution cycles against a deterministic mock backend. See [Codex](codex.md) and [Claude Code](claude-code.md) for setup and limitations. These tests do not establish compatibility with real inference models; YAG never executes client tools.
+
+## HTTP request interoperability
+
+Use a single bearer Authorization header for OpenAI-compatible endpoints.
+For Anthropic Messages endpoints, either bearer Authorization or X-API-Key
+may be used, but not both on the same request. HTTP/1.x request-line tokens
+must be separated by exactly one ASCII space; avoid injecting control bytes
+or duplicate Host headers from custom SDK transports.

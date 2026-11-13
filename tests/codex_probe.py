@@ -104,7 +104,10 @@ threading.Thread(target=backend.serve_forever, daemon=True).start()
 with socket.socket() as listener:
     listener.bind(('127.0.0.1', 0))
     port = listener.getsockname()[1]
-with tempfile.TemporaryDirectory() as work:
+# Codex may still be asynchronously cloning its plugin cache after the CLI
+# exits. A concurrent writer can race with temporary directory teardown.
+# Do not fail a successful protocol qualification solely on that cleanup race.
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as work:
     home = os.path.join(work, 'codex-home')
     os.mkdir(home)
     with open(os.path.join(home, 'config.toml'), 'w', encoding='utf8') as f:

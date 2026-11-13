@@ -50,10 +50,19 @@ class RateLimitTest(unittest.TestCase):
 
     def test_each_key_has_independent_budget(self):
         path = '/v1/models'
-        self.assertEqual([request(self.port, 'GET', path)[0] for _ in range(3)],
-                         [200, 200, 429])
-        self.assertEqual([request(self.port, 'GET', path, key=SECOND_KEY)[0] for _ in range(3)],
-                         [200, 200, 429])
+        first = [request(self.port, 'GET', path) for _ in range(3)]
+        second = [request(self.port, 'GET', path, key=SECOND_KEY)
+                  for _ in range(3)]
+        self.assertEqual([status for status, _, _ in first], [200, 200, 429])
+        self.assertEqual([status for status, _, _ in second], [200, 200, 429])
+        for status, headers, body in (first[-1], second[-1]):
+            self.assertEqual(status, 429)
+            self.assertEqual(headers.get('Cache-Control'), 'no-store')
+            retry = int(headers['Retry-After'])
+            self.assertGreaterEqual(retry, 1)
+            self.assertLessEqual(retry, 60)
+            self.assertIn(b'Rate limit exceeded', body)
+        self.assertNotIn('Retry-After', first[0][1])
         self.assertEqual(request(self.port, 'GET', path, key=None)[0], 401)
         self.assertEqual(request(self.port, 'GET', '/health', key=None)[0], 200)
 

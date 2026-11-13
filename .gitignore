@@ -5,3 +5,9 @@ console/dist/
 
 __pycache__/
 *.py[cod]
+
+# LAN gateway bootstrap: generated credentials and local trust anchors
+.env.lan
+lan-clients.txt
+lan-root-ca.crt
+backups/

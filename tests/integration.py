@@ -33,6 +33,29 @@ class Backend(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get('Authorization') != 'Bearer '+UPKEY: return self.send(401, {'error': {'message':'bad upstream key'}})
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path=='/v1/images/generations':
+            return self.send(200,{'created':123,'data':[{'b64_json':'aW1hZ2U='}],
+                                  'request':data})
+        if self.path=='/v1/audio/speech':
+            return self.send(200,b'ID3'+bytes([0,1,2,3]),'audio/mpeg')
+        if self.path=='/v1/embeddings':
+            if data['model']=='bad':
+                return self.send(429,{'error':{'message':'embedding backend limit'}})
+            return self.send(200,{
+                'object':'list','data':[{'object':'embedding','index':0,
+                                         'embedding':[0.125,-0.25,0.5]}],
+                'model':data['model'],
+                'usage':{'prompt_tokens':2,'total_tokens':2},
+                'request':data})
+        if self.path=='/v1/completions':
+            if data.get('stream'):
+                payload=(b'data: {"object":"text_completion","choices":'
+                         b'[{"index":0,"text":"Hello","finish_reason":null}]}'
+                         +bytes([10,10])+b'data: [DONE]'+bytes([10,10]))
+                return self.send(200,payload,'text/event-stream')
+            return self.send(200,{'object':'text_completion','model':data['model'],
+                'choices':[{'text':'Hello','index':0,'finish_reason':'stop'}],
+                'request':data})
         if data['model']=='slow': time.sleep(2); return self.send(200, {})
         if data['model']=='bad': return self.send(429, {'error':{'message':'backend limit'}})
         if data['model']=='anthropic-tools':
@@ -179,6 +202,32 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)
         status,_,body=request(self.port,'GET','/api/status');self.assertEqual(status,200);self.assertGreaterEqual(json.loads(body)['active_connections'],1)
+    def test_client_monitoring_is_scoped_and_never_leaks_credentials(self):
+        self.assertEqual(request(self.port,'GET','/api/clients',key=None)[0],401)
+        self.assertEqual(request(self.port,'GET','/api/clients',
+            key='models-only-key-123456')[0],403)
+        status,_,body=request(self.port,'GET','/api/clients')
+        self.assertEqual(status,200,body)
+        before=json.loads(body)
+        self.assertEqual(before['object'],'gateway.clients')
+        self.assertEqual(before['rate_limit_per_minute'],0)
+        ids=[item['id'] for item in before['data']]
+        self.assertEqual(ids,['primary','client-01','client-02'])
+        self.assertEqual(before['data'][0]['scope'],'all')
+        self.assertEqual(before['data'][1]['scope'],'all')
+        self.assertEqual(before['data'][2]['scope'],'models')
+        self.assertNotIn(KEY.encode(),body)
+        self.assertNotIn(b'additional-key-for-testing',body)
+        self.assertNotIn(b'models-only-key-123456',body)
+        request(self.port,'GET','/v1/models',key='additional-key-for-testing')
+        status,_,body=request(self.port,'GET','/api/clients')
+        self.assertEqual(status,200,body)
+        after=json.loads(body)
+        self.assertEqual(after['data'][1]['accepted_requests'],
+                         before['data'][1]['accepted_requests']+1)
+        self.assertEqual(after['data'][1]['rate_limited_requests'],0)
+        self.assertNotIn('api_key',str(after))
+
     def test_additional_api_key(self):
         self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing')[0],200)
         self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing-invalid')[0],401)
@@ -197,7 +246,9 @@ class Integration(unittest.TestCase):
             headers={'X-API-Key':key})[0],403)
 
     def test_invalid_scope_policy_fails_startup(self):
-        for scopes in ['bad','models,all','models,','all,invalid']:
+        # 'models,all' is valid: there are two extra keys and two known scopes.
+        # The extra third scope below must fail the positional count check.
+        for scopes in ['bad','models,all,monitor','models,','all,invalid']:
             env=dict(os.environ,YAG_API_KEY=KEY,
                 YAG_EXTRA_API_KEYS='extra-one-key-123456,extra-two-key-123456',
                 YAG_EXTRA_KEY_SCOPES=scopes)
@@ -205,8 +256,82 @@ class Integration(unittest.TestCase):
             self.assertNotEqual(outcome.returncode,0,scopes)
             self.assertIn(b'YAG_EXTRA_KEY_SCOPES',outcome.stderr)
 
+    def test_duplicate_api_keys_are_rejected(self):
+        # The same secret must never acquire a different privilege because
+        # it appears again in a later positional scope entry.
+        duplicate_extra='repeated-extra-key-12345'
+        cases=[
+            (KEY,'models'),
+            (f'{duplicate_extra},{duplicate_extra}','models,all'),
+        ]
+        for extra_keys,scopes in cases:
+            with self.subTest(scopes=scopes):
+                env=dict(os.environ,YAG_API_KEY=KEY,
+                    YAG_EXTRA_API_KEYS=extra_keys,
+                    YAG_EXTRA_KEY_SCOPES=scopes)
+                outcome=subprocess.run([sys.argv[1]],env=env,
+                    capture_output=True,timeout=2)
+                self.assertNotEqual(outcome.returncode,0)
+                self.assertIn(b'YAG_EXTRA_API_KEYS',outcome.stderr)
+
+    def test_valid_scope_policy_starts_and_enforces_permissions(self):
+        # Isolate this subprocess from the fixture gateway's listening port.
+        # A valid policy should start, not hang in a test expecting an exit.
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1',0))
+            port=listener.getsockname()[1]
+        models_key='models-only-extra-12345'
+        all_key='full-access-extra-12345'
+        env=dict(os.environ,YAG_API_KEY=KEY,YAG_BIND='127.0.0.1',
+            YAG_PORT=str(port),YAG_EXTRA_API_KEYS=f'{models_key},{all_key}',
+            YAG_EXTRA_KEY_SCOPES='models,all',
+            YAG_UPSTREAM_URL=f'http://127.0.0.1:{self.backend.server_port}/v1',
+            YAG_UPSTREAM_KEY=UPKEY,NO_PROXY='127.0.0.1,localhost')
+        proc=subprocess.Popen([sys.argv[1]],env=env,
+            stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        try:
+            for _ in range(100):
+                if proc.poll() is not None:
+                    self.fail('Valid scope policy rejected: '+
+                        proc.stderr.read().decode(errors='replace'))
+                try:
+                    if request(port,'GET','/health',key=None)[0]==200:
+                        break
+                except OSError:
+                    time.sleep(.03)
+            else:
+                self.fail('Gateway did not start with valid scopes')
+            self.assertEqual(request(port,'GET','/v1/models',key=models_key)[0],200)
+            self.assertEqual(request(port,'GET','/api/metrics',key=models_key)[0],403)
+            self.assertEqual(request(port,'GET','/v1/models',key=all_key)[0],200)
+            self.assertEqual(request(port,'GET','/api/metrics',key=all_key)[0],200)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+            proc.wait(timeout=5)
+            proc.stderr.close()
+
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
+    def test_get_model_details_uses_merged_inventory_and_models_scope(self):
+        for model,owner in [('glm-test','local'),
+                            ('routed-model','yag-configured-route')]:
+            with self.subTest(model=model):
+                path='/v1/models/'+model
+                status,_,body=request(self.port,'GET',path)
+                self.assertEqual(status,200,body)
+                details=json.loads(body)
+                self.assertEqual(details['id'],model)
+                self.assertEqual(details['object'],'model')
+                self.assertEqual(details['owned_by'],owner)
+                self.assertEqual(request(self.port,'GET',path,
+                    key='models-only-key-123456')[0],200)
+                self.assertEqual(request(self.port,'GET',path,key=None)[0],401)
+        self.assertEqual(request(self.port,'GET','/v1/models/non-existent')[0],404)
+        self.assertEqual(request(self.port,'GET','/v1/models/')[0],404)
+        self.assertNotIn(b'route-secret',
+            request(self.port,'GET','/v1/models/routed-model')[2])
+
     def test_route_inventory_does_not_leak_secrets(self):
         status,_,data=request(self.port,'GET','/api/routes')
         self.assertEqual(status,200,data)
@@ -284,6 +409,22 @@ class Integration(unittest.TestCase):
         self.assertNotIn(b'secret-prompt',body)
         self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
 
+    def test_universal_api_capabilities_and_metrics(self):
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        self.assertEqual(status,200,body)
+        protocols=json.loads(body)['protocols']
+        self.assertEqual(protocols['embeddings']['mode'],'upstream_passthrough')
+        self.assertEqual(protocols['completions']['mode'],'upstream_passthrough')
+        self.assertTrue(protocols['completions']['streaming'])
+        before=json.loads(request(self.port,'GET','/api/metrics')[2])
+        request(self.port,'POST','/v1/embeddings',{'model':'glm-test','input':'a'})
+        request(self.port,'POST','/v1/completions',{'model':'glm-test','prompt':'a'})
+        after=json.loads(request(self.port,'GET','/api/metrics')[2])
+        self.assertEqual(after['embeddings_requests']-before['embeddings_requests'],1)
+        self.assertEqual(after['completions_requests']-before['completions_requests'],1)
+        self.assertNotIn('prompt',after)
+        self.assertNotIn('input',after)
+
     def test_capabilities_contract_does_not_confuse_gateway_with_model_support(self):
         status,_,body=request(self.port,'GET','/api/capabilities')
         self.assertEqual(status,200,body)
@@ -321,6 +462,106 @@ class Integration(unittest.TestCase):
         self.assertIn('routed-model',models)
         self.assertEqual(models['routed-model']['owned_by'],'yag-configured-route')
         self.assertNotIn('route-secret',body.decode())
+
+    def test_embeddings_proxy_and_route_selection(self):
+        payload={'model':'glm-test','input':['first','second'],
+                 'encoding_format':'float'}
+        status,headers,body=request(self.port,'POST','/v1/embeddings',payload)
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertEqual(response['object'],'list')
+        self.assertEqual(response['data'][0]['embedding'],[0.125,-0.25,0.5])
+        self.assertEqual(response['request'],payload)
+        self.assertEqual(response['usage']['total_tokens'],2)
+        self.assertIn('application/json',headers['Content-Type'])
+        routed={'model':'routed-model','input':'test'}
+        status,_,body=request(self.port,'POST','/v1/embeddings',routed)
+        self.assertEqual(status,200,body)
+        self.assertTrue(json.loads(body)['routed'])
+        self.assertEqual(json.loads(body)['received'],routed)
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            {'model':'bad','input':'hello'})[0],429)
+
+    def test_embeddings_require_valid_payload_and_inference_scope(self):
+        invalid=[{},[],{'model':'glm-test'},{'model':'','input':'hello'},
+                 {'model':'glm-test','input':''},
+                 {'model':'glm-test','input':[]},
+                 {'model':'glm-test','input':17},
+                 {'model':12,'input':'hello'}]
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                self.assertEqual(request(self.port,'POST','/v1/embeddings',
+                    payload)[0],400)
+        valid={'model':'glm-test','input':'hello'}
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            valid,key=None)[0],401)
+        self.assertEqual(request(self.port,'POST','/v1/embeddings',
+            valid,key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'GET','/v1/embeddings')[0],404)
+
+    def test_legacy_completions_proxy_streaming_and_routing(self):
+        payload={'model':'glm-test','prompt':'Say hello','temperature':0.2}
+        status,_,body=request(self.port,'POST','/v1/completions',payload)
+        self.assertEqual(status,200,body)
+        response=json.loads(body)
+        self.assertEqual(response['object'],'text_completion')
+        self.assertEqual(response['choices'][0]['text'],'Hello')
+        self.assertEqual(response['request'],payload)
+        stream=dict(payload,stream=True)
+        status,headers,body=request(self.port,'POST','/v1/completions',stream)
+        self.assertEqual(status,200,body)
+        self.assertIn('text/event-stream',headers['Content-Type'])
+        self.assertIn(b'data: [DONE]',body)
+        routed={'model':'routed-model','prompt':'Hello'}
+        status,_,body=request(self.port,'POST','/v1/completions',routed)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['received'],routed)
+
+    def test_legacy_completions_validate_and_authenticate(self):
+        invalid=[{}, {'model':'glm-test'}, {'model':'','prompt':'hi'},
+                 {'model':'glm-test','prompt':''},
+                 {'model':'glm-test','prompt':[]},
+                 {'model':'glm-test','prompt':False},
+                 {'model':1,'prompt':'hi'}]
+        for payload in invalid:
+            with self.subTest(payload=payload):
+                self.assertEqual(request(self.port,'POST','/v1/completions',
+                    payload)[0],400)
+        valid={'model':'glm-test','prompt':'Hello'}
+        self.assertEqual(request(self.port,'POST','/v1/completions',
+            valid,key=None)[0],401)
+        self.assertEqual(request(self.port,'POST','/v1/completions',
+            valid,key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'GET','/v1/completions')[0],404)
+
+    def test_image_and_speech_generation_passthrough(self):
+        image={'model':'glm-test','prompt':'A small green tree','size':'256x256'}
+        status,headers,body=request(self.port,'POST','/v1/images/generations',image)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)['request'],image)
+        self.assertEqual(json.loads(body)['data'][0]['b64_json'],'aW1hZ2U=')
+        speech={'model':'glm-test','input':'Hello','voice':'alloy',
+                'response_format':'mp3'}
+        status,headers,body=request(self.port,'POST','/v1/audio/speech',speech)
+        self.assertEqual(status,200,body)
+        self.assertIn('audio/mpeg',headers['Content-Type'])
+        self.assertEqual(body,b'ID3'+bytes([0,1,2,3]))
+        for path,payload in [
+            ('/v1/images/generations',{'model':'glm-test'}),
+            ('/v1/images/generations',{'model':'','prompt':'hello'}),
+            ('/v1/audio/speech',{'model':'glm-test','input':'hello'}),
+            ('/v1/audio/speech',{'model':'glm-test','input':'','voice':'alloy'}),
+        ]:
+            with self.subTest(path=path,payload=payload):
+                self.assertEqual(request(self.port,'POST',path,payload)[0],400)
+        self.assertEqual(request(self.port,'POST','/v1/images/generations',image,
+                                 key='models-only-key-123456')[0],403)
+        self.assertEqual(request(self.port,'POST','/v1/audio/speech',speech,
+                                 key=None)[0],401)
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        protocols=json.loads(body)['protocols']
+        self.assertIn('image_generations',protocols)
+        self.assertIn('audio_speech',protocols)
 
     def test_tools_and_parameters_pass_through(self):
         payload={'model':'glm-test','messages':[{'role':'user','content':'hi'}],'tools':[{'type':'function','function':{'name':'read','parameters':{'type':'object'}}}],'temperature':0.4}
