@@ -101,7 +101,7 @@ flowchart LR
 - **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
 - **Console.** Served by the Host itself: session-only key entry, real status and model discovery, text chat with cancellation, copyable HTTP instructions. The playground doesn't do tools — API clients handle those themselves.
 - **Hard limits, enforced.** Bounded request size, connection count, socket and upstream timeouts.
-- **Central AI Control Plane.** Local-only Console model downloads/deletion, persistent runtime LAN clients with immediate revocation, optional private administrator audit events, cgroup and optional Linux host-visible hardware metrics, FIFO inference scheduler and model-aware least-inflight replica pool with passive cooldowns. Operator CLI supports encrypted configuration backups and controlled updates. See [Control Plane operations](docs/operations/control-plane.md).
+- **Central AI Control Plane.** Local-only Console model downloads/deletion, persistent runtime LAN clients with immediate revocation, optional private administrator audit events, cgroup and optional Linux host-visible hardware metrics, FIFO inference scheduler and model-aware least-inflight replica pool with passive cooldowns. Provider Manager supports local live replica editing, secure credential aliases and model discovery probes when a private provider store is configured. Operator CLI supports encrypted configuration backups and controlled updates. See [Control Plane operations](docs/operations/control-plane.md).
 - **Additional multimodal passthrough.** OpenAI-compatible image generation and binary audio speech endpoints (backend support required, not implemented by Ollama automatically).
 - **Tests.** Automated mock-upstream suite: auth, framing, discovery, tool data, streaming, errors, timeout, disconnection, concurrency and control-plane operations.
 
@@ -111,7 +111,7 @@ flowchart LR
 - Full Claude Code compatibility with real models. A real Claude Code CLI now passes a text turn and local Read-tool cycle against a mock backend; multimodal inputs, native thinking, native token counting, prompt caching and server-side tools are still unsupported.
 - Automatic capability verification and predictive provider routing. `/v1/models` combines the default upstream with static route IDs; an opt-in circuit breaker now suppresses calls to failing routed providers, and only definitively failed connection setup may be retried. Operator-declared capability hints and passive provider health counters are not live model verification.
 - Native TLS, CORS configuration, **complete** security auditing, persistent request history, a security-audited identity system, encrypted-at-rest *live* credential store and unauthenticated connection-level abuse protection. An optional local JSONL trail records **administrative response status only**, without identities, secrets or request bodies. The LAN profile uses a **separate** Caddy TLS proxy; runtime-managed clients can be revoked without restart, but static bootstrap credentials still live in the private environment file. No independent security audit has been completed.
-- Complete cross-platform GPU telemetry and automatic cross-server capability matching. Linux DRM/sysfs can supply GPU utilization, VRAM and temperature when present, while NVIDIA-specific and other inaccessible sensors still need an exporter. Replica pools support explicit model allowlists, but YAG does not automatically verify model semantics.
+- Complete cross-platform GPU telemetry and automatic cross-server capability matching. Linux DRM/sysfs can supply GPU utilization, VRAM and temperature when present, while NVIDIA-specific and other inaccessible sensors still need an exporter. Managed replica pools support explicit model allowlists and on-demand inventory probes, but YAG does not automatically verify model semantics.
 - Model inference. Tool execution. Not YAG's job.
 
 The model list is **not** a health or capability guarantee. Static route entries
@@ -239,7 +239,7 @@ router's ports.** If Ollama already runs on the central host, use the
 existing-host mode instead.
 
 [Full LAN server deployment and client onboarding](docs/deployment/lan-hub.md).
-[Control Plane APIs, resource limits, encrypted backups and replica management](docs/operations/control-plane.md).
+[Control Plane APIs, resource limits, managed provider editing, encrypted backups and replica management](docs/operations/control-plane.md).
 [Private administrative audit log: configuration and limitations](docs/operations/admin-audit.md).
 
 ## Ollama / Colibri quickstart
