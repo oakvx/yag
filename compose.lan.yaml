@@ -27,6 +27,8 @@ services:
       HUB_MAX_ACTIVE: ${HUB_MAX_ACTIVE:-4}
       HUB_MAX_QUEUE: ${HUB_MAX_QUEUE:-16}
       HUB_QUEUE_SECONDS: ${HUB_QUEUE_SECONDS:-15}
+      HUB_BACKUP_INTERVAL_HOURS: ${HUB_BACKUP_INTERVAL_HOURS:-24}
+      HUB_BACKUP_RETAIN: ${HUB_BACKUP_RETAIN:-14}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
