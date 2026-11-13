@@ -86,6 +86,23 @@ class HttpRobustness(unittest.TestCase):
                     b'HTTP/1.1 '+str(expected).encode()+b' '),reply)
         self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
 
+    def test_security_parser_matrix(self):
+        """HTTP parser regression matrix: explicit byte-level cases."""
+        auth = b'Authorization: Bearer '+KEY.encode()+b'\r\n'
+        get = b'GET /health HTTP/1.1\r\nHost: local\r\n'
+        post = b'POST /v1/chat/completions HTTP/1.1\r\nHost: local\r\n'+auth
+        cases = [
+            # HTTP_SECURITY_CASES_START
+            # HTTP_SECURITY_CASES_END
+        ]
+        for label,payload,expected in cases:
+            with self.subTest(case=label):
+                response=self.raw(payload)
+                self.assertTrue(response.startswith(
+                    b'HTTP/1.1 '+str(expected).encode()+b' '),
+                    (label,response))
+        self.assertEqual(request(self.port,'GET','/health',key=None)[0],200)
+
     def test_deterministic_malformed_header_corpus(self):
         rng=random.Random(190283)
         for _ in range(120):
