@@ -300,6 +300,13 @@ static void handle(int fd,yag_config *c) {
             }
         }
         char *v=colon+1; while(*v==' '||*v=='\t')v++; char *tail=v+strlen(v); while(tail>v && (tail[-1]==' '||tail[-1]=='\t')) *--tail=0;
+        /* Header values may contain HTAB, but never bare CR/LF, DEL or
+         * other control bytes. Reject ambiguous upstream/proxy framing. */
+        for(const unsigned char *q=(const unsigned char *)v;*q;q++) {
+            if((*q<0x20 && *q!='\t') || *q==0x7f) {
+                error(fd,400,"Invalid header value");goto done;
+            }
+        }
         if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
         else if(!strcasecmp(line,"Transfer-Encoding")) transfer_encoding=1;
         else if(!strcasecmp(line,"Expect")) {
