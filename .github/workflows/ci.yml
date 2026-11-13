@@ -102,6 +102,8 @@ jobs:
         env:
           YAG_API_KEY: integration-key-dummy-12345
         run: docker compose config --quiet
+      - name: Build non-root LAN Hub image
+        run: docker build --file hub/Dockerfile --tag yag-hub:local .
       - name: Validate LAN topology for existing and managed Ollama
         run: python3 tests/lan_compose_test.py
       - name: Run image and check unprivileged process
@@ -152,6 +154,20 @@ jobs:
           status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
             --cacert ./lan-root-ca.crt https://127.0.0.1:18443/)
           test "$status" = 404
+          # LAN admin dashboard and dynamically scoped control plane.
+          curl --fail --silent --show-error --cacert ./lan-root-ca.crt \
+            https://127.0.0.1:18443/hub/ | grep 'AI Datacenter'
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt https://127.0.0.1:18443/hub/api/clients)
+          test "$status" = 401
+          admin_key=$(sed -n 's/^YAG_API_KEY=//p' .env.lan)
+          curl --fail --silent --show-error --cacert ./lan-root-ca.crt \
+            -H "Authorization: Bearer $admin_key" \
+            https://127.0.0.1:18443/hub/api/clients | grep 'pc-01'
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            --cacert ./lan-root-ca.crt -H "Authorization: Bearer $client_key" \
+            https://127.0.0.1:18443/hub/api/clients)
+          test "$status" = 403
 
   codex-mock-probe:
     name: Codex CLI mock qualification (informational)
