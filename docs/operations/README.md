@@ -72,6 +72,9 @@ export YAG_EXTRA_KEY_SCOPES='inference+models,monitor'
 - `monitor` permits read-only `/api/*` inventory, status and metrics.
 - Only `all` can call active provider reachability checks.
 - Any denied scope returns 403; invalid credentials return 401.
+- All API key values must be unique, including the primary key. YAG refuses
+  startup if an extra key duplicates another key, preventing ambiguous
+  permission selection when scopes differ.
 - Rotating or revoking keys requires process restart; these are **not**
   user accounts or an online identity administration API.
 
