@@ -16,6 +16,29 @@ curl http://127.0.0.1:8080/health
 docker compose logs --no-color yag
 ```
 
+### Ollama on the Colibri host
+
+If Docker Compose and Ollama run on the same Linux host, the container
+cannot use the host's `127.0.0.1:11434` directly. Configure a reachable
+private host address instead:
+
+```sh
+export YAG_API_KEY="$(openssl rand -hex 32)"
+export YAG_UPSTREAM_URL='http://host.docker.internal:11434/v1'
+docker compose up --build -d
+```
+
+This works only if Ollama listens on a host interface reachable by Docker.
+By default, Ollama may listen only on loopback; changing its bind address
+requires a **firewall rule restricting port 11434 to the intended host or
+container network**. Never publish the Ollama API to the public internet.
+The Compose gateway port remains bound to host loopback.
+
+For Ollama on a separate machine named Colibri, use
+`YAG_UPSTREAM_URL=http://colibri:11434/v1` on a private LAN or a protected
+tunnel, and ensure that DNS, firewall and bind addresses permit YAG to
+connect. See the [Ollama / Colibri guide](../integrations/ollama-colibri.md).
+
 To connect to an inference container on the same Docker network, configure
 `YAG_UPSTREAM_URL` with its service DNS name and `/v1` suffix instead.
 Never embed upstream credentials in the Compose file. Use a restricted
