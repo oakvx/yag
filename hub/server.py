@@ -427,6 +427,18 @@ def main():
         port_number(os.environ.get("HUB_QUEUE_SECONDS"), 15, upper=300))
     Handler.ollama = Ollama(os.environ.get("HUB_OLLAMA_URL", ""))
     Handler.telemetry = Telemetry()
+    interval_hours = port_number(os.environ.get("HUB_BACKUP_INTERVAL_HOURS"), 24, lower=0, upper=720)
+    keep = port_number(os.environ.get("HUB_BACKUP_RETAIN"), 14, upper=60)
+    if interval_hours:
+        def automatic_backup():
+            while True:
+                try:
+                    Handler.state.archive_snapshot("/data/backups", keep)
+                except (OSError, ValueError, sqlite3.Error) as exc:
+                    # Only the error type is logged, never sensitive DB content.
+                    print("Hub backup failed:", type(exc).__name__, flush=True)
+                threading.Event().wait(interval_hours * 3600)
+        threading.Thread(target=automatic_backup, name="hub-backup", daemon=True).start()
     port = port_number(os.environ.get("HUB_PORT"), 8081)
     server = LimitedThreadServer(("0.0.0.0", port), Handler)
     print("YAG Hub listening on private container port", port, flush=True)
