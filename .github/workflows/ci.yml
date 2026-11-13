@@ -111,10 +111,15 @@ jobs:
           compose=(docker compose --env-file .env.lan -f compose.yaml -f compose.lan.yaml)
           trap '${compose[@]} down --remove-orphans || true' EXIT
           "${compose[@]}" up --no-build -d yag caddy
-          for i in $(seq 1 45); do
-            if curl -ksSf https://127.0.0.1:18443/health > /dev/null; then break; fi
+          ready=0
+          for i in $(seq 1 15); do
+            if curl -ksSf https://127.0.0.1:18443/health > /dev/null; then ready=1; break; fi
             sleep 1
           done
+          if [ "$ready" != 1 ]; then
+            "${compose[@]}" logs --no-color caddy
+            exit 1
+          fi
           "${compose[@]}" cp caddy:/data/caddy/pki/authorities/local/root.crt ./lan-root-ca.crt
           curl --fail --silent --show-error --cacert ./lan-root-ca.crt https://127.0.0.1:18443/health
           status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
