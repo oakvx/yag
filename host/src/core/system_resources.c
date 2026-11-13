@@ -131,7 +131,7 @@ static int add_gpu_sysfs(yyjson_mut_doc *d,yyjson_mut_val *gpu,int *count) {
         if(!ok || !yyjson_mut_arr_add_val(devices,device))return 0;
         (*count)++;
     }
-    return yyjson_mut_obj_add_str(d,gpu,"scope","visible_linux_drm_sysfs")!=NULL;
+    return yyjson_mut_obj_add_str(d,gpu,"scope","visible_linux_drm_sysfs");
 }
 
 void system_resources_handle(int fd) {
