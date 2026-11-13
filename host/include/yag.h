@@ -49,6 +49,7 @@ typedef struct {
     int enforce_model_capabilities;
     unsigned circuit_threshold, circuit_cooldown_seconds;
     unsigned header_deadline_seconds, body_deadline_seconds;
+    unsigned max_body_bytes;
     yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
