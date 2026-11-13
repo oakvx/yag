@@ -221,6 +221,15 @@ int config_load(yag_config *c) {
     }
     c->circuit_threshold=(unsigned)threshold_value;
     c->circuit_cooldown_seconds=(unsigned)cooldown_value;
+    const char *max_body_mb=env("YAG_MAX_BODY_MB","1");
+    char *body_size_end=NULL;
+    errno=0;
+    unsigned long body_mb=strtoul(max_body_mb,&body_size_end,10);
+    if(errno || body_size_end==max_body_mb || *body_size_end || body_mb<1 || body_mb>8) {
+        fprintf(stderr,"YAG_MAX_BODY_MB must be 1..8\\n");
+        return -1;
+    }
+    c->max_body_bytes=(unsigned)body_mb*1024u*1024u;
     const char *header_deadline=env("YAG_HEADER_DEADLINE_SECONDS","10");
     const char *body_deadline=env("YAG_BODY_DEADLINE_SECONDS","30");
     char *he=NULL,*be=NULL;
