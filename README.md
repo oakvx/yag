@@ -96,7 +96,7 @@ flowchart LR
 ## ✅ What works today
 
 - **Host.** Strict request-line spacing and control-byte checks; duplicate Host and competing auth headers are rejected. Localhost HTTP server, public `/health`, one primary bearer key plus up to 16 extra keys, with optional read-only/scoped access for extra keys. HTTP header/body deadlines and connection caps are enforced.
-- **Chat Completions.** `GET /v1/models`, `GET /v1/models/{id}` and `POST /v1/chat/completions`, including transparent upstream SSE streaming and tool-call structures. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
+- **Chat Completions.** `GET /v1/models`, `GET /v1/models/{id}`, `POST /v1/chat/completions`, `POST /v1/completions` and `POST /v1/embeddings`, including transparent upstream SSE streaming for generation and tool-call structures for Chat. Bodies are passed through; upstream errors and status codes are forwarded verbatim. The upstream decides what it supports — YAG does not validate OpenAI semantics.
 - **Responses subset (stateless).** Text, function calls and tool results (including namespaced function tools), semantic SSE events and explicitly rejected unsupported features. A pinned Codex CLI completed mock text and shell-tool cycles; see [Responses support](docs/architecture/STATUS.md).
 - **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
 - **Console.** Served by the Host itself: session-only key entry, real status and model discovery, text chat with cancellation, copyable HTTP instructions. The playground doesn't do tools — API clients handle those themselves.
@@ -128,6 +128,8 @@ don't guarantee their backends are reachable or support the requested operations
 | `POST` | `/api/provider/check` | key | `{}` for the default provider or `{"model":"<id>"}` → probes that route's `/models` with a 3 s timeout. Reachability only, never returns upstream details. |
 | `GET` | `/v1/models` | key | Default upstream discovery + configured static route IDs. |
 | `POST` | `/v1/chat/completions` | key | Passthrough, SSE included. |
+| `POST` | `/v1/completions` | key | Legacy text completions passthrough, SSE if supported upstream. |
+| `POST` | `/v1/embeddings` | key | Vector embeddings passthrough; requires upstream embedding model. |
 | `POST` | `/v1/responses` | key | Responses subset, translated to Chat. |
 | `POST` | `/v1/messages` | key | Anthropic text/function Messages, optional SSE streaming; translated to Chat. |
 
@@ -211,6 +213,7 @@ Read once at startup. Restart to apply.
 | `YAG_BIND` | `127.0.0.1` | Listen address. `0.0.0.0` only if you mean it. |
 | `YAG_PORT` | `8080` | Listen port. |
 | `YAG_UPSTREAM_URL` | `http://127.0.0.1:8000/v1` | HTTP(S) upstream API base. No trailing slash, query or fragment. |
+| *Ollama on Colibri* | *set `YAG_UPSTREAM_URL`* | Example: `http://colibri:11434/v1` on a trusted private LAN; no native Ollama API is exposed by YAG. |
 | `YAG_UPSTREAM_KEY` | empty | Optional upstream bearer key. Never leaves the host. |
 | `YAG_MODEL_ROUTES` | empty | JSON array of ≤16 `{model,url,key_env?}` routes, validated at startup. Matched models go there; everything else goes to the default. |
 | `YAG_MODEL_CAPABILITIES` | empty | JSON array (≤32) of `{model,features,context_window?}`. Features: streaming, function_tools, json_schema, reasoning, vision, audio. Operator assertions only, not probed. |
