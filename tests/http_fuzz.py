@@ -97,6 +97,7 @@ class HttpRobustness(unittest.TestCase):
             ('request-line-02',b'GET  /health HTTP/1.1\r\nHost: local\r\n\r\n',400),
             ('request-line-03',b'GET /health  HTTP/1.1\r\nHost: local\r\n\r\n',400),
             ('request-line-04',b'GET /health HTTP/1.1 \r\nHost: local\r\n\r\n',400),
+            ('request-line-05',b'GET\t/health HTTP/1.1\r\nHost: local\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
