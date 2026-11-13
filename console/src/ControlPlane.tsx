@@ -370,21 +370,106 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <b>{scheduler?.queue_wait_ms === undefined?'—':scheduler.queue_wait_ms+' ms'}</b></div>
       </section>
       <section className="panel control-wide">
-        <div className="panel-head"><div><h2><Server size={16}/> Multi-server inference pool</h2>
-          <p>Least-inflight selection for replicas with matching model inventories; health cooldown after failures.</p></div>
-          <span className="tag">{pool.length} BACKENDS</span></div>
+        <div className="panel-head"><div><h2><Server size={16}/> Provider manager</h2>
+          <p>Manage OpenAI-compatible replicas, model allowlists, routing priority and connection health.</p></div>
+          <span className="tag">{providers.length} REPLICAS</span></div>
+        {errors.providers && <div className="control-error">{errors.providers}</div>}
+        {!providerEditable && <div className="control-footnote">
+          Editing is disabled. Set <code>YAG_PROVIDER_STORE</code> to a private path on the server.
+          You can still inspect configured backends and test their model inventories.
+        </div>}
+        <div className="control-provider-primary">
+          <div><b>Primary backend · always enabled</b>
+            <small>Default upstream remains the model discovery authority.</small></div>
+          <div className="control-actions">
+            <span className="control-probe">{providerChecks[0]
+              ? (providerChecks[0].available?'Healthy':'Unavailable')+
+                ' · '+providerChecks[0].http_status+' · '+providerChecks[0].latency_ms+' ms'
+              : 'Not checked'}</span>
+            <button className="outline-button small" onClick={()=>void checkProvider(0)}>Check</button>
+          </div>
+          {providerChecks[0]?.models.length ? <small className="control-discovered">
+            Reported models: {providerChecks[0].models.join(', ')}</small> : null}
+        </div>
+        <div className="control-table">
+          {providers.map(p=><div className="control-provider" key={p.index}>
+            <div className="control-provider-info">
+              <b>Replica #{p.index} · {p.enabled?'Enabled':'Disabled'} · priority {p.priority}</b>
+              <code>{p.url}</code>
+              <small>Credentials: {p.key_env || 'none'} · Declared models: {
+                p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
+              <small>Probe: {providerChecks[p.index]
+                ? (providerChecks[p.index].available?'Healthy':'Unavailable')+
+                  ' · HTTP '+providerChecks[p.index].http_status+
+                  ' · '+providerChecks[p.index].latency_ms+' ms'
+                : 'Not checked'}</small>
+              {providerChecks[p.index]?.models.length ? <small className="control-discovered">
+                Backend-reported models (unverified): {providerChecks[p.index].models.join(', ')}
+              </small> : null}
+            </div>
+            <div className="control-actions">
+              <button className="outline-button small" onClick={()=>void checkProvider(p.index)}>Check</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy}
+                onClick={()=>editProvider(p)}>Edit</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy}
+                onClick={()=>void changeProvider(p.index,'toggle')}>{p.enabled?'Disable':'Enable'}</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy||p.index===1}
+                onClick={()=>void changeProvider(p.index,'up')}>↑</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy||p.index===providers.length}
+                onClick={()=>void changeProvider(p.index,'down')}>↓</button>
+              <button className="outline-button small danger" disabled={!providerEditable||!!busy}
+                onClick={()=>void changeProvider(p.index,'remove')}>Remove</button>
+            </div>
+          </div>)}
+          {!providers.length && <div className="control-empty">No additional backends configured.</div>}
+        </div>
+        <form className="control-provider-form" onSubmit={e=>void saveProvider(e)}>
+          <div className="control-form-title"><b>{providerEditing===null?'Add replica':'Edit replica #'+providerEditing}</b>
+            <small>Apply updates atomically. Busy pools respond with HTTP 409, without interrupting inference.</small></div>
+          <div className="control-provider-fields">
+            <label>API base URL
+              <input value={providerUrl} onChange={e=>setProviderUrl(e.target.value)}
+                placeholder="http://192.168.1.60:11434/v1" maxLength={512}
+                required disabled={!providerEditable||!!busy}/></label>
+            <label>Model IDs (optional, comma-separated)
+              <input value={providerModels} onChange={e=>setProviderModels(e.target.value)}
+                placeholder="llama3.2, qwen2.5" disabled={!providerEditable||!!busy}/></label>
+            <label>Credential alias
+              <select value={providerKey} onChange={e=>setProviderKey(e.target.value)}
+                disabled={!providerEditable||!!busy}>
+                <option value="">None</option>
+                {Array.from({length:8},(_,i)=>'YAG_POOL_KEY_'+(i+1)).map(alias=>
+                  <option key={alias} value={alias}>{alias}</option>)}
+              </select></label>
+            <label>Priority (0 highest · 100 lowest)
+              <input type="number" min="0" max="100" value={providerPriority}
+                onChange={e=>setProviderPriority(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+          </div>
+          <div className="control-actions">
+            {providerEditing!==null && <button type="button" className="outline-button small"
+              onClick={resetProviderForm}>Cancel edit</button>}
+            <button className="primary-button" type="submit"
+              disabled={!providerEditable||!!busy||!providerUrl.trim()||
+                        (providerEditing===null&&providers.length>=8)}>
+              {providerEditing===null?'Add and apply':'Save and apply'}
+            </button>
+          </div>
+        </form>
+        <div className="control-footnote">
+          Routing selects a backend by least concurrent requests, then numeric priority.
+          Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
+          while the Console is open; reported IDs are not proof of model capabilities.
+          Secrets remain in server-side environment variables and are never included in API responses.
+          Private LAN connections and endpoint validation remain required.
+        </div>
         <div className="provider-table-wrap"><table className="provider-table">
-          <thead><tr><th>BACKEND</th><th>RUNNING</th><th>ATTEMPTS</th>
-            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th><th>MODELS</th></tr></thead>
+          <thead><tr><th>BACKEND</th><th>ACTIVE</th><th>ATTEMPTS</th>
+            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
             <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
-            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td>
-            <td>{p.model_allowlist_enabled ? p.declared_models?.join(', ') : 'Unrestricted'}</td></tr>)}</tbody>
+            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
         </table></div>
-        <div className="control-footnote">For heterogeneous replicas, declare the supported model IDs in the backend's <code>models</code> allowlist. Absence of this field preserves legacy unrestricted routing; YAG does not automatically verify inventory or model semantics. Configure replica endpoints on the central server with
-          <code> python scripts/lan.py providers add --url http://colibri2:11434/v1</code>,
-          then apply with <code>python scripts/lan.py up</code>. Upstream credentials and addresses
-          are never returned by the monitoring API.</div>
       </section>
       <section className="panel control-wide">
         <div className="panel-head"><div><h2><HardDrive size={16}/> Maintenance and backups</h2>
