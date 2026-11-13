@@ -52,6 +52,8 @@ typedef struct {
     yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
+    unsigned long key_accepted_requests[17];
+    unsigned long key_rate_limited_requests[17];
 } yag_config;
 int config_load(yag_config *c);
 void config_free(yag_config *c);
