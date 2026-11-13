@@ -40,7 +40,7 @@ function byteSize(value?: number) {
 /** Generate local-only operator commands; never send backend addresses or credentials to the API. */
 export function privateReplicaCommand(raw: string): {command:string;error:string} {
   const url=raw.trim()
-  if(!url || url.length>256 || /[\s"'\x00-\x1f\x7f]/.test(url))
+  if(!/^http:\/\/[0-9.]+:[0-9]{1,5}\/v1$/.test(url))
     return {command:'',error:'Enter a valid private endpoint without whitespace or shell metacharacters.'}
   let parsed:URL
   try { parsed=new URL(url) } catch { return {command:'',error:'Invalid URL.'} }
