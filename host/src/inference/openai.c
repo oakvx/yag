@@ -222,12 +222,12 @@ static int measured_upstream(yag_config *cfg,const yag_config *target,
     free(cap.bytes);
     return rc;
 }
-/* Replica pool: default upstream is slot zero. Every replica must expose
- * the same model IDs and OpenAI-compatible behavior. Selection is least
- * outstanding requests; passive health suppresses failing replicas for
- * 30 seconds after two consecutive transport/5xx failures. No ambiguous
- * request is ever replayed. */
-static int pool_choose(yag_config *cfg) {
+/* Replica pool: default upstream is slot zero. Optional explicit per-replica
+ * model allowlists prevent requests being routed to unsupported replicas.
+ * Empty allowlist (legacy config) means operator-asserted equivalent models.
+ * Least-inflight selection and passive health cooldown apply afterward.
+ * No ambiguous request is ever replayed. */
+static int pool_choose(yag_config *cfg,const char *model) {
     int chosen=-1;
     unsigned lowest=0xffffffffu;
     time_t now=time(NULL);
@@ -240,6 +240,14 @@ static int pool_choose(yag_config *cfg) {
         time_t until=index==0?cfg->default_pool_unavailable_until:
             cfg->pool[index-1].unavailable_until;
         if(until>now)continue;
+        if(index>0 && cfg->pool[index-1].model_count) {
+            int supported=0;
+            for(size_t j=0;j<cfg->pool[index-1].model_count;j++)
+                if(model && !strcmp(model,cfg->pool[index-1].models[j])) {
+                    supported=1;break;
+                }
+            if(!supported)continue;
+        }
         if(active<lowest){lowest=active;chosen=(int)index;}
     }
     if(chosen>=0) {
@@ -295,8 +303,16 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
             && yyjson_mut_obj_add_uint(d,item,"successes",stats->successes)
             && yyjson_mut_obj_add_uint(d,item,"failures",stats->failures)
             && yyjson_mut_obj_add_uint(d,item,"cooldown_seconds",
-                 until>now?(unsigned long)(until-now):0u)
-            && yyjson_mut_arr_add_val(items,item);
+                 until>now?(unsigned long)(until-now):0u);
+        yyjson_mut_val *declared=ok?yyjson_mut_obj_add_arr(d,item,"declared_models"):NULL;
+        if(!declared)ok=0;
+        if(ok && i>0)for(size_t j=0;j<cfg->pool[i-1].model_count;j++)
+            if(!yyjson_mut_arr_add_str(d,declared,cfg->pool[i-1].models[j])) {
+                ok=0;break;
+            }
+        if(ok)ok=yyjson_mut_obj_add_bool(d,item,"model_allowlist_enabled",
+                        i>0 && cfg->pool[i-1].model_count>0)
+                  && yyjson_mut_arr_add_val(items,item);
     }
     pthread_mutex_unlock(&cfg->lock);
     if(ok)yyjson_mut_doc_set_root(d,root);
@@ -317,7 +333,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
     yag_config selected={0};
     const yag_config *target=config_for_model(c,model,&selected);
     if(target==c && c->pool_count) {
-        int index=pool_choose(state);
+        int index=pool_choose(state,model);
         if(index<0) {
             if(status)*status=0;
             return CURLE_COULDNT_CONNECT;

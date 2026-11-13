@@ -45,8 +45,8 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 > with real inference models remains unverified. The Anthropic adapter now handles
 > streaming text and function tools. Claude Code CLI now completes streaming text
 > and a local Read-tool cycle against a deterministic mock backend; real models
-> remain **unverified**. No TLS, CORS
-> configuration, audit log or admin API. **Do not deploy this on an untrusted network.**
+> remain **unverified**. No native TLS, CORS
+> configuration, security audit log or network-exposed admin API. **Do not deploy this on an untrusted network.**
 > Full scope: [architecture & status](docs/architecture/STATUS.md).
 
 ---
@@ -60,7 +60,7 @@ It never runs a model and never executes a tool — and never will.
 That's not a limitation. That's the scope. YAG is a router, a translator
 and a gatekeeper. Boring on purpose: C17, libcurl, pthreads, vendored yyjson.
 
-- **One key in front of many backends** — a default upstream plus up to 16 exact-model routes, each with its own secret read from the environment.
+- **One key in front of many backends** — a default upstream plus up to 16 exact-model routes, each with its own secret read from the environment. Pool replicas can optionally declare exact model allowlists.
 - **Credentials never leave the host.** The browser sees your gateway key; the upstream key stays server-side. Always.
 
 ## Architecture
@@ -101,7 +101,7 @@ flowchart LR
 - **Anthropic Messages.** `POST /v1/messages` translates text and function-tool exchanges in non-streaming and SSE modes. Tool definitions, selection, `tool_use`, mixed text/tool results, system text blocks and error-marked results are supported within a bounded subset. Accepts `Authorization: Bearer` or `x-api-key` with the YAG gateway secret.
 - **Console.** Served by the Host itself: session-only key entry, real status and model discovery, text chat with cancellation, copyable HTTP instructions. The playground doesn't do tools — API clients handle those themselves.
 - **Hard limits, enforced.** Bounded request size, connection count, socket and upstream timeouts.
-- **Central AI Control Plane.** Local-only Console model downloads/deletion, persistent runtime LAN clients with immediate revocation, container-scoped resource telemetry, FIFO inference scheduler and least-inflight replica pool with passive cooldowns. Operator CLI supports encrypted configuration backups and controlled updates. See [Control Plane operations](docs/operations/control-plane.md).
+- **Central AI Control Plane.** Local-only Console model downloads/deletion, persistent runtime LAN clients with immediate revocation, cgroup and optional Linux host-visible hardware metrics, FIFO inference scheduler and model-aware least-inflight replica pool with passive cooldowns. Operator CLI supports encrypted configuration backups and controlled updates. See [Control Plane operations](docs/operations/control-plane.md).
 - **Additional multimodal passthrough.** OpenAI-compatible image generation and binary audio speech endpoints (backend support required, not implemented by Ollama automatically).
 - **Tests.** Automated mock-upstream suite: auth, framing, discovery, tool data, streaming, errors, timeout, disconnection, concurrency and control-plane operations.
 
@@ -111,7 +111,7 @@ flowchart LR
 - Full Claude Code compatibility with real models. A real Claude Code CLI now passes a text turn and local Read-tool cycle against a mock backend; multimodal inputs, native thinking, native token counting, prompt caching and server-side tools are still unsupported.
 - Automatic capability verification and predictive provider routing. `/v1/models` combines the default upstream with static route IDs; an opt-in circuit breaker now suppresses calls to failing routed providers, and only definitively failed connection setup may be retried. Operator-declared capability hints and passive provider health counters are not live model verification.
 - Native TLS, CORS configuration, audit logging, persistent request history, a security-audited identity system, encrypted-at-rest *live* credential store and unauthenticated connection-level abuse protection. The LAN profile uses a **separate** Caddy TLS proxy; runtime-managed clients can be revoked without restart, but static bootstrap credentials still live in the private environment file. No independent security audit has been completed.
-- Complete host GPU telemetry and automatic cross-server capability matching. Ollama reports loaded-model VRAM; precise host GPU/VRAM utilization needs an exporter. Replica pools require the same installed model IDs and semantics.
+- Complete cross-platform GPU telemetry and automatic cross-server capability matching. Linux DRM/sysfs can supply GPU utilization, VRAM and temperature when present, while NVIDIA-specific and other inaccessible sensors still need an exporter. Replica pools support explicit model allowlists, but YAG does not automatically verify model semantics.
 - Model inference. Tool execution. Not YAG's job.
 
 The model list is **not** a health or capability guarantee. Static route entries
@@ -127,7 +127,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
 | `GET` | `/api/clients` | monitor key | Per-key accepted/throttled request counts, positional labels and scopes. No secrets or prompts. |
 | `GET` | `/api/scheduler` | monitor key | Active/waiting requests and inference concurrency settings. |
-| `GET` | `/api/system/resources` | monitor key | Container CPU/load and cgroup RAM metrics (not whole-host GPU telemetry). |
+| `GET` | `/api/system/resources` | monitor key | cgroup RAM, Linux-visible CPU and RAM, optional DRM/sysfs GPU counters; sensor scope explicit. |
 | `GET` | `/api/providers/pool` | monitor key | Default + replica load, passive health and request aggregates without URLs or secrets. |
 | `GET/POST` | `/api/admin/clients*` | primary only (local) | List, issue, rename, enable/disable and revoke runtime client keys. |
 | `GET/POST` | `/api/admin/ollama/*` | primary only (local) | Ollama installed/loaded models, background pull jobs and deletion. |

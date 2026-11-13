@@ -10,12 +10,12 @@ type Client = { id: number; name: string; scope: string; enabled: boolean; manag
 type ClientList = {data: Client[]}
 type ResourceMetrics = {
   scope: string;
-  cpu: {available: boolean; logical_cores_visible?: number; load_1?: number;load_5?: number;load_15?: number}
-  memory: {available: boolean;scope: string;used_bytes?: number;limit_bytes?: number}
-  gpu: {available: boolean}
+  cpu: {available: boolean; logical_cores_visible?: number; load_1?: number;load_5?: number;load_15?: number;utilization_percent?: number}
+  memory: {available: boolean;scope: string;used_bytes?: number;limit_bytes?: number;visible_host_total_bytes?: number;visible_host_available_bytes?: number;visible_host_scope?: string}
+  gpu: {available: boolean;scope?: string;devices?: {id:string;utilization_percent?:number;vram_used_bytes?:number;vram_total_bytes?:number;temperature_c?:number}[]}
 }
 type Scheduler = {max_inference:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
-type Pool = {data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number}[]}
+type Pool = {data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
@@ -239,19 +239,33 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
       </section>
       <section className="panel">
         <div className="panel-head"><div><h2><Cpu size={16}/> System telemetry</h2>
-          <p>Container-scoped measurements; do not confuse them with whole-host GPU metrics.</p></div></div>
+          <p>Gateway cgroup metrics, visible Linux kernel values and driver-dependent GPU sensors are identified separately.</p></div></div>
         {errors.infra && <div className="control-error">{errors.infra}</div>}
         <div className="setting-row"><div><b>Visible CPU cores</b><small>Gateway runtime</small></div>
           <b>{resources?.cpu.logical_cores_visible ?? 'Unavailable'}</b></div>
         <div className="setting-row"><div><b>Load average (1 min)</b><small>Linux reported load</small></div>
           <b>{resources?.cpu.load_1?.toFixed(2) ?? 'Unavailable'}</b></div>
+        <div className="setting-row"><div><b>CPU utilization</b><small>/proc/stat · sampled between refreshes</small></div>
+          <b>{resources?.cpu.utilization_percent === undefined?'Sampling…':resources.cpu.utilization_percent.toFixed(1)+'%'}</b></div>
         <div className="setting-row"><div><b>Memory usage</b><small>cgroup v2 · gateway container</small></div>
           <b>{byteSize(resources?.memory.used_bytes)}</b></div>
         <div className="setting-row"><div><b>Memory limit</b><small>Container cgroup limit</small></div>
           <b>{byteSize(resources?.memory.limit_bytes)}</b></div>
+        <div className="setting-row"><div><b>Linux-visible RAM</b><small>/proc/meminfo · may describe host even inside container</small></div>
+          <b>{byteSize(resources?.memory.visible_host_total_bytes)}</b></div>
+        <div className="setting-row"><div><b>Linux-visible available RAM</b><small>/proc/meminfo · separate from cgroup limit</small></div>
+          <b>{byteSize(resources?.memory.visible_host_available_bytes)}</b></div>
         <div className="setting-row"><div><b>Loaded model VRAM</b><small>Sum reported by Ollama /api/ps</small></div>
           <b>{loaded.length?byteSize(activeVram):'Not reported'}</b></div>
-        <div className="control-footnote">Total GPU utilization, VRAM capacity and host-wide memory require a dedicated hardware exporter and are not reported by this gateway.</div>
+        {(resources?.gpu.devices||[]).map(g=><React.Fragment key={g.id}>
+          <div className="setting-row"><div><b>{g.id} · GPU usage</b><small>Visible Linux DRM sysfs (driver dependent)</small></div>
+            <b>{g.utilization_percent===undefined?'Not reported':g.utilization_percent+'%'}</b></div>
+          <div className="setting-row"><div><b>{g.id} · VRAM</b><small>Used / total reported by driver</small></div>
+            <b>{byteSize(g.vram_used_bytes)} / {byteSize(g.vram_total_bytes)}</b></div>
+          <div className="setting-row"><div><b>{g.id} · Temperature</b><small>GPU hwmon sensor</small></div>
+            <b>{g.temperature_c===undefined?'Not reported':g.temperature_c.toFixed(1)+' °C'}</b></div>
+        </React.Fragment>)}
+        <div className="control-footnote">GPU sensor availability depends on Linux sysfs access and the driver. NVIDIA and other devices without DRM counters require an external exporter; unavailable values are never estimated.</div>
       </section>
       <section className="panel">
         <div className="panel-head"><div><h2><Activity size={16}/> Inference scheduler</h2>
@@ -269,12 +283,13 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <span className="tag">{pool.length} BACKENDS</span></div>
         <div className="provider-table-wrap"><table className="provider-table">
           <thead><tr><th>BACKEND</th><th>RUNNING</th><th>ATTEMPTS</th>
-            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
+            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th><th>MODELS</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
             <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
-            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
+            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td>
+            <td>{p.model_allowlist_enabled ? p.declared_models?.join(', ') : 'Unrestricted'}</td></tr>)}</tbody>
         </table></div>
-        <div className="control-footnote">Configure replica endpoints on the central server with
+        <div className="control-footnote">For heterogeneous replicas, declare the supported model IDs in the backend's <code>models</code> allowlist. Absence of this field preserves legacy unrestricted routing; YAG does not automatically verify inventory or model semantics. Configure replica endpoints on the central server with
           <code> python scripts/lan.py providers add --url http://colibri2:11434/v1</code>,
           then apply with <code>python scripts/lan.py up</code>. Upstream credentials and addresses
           are never returned by the monitoring API.</div>

@@ -22,10 +22,10 @@ static int valid_url(const char *url) {
     return n && (!strncmp(url,"http://",7) || !strncmp(url,"https://",8))
         && !strpbrk(url,"\r\n?#") && url[n-1]!='/';
 }
-/* All pool backends must expose the SAME model IDs and semantics.
- * The default upstream remains the model-discovery authority. Optional
- * replicas receive inference only and are selected by least outstanding
- * requests with a small passive health cooldown. */
+/* The default upstream remains the model-discovery authority. A replica may
+ * declare a bounded list of supported model IDs to avoid sending it unknown
+ * models. Unrestricted replicas retain legacy equivalent-inventory behavior.
+ * The operator, not YAG, must verify semantic compatibility of model IDs. */
 static int load_pool(yag_config *cfg) {
     const char *raw=getenv("YAG_UPSTREAM_POOL");
     if(!raw || !*raw)return 0;
@@ -36,18 +36,37 @@ static int load_pool(yag_config *cfg) {
         yyjson_val *entry=yyjson_arr_get(root,i);
         yyjson_val *url=yyjson_obj_get(entry,"url");
         yyjson_val *key=yyjson_obj_get(entry,"key_env");
+        yyjson_val *models=yyjson_obj_get(entry,"models");
         if(!yyjson_is_obj(entry) || !yyjson_is_str(url)
             || !yyjson_get_len(url) || yyjson_get_len(url)>1024
             || strlen(yyjson_get_str(url))!=yyjson_get_len(url)
             || !valid_url(yyjson_get_str(url))
             || (key && (!yyjson_is_str(key) || !yyjson_get_len(key)
                 || strlen(yyjson_get_str(key))!=yyjson_get_len(key)))
-            || yyjson_obj_size(entry)!=(size_t)(key?2:1)
+            || (models && (!yyjson_is_arr(models) || !yyjson_arr_size(models)
+                || yyjson_arr_size(models)>32))
+            || yyjson_obj_size(entry)!=(size_t)(1+(key?1:0)+(models?1:0))
             || !strcmp(yyjson_get_str(url),cfg->upstream)) {
             ok=0;break;
         }
         for(size_t j=0;j<cfg->pool_count;j++)
             if(!strcmp(yyjson_get_str(url),cfg->pool[j].url))ok=0;
+        if(!ok)break;
+        if(models)for(size_t j=0;j<yyjson_arr_size(models);j++) {
+            yyjson_val *item=yyjson_arr_get(models,j);
+            if(!yyjson_is_str(item) || !yyjson_get_len(item)
+                || yyjson_get_len(item)>255
+                || strlen(yyjson_get_str(item))!=yyjson_get_len(item)) {
+                ok=0;break;
+            }
+            const unsigned char *name=(const unsigned char *)yyjson_get_str(item);
+            for(size_t k=0;k<yyjson_get_len(item);k++)
+                if(name[k]<32 || name[k]==127)ok=0;
+            for(size_t k=0;k<j;k++)
+                if(!strcmp((const char *)name,
+                           yyjson_get_str(yyjson_arr_get(models,k))))ok=0;
+            if(!ok)break;
+        }
         if(!ok)break;
         const char *secret="";
         if(key) {
@@ -66,10 +85,16 @@ static int load_pool(yag_config *cfg) {
         backend->key=secret;
         if(!backend->url){ok=0;break;}
         cfg->pool_count++;
+        if(models)for(size_t j=0;j<yyjson_arr_size(models);j++) {
+            backend->models[j]=strdup(yyjson_get_str(yyjson_arr_get(models,j)));
+            if(!backend->models[j]){ok=0;break;}
+            backend->model_count++;
+        }
+        if(!ok)break;
     }
     yyjson_doc_free(doc);
     if(!ok)fprintf(stderr,
-        "YAG_UPSTREAM_POOL requires up to 8 distinct OpenAI-compatible URL replicas and optional key_env\n");
+        "YAG_UPSTREAM_POOL: expected up to 8 distinct URL replicas, optional key_env and optional nonempty models array (max 32)\n");
     return ok?0:-1;
 }
 static int load_routes(yag_config *c) {
@@ -358,7 +383,10 @@ void config_free(yag_config *c) {
     for(size_t i=0;i<c->route_count;i++) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
-    for(size_t i=0;i<c->pool_count;i++)free(c->pool[i].url);
+    for(size_t i=0;i<c->pool_count;i++) {
+        free(c->pool[i].url);
+        for(size_t j=0;j<c->pool[i].model_count;j++)free(c->pool[i].models[j]);
+    }
     free(c->extra_keys_storage);
     free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);
