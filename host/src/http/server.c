@@ -299,7 +299,7 @@ static void handle(int fd,yag_config *c) {
          * extra key can be restricted to inference, discovery or read-only
          * monitoring without access to provider probe operations. */
         unsigned required=!strcmp(uri,"/api/provider/check")?8u:
-            !strcmp(uri,"/v1/models")?2u:!strncmp(uri,"/v1/",4)?1u:4u;
+            (!strcmp(uri,"/v1/models") || !strncmp(uri,"/v1/models/",11))?2u:!strncmp(uri,"/v1/",4)?1u:4u;
         unsigned scope=key_index==0?15u:c->extra_key_scopes[key_index-1];
         if(!(scope&required)){error(fd,403,"Insufficient API key scope");goto done;}
         if(!rate_permit(c,key_index)){error(fd,429,"Rate limit exceeded");goto done;}
@@ -356,6 +356,10 @@ static void handle(int fd,yag_config *c) {
     else if(!strcmp(uri,"/v1/models") && !strcmp(method,"GET")) {
         increment(c,&c->model_list_requests);
         models_handle(fd,c);
+    }
+    else if(!strncmp(uri,"/v1/models/",11) && !strcmp(method,"GET")) {
+        increment(c,&c->model_list_requests);
+        models_handle_detail(fd,c,uri+11);
     }
     else if(!strcmp(uri,"/v1/chat/completions") && !strcmp(method,"POST")) {
         increment(c,&c->chat_requests);
