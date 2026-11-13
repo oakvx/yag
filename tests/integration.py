@@ -197,6 +197,32 @@ class Integration(unittest.TestCase):
         self.assertEqual(request(self.port,'GET','/v1/models',key=None)[0],401)
         self.assertEqual(request(self.port,'GET','/v1/models',key='wrong')[0],401)
         status,_,body=request(self.port,'GET','/api/status');self.assertEqual(status,200);self.assertGreaterEqual(json.loads(body)['active_connections'],1)
+    def test_client_monitoring_is_scoped_and_never_leaks_credentials(self):
+        self.assertEqual(request(self.port,'GET','/api/clients',key=None)[0],401)
+        self.assertEqual(request(self.port,'GET','/api/clients',
+            key='models-only-key-123456')[0],403)
+        status,_,body=request(self.port,'GET','/api/clients')
+        self.assertEqual(status,200,body)
+        before=json.loads(body)
+        self.assertEqual(before['object'],'gateway.clients')
+        self.assertEqual(before['rate_limit_per_minute'],0)
+        ids=[item['id'] for item in before['data']]
+        self.assertEqual(ids,['primary','client-01','client-02'])
+        self.assertEqual(before['data'][0]['scope'],'all')
+        self.assertEqual(before['data'][1]['scope'],'all')
+        self.assertEqual(before['data'][2]['scope'],'models')
+        self.assertNotIn(KEY.encode(),body)
+        self.assertNotIn(b'additional-key-for-testing',body)
+        self.assertNotIn(b'models-only-key-123456',body)
+        request(self.port,'GET','/v1/models',key='additional-key-for-testing')
+        status,_,body=request(self.port,'GET','/api/clients')
+        self.assertEqual(status,200,body)
+        after=json.loads(body)
+        self.assertEqual(after['data'][1]['accepted_requests'],
+                         before['data'][1]['accepted_requests']+1)
+        self.assertEqual(after['data'][1]['rate_limited_requests'],0)
+        self.assertNotIn('api_key',str(after))
+
     def test_additional_api_key(self):
         self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing')[0],200)
         self.assertEqual(request(self.port,'GET','/v1/models',key='additional-key-for-testing-invalid')[0],401)

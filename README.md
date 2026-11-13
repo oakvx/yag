@@ -122,6 +122,7 @@ don't guarantee their backends are reachable or support the requested operations
 | `GET` | `/api/status` | key | Host status. |
 | `GET` | `/api/routes` | key | Configured model IDs. No URLs, no credentials. |
 | `GET` | `/api/metrics` | key | In-memory counters by protocol. No prompts, no history. Resets on restart. |
+| `GET` | `/api/clients` | monitor key | Per-key accepted/throttled request counts, positional labels and scopes. No secrets or prompts. |
 | `GET` | `/api/capabilities` | key | Explicit gateway protocol/limit support matrix (not model capability discovery). |
 | `GET` | `/api/models/capabilities` | key | Operator-declared model capabilities (never marked verified). |
 | `GET` | `/api/providers/status` | key | In-memory per-provider attempts, failures, circuit state, latency and reported tokens. |
@@ -200,6 +201,30 @@ rules for Responses live in the [status doc](docs/architecture/STATUS.md).
 > [!CAUTION]
 > If a stream dies after the headers are sent, the connection just closes — the HTTP
 > status cannot be changed retroactively. Clients must detect incomplete streams.
+
+## Central LAN AI server (Colibri)
+
+YAG can run on one central machine and serve multiple LAN PCs over
+**HTTPS with a private CA**, separate scoped API keys and per-key rate
+limits. The recommended Compose stack keeps Ollama's port private,
+publishes only the TLS proxy on the server's selected LAN IP and keeps
+the React Console local to the central machine.
+
+```sh
+python3 scripts/lan_bootstrap.py --lan-ip 192.168.1.50 \
+  --clients 3 --managed-ollama
+docker compose --env-file .env.lan \
+  -f compose.yaml -f compose.lan.yaml -f compose.lan.ollama.yaml \
+  up -d --build
+```
+
+Replace `192.168.1.50` with your server's actual static LAN IP. Clients
+connect to `https://192.168.1.50/v1` after installing the generated
+private CA root. **Do not skip certificate verification or forward the
+router's ports.** If Ollama already runs on the central host, use the
+existing-host mode instead.
+
+[Full LAN server deployment and client onboarding](docs/deployment/lan-hub.md).
 
 ## Ollama / Colibri quickstart
 

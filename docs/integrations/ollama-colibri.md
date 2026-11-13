@@ -1,5 +1,11 @@
 # YAG Universal: Ollama on Colibri
 
+**For a central Colibri server serving multiple LAN PCs**, use the
+[LAN AI Hub deployment](../deployment/lan-hub.md). It provides a
+Compose stack with HTTPS, client-specific API keys and an optional
+private Ollama container. The single-machine loopback examples below
+are not a substitute for secure LAN deployment.
+
 YAG provides a single **OpenAI-compatible gateway** for an Ollama instance
 running on a machine such as **Colibri**. Applications authenticate to YAG,
 not to Ollama. The upstream model executes inference; YAG routes and translates
