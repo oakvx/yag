@@ -329,7 +329,7 @@ static void handle(int fd,yag_config *c) {
     int api=!strncmp(uri,"/v1/",4) || !strncmp(uri,"/api/",5);
     if(api) {
         int is_messages=!strcmp(uri,"/v1/messages") || !strcmp(uri,"/v1/messages/count_tokens");
-        if(is_messages && auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
+        if(auth && native_key){error(fd,400,"Choose one authentication header");goto done;}
         int key_index=auth?authenticated_key(c,auth):
             (is_messages && native_key?authenticated_raw_key(c,native_key):-1);
         if(key_index<0){error(fd,401,"Invalid API key");goto done;}
