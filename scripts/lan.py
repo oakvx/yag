@@ -208,6 +208,8 @@ def main(argv=None):
     providers.add_argument("operation", choices=("list", "add", "remove"))
     providers.add_argument("--url", help="OpenAI-compatible endpoint ending in /v1")
     providers.add_argument("--key-env", help="Name of a configured private upstream key")
+    providers.add_argument("--model", action="append", dest="replica_models",
+                           help="Model ID supported by this replica (repeatable, add only)")
     backup = actions.add_parser("backup", help="Create an encrypted LAN configuration snapshot")
     backup.add_argument("--recipient", required=True, help="Public age recipient (age1...)")
     backup.add_argument("--output-dir", default="backups", help="Private backup directory")
@@ -231,7 +233,8 @@ def main(argv=None):
             export_ca(config)
             return 0
         if args.action == "providers":
-            configure_provider(ENV_PATH, args.operation, args.url, args.key_env)
+            configure_provider(ENV_PATH, args.operation, args.url, args.key_env,
+                               args.replica_models)
             return 0
         if args.action == "backup":
             require_docker(config)
