@@ -130,6 +130,45 @@ through Compose environment, not through JSON or an API response. Pool
 changes currently require redeployment via `lan.py up`; no unsafe
 hot-editing of live libcurl destination pointers is provided.
 
+### Provider Manager (local Console)
+
+The LAN Compose profile sets `YAG_PROVIDER_STORE=/opt/yag/state/providers.json`
+in the private `yag-state` volume. Only the primary administrator key on
+the central machine can use the management API. The LAN Caddy proxy blocks
+`/api/admin/*`, including these endpoints:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/admin/providers` | List replica URLs, credential aliases, model policies and priority; never secret values |
+| POST | `/api/admin/providers/apply` | Atomically persist and replace up to eight live replicas |
+| POST | `/api/admin/providers/check` | Probe the configured upstream's `/models` (3-second timeout), up to 32 IDs |
+
+Example `apply` JSON, sent only from the localhost Console:
+
+```json
+{"replicas":[{"url":"http://192.168.1.60:11434/v1","key_env":"YAG_POOL_KEY_1","models":["llama3.2"],"priority":20,"enabled":true}]}
+```
+
+Credentials are **environment references** `YAG_POOL_KEY_1` through
+`YAG_POOL_KEY_8`. The API rejects raw key values; it persists the alias only.
+Untrusted upstreams must not be configured because they receive inference
+traffic and their assigned upstream credential.
+
+An apply is synchronous and transactional. It returns HTTP 409 while the
+primary or any replica has an in-flight inference, and HTTP 500 if private
+persistence fails. Neither failure modifies the running pool. Success
+takes effect without restarting the gateway and survives restarts.
+The stored registry takes precedence over `YAG_UPSTREAM_POOL` after its
+first write. Edit/remove that private file only while YAG is stopped.
+
+The primary upstream remains fixed in `YAG_UPSTREAM_URL`. Disabled replicas
+are ignored by routing. Priority (0 highest, 100 lowest) breaks ties after
+least-inflight; equal-priority replicas retain rotation. The dashboard
+probes each configured backend once per 60 seconds **while open**.
+Model IDs returned by probes are advertised inventory, not a verified
+capability registry. There is no background probe scheduler with the UI
+closed. HTTP upstreams must use private IPv4 or local hostnames; remote
+HTTPS is allowed, and only the administrator can configure destinations.
 ### Resource telemetry caveats
 
 `GET /api/system/resources` retains cgroup v2 RAM usage and limits.

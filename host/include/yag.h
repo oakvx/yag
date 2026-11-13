@@ -27,6 +27,9 @@ typedef struct {
 typedef struct {
     char *url;
     const char *key;
+    char *key_env;
+    unsigned priority;
+    int enabled;
     /* Optional operator-declared per-replica model allowlist (not auto-discovery). */
     char *models[32];
     size_t model_count;
@@ -79,6 +82,7 @@ typedef struct {
 
     /* Runtime-managed client keys; static ENV keys occupy first slots. */
     const char *client_store;
+    const char *provider_store;
     /* Opt-in write-only audit trail for administrative HTTP responses. */
     int admin_audit_fd;
     size_t static_key_count;
@@ -116,6 +120,10 @@ void scheduler_release(yag_config *cfg, int key_index);
 void scheduler_status(int fd, yag_config *cfg);
 void system_resources_handle(int fd);
 void provider_pool_status_handle(int fd,yag_config *cfg);
+int provider_manager_load(yag_config *cfg);
+void provider_pool_free(yag_pool_backend pool[8],size_t count);
+int provider_manager_handle(int fd,yag_config *cfg,const char *method,
+                            const char *uri,const char *body,size_t len);
 int ollama_admin_handle(int fd,yag_config *cfg,const char *method,
                         const char *uri,const char *body,size_t length);
 void admin_audit_response(const yag_config *cfg,const char *resource,

@@ -17,6 +17,10 @@ type ResourceMetrics = {
 type Scheduler = {max_inference:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
 type Pool = {data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
+type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean}
+type ProviderList = {editable:boolean;data:ProviderConfig[]}
+type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
+type ProviderPayload = {url:string;models:string[];enabled:boolean;priority:number;key_env?:string}
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
   if (!key) throw new Error('Enter the primary administrator API key in Settings')
@@ -49,6 +53,14 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [resources,setResources]=useState<ResourceMetrics|null>(null)
   const [scheduler,setScheduler]=useState<Scheduler|null>(null)
   const [pool,setPool]=useState<Pool['data']>([])
+  const [providers,setProviders]=useState<ProviderConfig[]>([])
+  const [providerEditable,setProviderEditable]=useState(false)
+  const [providerChecks,setProviderChecks]=useState<Record<number,ProviderProbe>>({})
+  const [providerUrl,setProviderUrl]=useState('')
+  const [providerModels,setProviderModels]=useState('')
+  const [providerKey,setProviderKey]=useState('')
+  const [providerPriority,setProviderPriority]=useState(50)
+  const [providerEditing,setProviderEditing]=useState<number|null>(null)
   const [modelInput,setModelInput]=useState('')
   const [clientName,setClientName]=useState('')
   const [clientScope,setClientScope]=useState('inference+models')
@@ -90,14 +102,94 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
       setErrors(prev=>({...prev,infra:''}))
     }catch(e){setErrors(prev=>({...prev,infra:(e as Error).message}))}
   },[apiKey])
+  const loadProviders=useCallback(async()=>{
+    if(!apiKey){setProviders([]);setProviderEditable(false);return}
+    try {
+      const result=await controlRequest<ProviderList>(apiKey,'/api/admin/providers')
+      setProviders(Array.isArray(result.data)?result.data:[])
+      setProviderEditable(!!result.editable)
+      setErrors(previous=>({...previous,providers:''}))
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+  },[apiKey])
   const refresh=useCallback(async()=>{
-    await Promise.all([loadModels(),loadClients(),loadInfra()])
-  },[loadModels,loadClients,loadInfra])
+    await Promise.all([loadModels(),loadClients(),loadInfra(),loadProviders()])
+  },[loadModels,loadClients,loadInfra,loadProviders])
   useEffect(()=>{
     void refresh()
     const timer=setInterval(()=>void refresh(),10000)
     return ()=>clearInterval(timer)
   },[refresh])
+  useEffect(()=>{
+    if(!apiKey)return
+    let alive=true
+    const probe=async(index:number)=>{
+      try {
+        const info=await adminPost<ProviderProbe>(apiKey,'/api/admin/providers/check',{index})
+        if(alive)setProviderChecks(previous=>({...previous,[index]:info}))
+      }catch{/* A failed admin key or unavailable endpoint is surfaced by the manager. */}
+    }
+    const check=()=>{for(const index of [0,...providers.map(p=>p.index)])void probe(index)}
+    check()
+    const timer=setInterval(check,60000)
+    return ()=>{alive=false;clearInterval(timer)}
+  },[apiKey,providers.map(p=>p.index+':'+p.url).join('|')])
+  function resetProviderForm(){
+    setProviderUrl('');setProviderModels('');setProviderKey('')
+    setProviderPriority(50);setProviderEditing(null)
+  }
+  async function persistProviders(next:ProviderPayload[]){
+    if(busy || !providerEditable)return
+    setBusy('providers');setNotice('')
+    try {
+      await adminPost(apiKey,'/api/admin/providers/apply',{replicas:next})
+      resetProviderForm();setProviderChecks({})
+      setNotice('Provider configuration persisted and applied live.')
+      await Promise.all([loadProviders(),loadInfra()])
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+    finally{setBusy('')}
+  }
+  function payloads():ProviderPayload[]{
+    return providers.map(({url,key_env,models,enabled,priority})=>({
+      url,models,enabled,priority,...(key_env?{key_env}:{})
+    }))
+  }
+  function editProvider(item:ProviderConfig){
+    setProviderEditing(item.index);setProviderUrl(item.url)
+    setProviderModels(item.models.join(', '));setProviderKey(item.key_env)
+    setProviderPriority(item.priority)
+  }
+  async function saveProvider(event:React.FormEvent){
+    event.preventDefault()
+    const next=payloads()
+    const selected=providerEditing===null?null:providers.find(p=>p.index===providerEditing)
+    const entry:ProviderPayload={
+      url:providerUrl.trim(),
+      models:Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean))),
+      ...(providerKey?{key_env:providerKey}:{}),
+      priority:providerPriority,enabled:selected?.enabled??true
+    }
+    if(selected)next[selected.index-1]=entry
+    else next.push(entry)
+    await persistProviders(next)
+  }
+  async function changeProvider(index:number,action:'remove'|'toggle'|'up'|'down'){
+    if(!providerEditable || busy)return
+    const next=payloads(),slot=index-1
+    if(action==='remove'){
+      if(!window.confirm('Remove this backend from live inference routing?'))return
+      next.splice(slot,1)
+    }else if(action==='toggle')next[slot].enabled=!next[slot].enabled
+    else if(action==='up' && slot>0)[next[slot-1],next[slot]]=[next[slot],next[slot-1]]
+    else if(action==='down' && slot<next.length-1)[next[slot],next[slot+1]]=[next[slot+1],next[slot]]
+    await persistProviders(next)
+  }
+  async function checkProvider(index:number){
+    try {
+      const info=await adminPost<ProviderProbe>(apiKey,'/api/admin/providers/check',{index})
+      setProviderChecks(previous=>({...previous,[index]:info}))
+      setErrors(previous=>({...previous,providers:''}))
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+  }
   async function pullModel() {
     const name=modelInput.trim()
     if(!name || busy)return
@@ -278,21 +370,106 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <b>{scheduler?.queue_wait_ms === undefined?'—':scheduler.queue_wait_ms+' ms'}</b></div>
       </section>
       <section className="panel control-wide">
-        <div className="panel-head"><div><h2><Server size={16}/> Multi-server inference pool</h2>
-          <p>Least-inflight selection for replicas with matching model inventories; health cooldown after failures.</p></div>
-          <span className="tag">{pool.length} BACKENDS</span></div>
+        <div className="panel-head"><div><h2><Server size={16}/> Provider manager</h2>
+          <p>Manage OpenAI-compatible replicas, model allowlists, routing priority and connection health.</p></div>
+          <span className="tag">{providers.length} REPLICAS</span></div>
+        {errors.providers && <div className="control-error">{errors.providers}</div>}
+        {!providerEditable && <div className="control-footnote">
+          Editing is disabled. Set <code>YAG_PROVIDER_STORE</code> to a private path on the server.
+          You can still inspect configured backends and test their model inventories.
+        </div>}
+        <div className="control-provider-primary">
+          <div><b>Primary backend · always enabled</b>
+            <small>Default upstream remains the model discovery authority.</small></div>
+          <div className="control-actions">
+            <span className="control-probe">{providerChecks[0]
+              ? (providerChecks[0].available?'Healthy':'Unavailable')+
+                ' · '+providerChecks[0].http_status+' · '+providerChecks[0].latency_ms+' ms'
+              : 'Not checked'}</span>
+            <button className="outline-button small" onClick={()=>void checkProvider(0)}>Check</button>
+          </div>
+          {providerChecks[0]?.models.length ? <small className="control-discovered">
+            Reported models: {providerChecks[0].models.join(', ')}</small> : null}
+        </div>
+        <div className="control-table">
+          {providers.map(p=><div className="control-provider" key={p.index}>
+            <div className="control-provider-info">
+              <b>Replica #{p.index} · {p.enabled?'Enabled':'Disabled'} · priority {p.priority}</b>
+              <code>{p.url}</code>
+              <small>Credentials: {p.key_env || 'none'} · Declared models: {
+                p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
+              <small>Probe: {providerChecks[p.index]
+                ? (providerChecks[p.index].available?'Healthy':'Unavailable')+
+                  ' · HTTP '+providerChecks[p.index].http_status+
+                  ' · '+providerChecks[p.index].latency_ms+' ms'
+                : 'Not checked'}</small>
+              {providerChecks[p.index]?.models.length ? <small className="control-discovered">
+                Backend-reported models (unverified): {providerChecks[p.index].models.join(', ')}
+              </small> : null}
+            </div>
+            <div className="control-actions">
+              <button className="outline-button small" onClick={()=>void checkProvider(p.index)}>Check</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy}
+                onClick={()=>editProvider(p)}>Edit</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy}
+                onClick={()=>void changeProvider(p.index,'toggle')}>{p.enabled?'Disable':'Enable'}</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy||p.index===1}
+                onClick={()=>void changeProvider(p.index,'up')}>↑</button>
+              <button className="outline-button small" disabled={!providerEditable||!!busy||p.index===providers.length}
+                onClick={()=>void changeProvider(p.index,'down')}>↓</button>
+              <button className="outline-button small danger" disabled={!providerEditable||!!busy}
+                onClick={()=>void changeProvider(p.index,'remove')}>Remove</button>
+            </div>
+          </div>)}
+          {!providers.length && <div className="control-empty">No additional backends configured.</div>}
+        </div>
+        <form className="control-provider-form" onSubmit={e=>void saveProvider(e)}>
+          <div className="control-form-title"><b>{providerEditing===null?'Add replica':'Edit replica #'+providerEditing}</b>
+            <small>Apply updates atomically. Busy pools respond with HTTP 409, without interrupting inference.</small></div>
+          <div className="control-provider-fields">
+            <label>API base URL
+              <input value={providerUrl} onChange={e=>setProviderUrl(e.target.value)}
+                placeholder="http://192.168.1.60:11434/v1" maxLength={512}
+                required disabled={!providerEditable||!!busy}/></label>
+            <label>Model IDs (optional, comma-separated)
+              <input value={providerModels} onChange={e=>setProviderModels(e.target.value)}
+                placeholder="llama3.2, qwen2.5" disabled={!providerEditable||!!busy}/></label>
+            <label>Credential alias
+              <select value={providerKey} onChange={e=>setProviderKey(e.target.value)}
+                disabled={!providerEditable||!!busy}>
+                <option value="">None</option>
+                {Array.from({length:8},(_,i)=>'YAG_POOL_KEY_'+(i+1)).map(alias=>
+                  <option key={alias} value={alias}>{alias}</option>)}
+              </select></label>
+            <label>Priority (0 highest · 100 lowest)
+              <input type="number" min="0" max="100" value={providerPriority}
+                onChange={e=>setProviderPriority(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+          </div>
+          <div className="control-actions">
+            {providerEditing!==null && <button type="button" className="outline-button small"
+              onClick={resetProviderForm}>Cancel edit</button>}
+            <button className="primary-button" type="submit"
+              disabled={!providerEditable||!!busy||!providerUrl.trim()||
+                        (providerEditing===null&&providers.length>=8)}>
+              {providerEditing===null?'Add and apply':'Save and apply'}
+            </button>
+          </div>
+        </form>
+        <div className="control-footnote">
+          Routing selects a backend by least concurrent requests, then numeric priority.
+          Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
+          while the Console is open; reported IDs are not proof of model capabilities.
+          Secrets remain in server-side environment variables and are never included in API responses.
+          Private LAN connections and endpoint validation remain required.
+        </div>
         <div className="provider-table-wrap"><table className="provider-table">
-          <thead><tr><th>BACKEND</th><th>RUNNING</th><th>ATTEMPTS</th>
-            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th><th>MODELS</th></tr></thead>
+          <thead><tr><th>BACKEND</th><th>ACTIVE</th><th>ATTEMPTS</th>
+            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
             <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
-            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td>
-            <td>{p.model_allowlist_enabled ? p.declared_models?.join(', ') : 'Unrestricted'}</td></tr>)}</tbody>
+            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
         </table></div>
-        <div className="control-footnote">For heterogeneous replicas, declare the supported model IDs in the backend's <code>models</code> allowlist. Absence of this field preserves legacy unrestricted routing; YAG does not automatically verify inventory or model semantics. Configure replica endpoints on the central server with
-          <code> python scripts/lan.py providers add --url http://colibri2:11434/v1</code>,
-          then apply with <code>python scripts/lan.py up</code>. Upstream credentials and addresses
-          are never returned by the monitoring API.</div>
       </section>
       <section className="panel control-wide">
         <div className="panel-head"><div><h2><HardDrive size={16}/> Maintenance and backups</h2>

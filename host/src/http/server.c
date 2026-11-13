@@ -359,7 +359,8 @@ static void handle(int fd,yag_config *c) {
     if(!strncmp(uri,"/api/admin/",11)) {
         audit_cfg=c;
         audit_resource=!strncmp(uri,"/api/admin/clients",18)?"clients":
-            !strncmp(uri,"/api/admin/ollama/",18)?"ollama":"other";
+            !strncmp(uri,"/api/admin/ollama/",18)?"ollama":
+            !strncmp(uri,"/api/admin/providers",20)?"providers":"other";
         audit_method=!strcmp(method,"GET")?"GET":
             !strcmp(method,"POST")?"POST":"OTHER";
     }
@@ -472,6 +473,10 @@ static void handle(int fd,yag_config *c) {
     else if(!strcmp(uri,"/api/providers/pool") && !strcmp(method,"GET")) provider_pool_status_handle(fd,c);
     else if(!strncmp(uri,"/api/admin/ollama/",18)) {
         if(!ollama_admin_handle(fd,c,method,uri,body,length))
+            error(fd,404,"Not found");
+    }
+    else if(!strncmp(uri,"/api/admin/providers",20)) {
+        if(!provider_manager_handle(fd,c,method,uri,body,length))
             error(fd,404,"Not found");
     }
     else if(!strncmp(uri,"/api/admin/clients",18)) {
