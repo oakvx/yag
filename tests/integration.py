@@ -197,13 +197,52 @@ class Integration(unittest.TestCase):
             headers={'X-API-Key':key})[0],403)
 
     def test_invalid_scope_policy_fails_startup(self):
-        for scopes in ['bad','models,all','models,','all,invalid']:
+        # 'models,all' is valid: there are two extra keys and two known scopes.
+        # The extra third scope below must fail the positional count check.
+        for scopes in ['bad','models,all,monitor','models,','all,invalid']:
             env=dict(os.environ,YAG_API_KEY=KEY,
                 YAG_EXTRA_API_KEYS='extra-one-key-123456,extra-two-key-123456',
                 YAG_EXTRA_KEY_SCOPES=scopes)
             outcome=subprocess.run([sys.argv[1]],env=env,capture_output=True,timeout=2)
             self.assertNotEqual(outcome.returncode,0,scopes)
             self.assertIn(b'YAG_EXTRA_KEY_SCOPES',outcome.stderr)
+
+    def test_valid_scope_policy_starts_and_enforces_permissions(self):
+        # Isolate this subprocess from the fixture gateway's listening port.
+        # A valid policy should start, not hang in a test expecting an exit.
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1',0))
+            port=listener.getsockname()[1]
+        models_key='models-only-extra-12345'
+        all_key='full-access-extra-12345'
+        env=dict(os.environ,YAG_API_KEY=KEY,YAG_BIND='127.0.0.1',
+            YAG_PORT=str(port),YAG_EXTRA_API_KEYS=f'{models_key},{all_key}',
+            YAG_EXTRA_KEY_SCOPES='models,all',
+            YAG_UPSTREAM_URL=f'http://127.0.0.1:{self.backend.server_port}/v1',
+            YAG_UPSTREAM_KEY=UPKEY,NO_PROXY='127.0.0.1,localhost')
+        proc=subprocess.Popen([sys.argv[1]],env=env,
+            stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        try:
+            for _ in range(100):
+                if proc.poll() is not None:
+                    self.fail('Valid scope policy rejected: '+
+                        proc.stderr.read().decode(errors='replace'))
+                try:
+                    if request(port,'GET','/health',key=None)[0]==200:
+                        break
+                except OSError:
+                    time.sleep(.03)
+            else:
+                self.fail('Gateway did not start with valid scopes')
+            self.assertEqual(request(port,'GET','/v1/models',key=models_key)[0],200)
+            self.assertEqual(request(port,'GET','/api/metrics',key=models_key)[0],403)
+            self.assertEqual(request(port,'GET','/v1/models',key=all_key)[0],200)
+            self.assertEqual(request(port,'GET','/api/metrics',key=all_key)[0],200)
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+            proc.wait(timeout=5)
+            proc.stderr.close()
 
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
