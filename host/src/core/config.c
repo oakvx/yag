@@ -296,6 +296,11 @@ int config_load(yag_config *c) {
     }
     c->header_deadline_seconds=(unsigned)hv;
     c->body_deadline_seconds=(unsigned)bv;
+    if(env_limit("YAG_MAX_BODY_BYTES","1048576",8388608,&c->max_body_bytes)
+        || c->max_body_bytes<65536) {
+        fprintf(stderr,"YAG_MAX_BODY_BYTES must be 65536..8388608\n");
+        return -1;
+    }
     const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
     if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
         fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");
