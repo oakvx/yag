@@ -378,6 +378,22 @@ class Integration(unittest.TestCase):
         self.assertNotIn(b'secret-prompt',body)
         self.assertEqual(request(self.port,'GET','/api/metrics',key=None)[0],401)
 
+    def test_universal_api_capabilities_and_metrics(self):
+        status,_,body=request(self.port,'GET','/api/capabilities')
+        self.assertEqual(status,200,body)
+        protocols=json.loads(body)['protocols']
+        self.assertEqual(protocols['embeddings']['mode'],'upstream_passthrough')
+        self.assertEqual(protocols['completions']['mode'],'upstream_passthrough')
+        self.assertTrue(protocols['completions']['streaming'])
+        before=json.loads(request(self.port,'GET','/api/metrics')[2])
+        request(self.port,'POST','/v1/embeddings',{'model':'glm-test','input':'a'})
+        request(self.port,'POST','/v1/completions',{'model':'glm-test','prompt':'a'})
+        after=json.loads(request(self.port,'GET','/api/metrics')[2])
+        self.assertEqual(after['embeddings_requests']-before['embeddings_requests'],1)
+        self.assertEqual(after['completions_requests']-before['completions_requests'],1)
+        self.assertNotIn('prompt',after)
+        self.assertNotIn('input',after)
+
     def test_capabilities_contract_does_not_confuse_gateway_with_model_support(self):
         status,_,body=request(self.port,'GET','/api/capabilities')
         self.assertEqual(status,200,body)
