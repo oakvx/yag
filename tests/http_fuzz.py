@@ -152,6 +152,7 @@ class HttpRobustness(unittest.TestCase):
             ('header-name-3f',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x3fCheck: a\r\n\r\n',400),
             ('header-name-40',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x40Check: a\r\n\r\n',400),
             ('header-name-5b',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x5bCheck: a\r\n\r\n',400),
+            ('header-name-5c',b'GET /health HTTP/1.1\r\nHost: local\r\nX\x5cCheck: a\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
