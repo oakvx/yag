@@ -222,6 +222,90 @@ static int measured_upstream(yag_config *cfg,const yag_config *target,
     free(cap.bytes);
     return rc;
 }
+/* Replica pool: default upstream is slot zero. Every replica must expose
+ * the same model IDs and OpenAI-compatible behavior. Selection is least
+ * outstanding requests; passive health suppresses failing replicas for
+ * 30 seconds after two consecutive transport/5xx failures. No ambiguous
+ * request is ever replayed. */
+static int pool_choose(yag_config *cfg) {
+    int chosen=-1;
+    unsigned lowest=0xffffffffu;
+    time_t now=time(NULL);
+    size_t total=cfg->pool_count+1;
+    pthread_mutex_lock(&cfg->lock);
+    for(size_t offset=0;offset<total;offset++) {
+        size_t index=(cfg->pool_cursor+offset)%total;
+        unsigned active=index==0?cfg->default_pool_active:
+            cfg->pool[index-1].active;
+        time_t until=index==0?cfg->default_pool_unavailable_until:
+            cfg->pool[index-1].unavailable_until;
+        if(until>now)continue;
+        if(active<lowest){lowest=active;chosen=(int)index;}
+    }
+    if(chosen>=0) {
+        if(chosen==0)cfg->default_pool_active++;
+        else cfg->pool[chosen-1].active++;
+        cfg->pool_cursor=((unsigned)chosen+1u)%(unsigned)total;
+    }
+    pthread_mutex_unlock(&cfg->lock);
+    return chosen;
+}
+static void pool_complete(yag_config *cfg,int index,int rc,long status) {
+    int unstable=status>=500 || (status==0 && rc!=CURLE_OK
+        && rc!=CURLE_ABORTED_BY_CALLBACK && rc!=CURLE_WRITE_ERROR);
+    pthread_mutex_lock(&cfg->lock);
+    unsigned *active=index==0?&cfg->default_pool_active:
+        &cfg->pool[index-1].active;
+    unsigned *failures=index==0?&cfg->default_pool_failures:
+        &cfg->pool[index-1].consecutive_failures;
+    time_t *until=index==0?&cfg->default_pool_unavailable_until:
+        &cfg->pool[index-1].unavailable_until;
+    if(*active)(*active)--;
+    if(unstable) {
+        if(*failures<1000000)(*failures)++;
+        if(*failures>=2)*until=time(NULL)+30;
+    } else if(rc==CURLE_OK) {
+        *failures=0;
+        *until=0;
+    }
+    pthread_mutex_unlock(&cfg->lock);
+}
+void provider_pool_status_handle(int fd,yag_config *cfg) {
+    yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
+    if(!d){reply(fd,500,"application/json",
+        "{\"error\":{\"message\":\"Out of memory\"}}");return;}
+    yyjson_mut_val *root=yyjson_mut_obj(d);
+    yyjson_mut_val *items=root?yyjson_mut_obj_add_arr(d,root,"data"):NULL;
+    int ok=root && items && yyjson_mut_obj_add_str(d,root,"object","gateway.pool")
+        && yyjson_mut_obj_add_uint(d,root,"replica_count",cfg->pool_count+1);
+    pthread_mutex_lock(&cfg->lock);
+    for(size_t i=0;ok && i<=cfg->pool_count;i++) {
+        yag_provider_stats *stats=i==0?&cfg->default_provider_stats:
+            &cfg->pool[i-1].stats;
+        unsigned active=i==0?cfg->default_pool_active:
+            cfg->pool[i-1].active;
+        time_t until=i==0?cfg->default_pool_unavailable_until:
+            cfg->pool[i-1].unavailable_until;
+        time_t now=time(NULL);
+        yyjson_mut_val *item=yyjson_mut_obj(d);
+        ok=item && yyjson_mut_obj_add_uint(d,item,"index",i)
+            && yyjson_mut_obj_add_str(d,item,"role",i==0?"primary":"replica")
+            && yyjson_mut_obj_add_uint(d,item,"active_requests",active)
+            && yyjson_mut_obj_add_uint(d,item,"attempts",stats->attempts)
+            && yyjson_mut_obj_add_uint(d,item,"successes",stats->successes)
+            && yyjson_mut_obj_add_uint(d,item,"failures",stats->failures)
+            && yyjson_mut_obj_add_uint(d,item,"cooldown_seconds",
+                 until>now?(unsigned long)(until-now):0u)
+            && yyjson_mut_arr_add_val(items,item);
+    }
+    pthread_mutex_unlock(&cfg->lock);
+    if(ok)yyjson_mut_doc_set_root(d,root);
+    char *json=ok?yyjson_mut_write(d,0,NULL):NULL;
+    if(json)reply(fd,200,"application/json",json);
+    else reply(fd,500,"application/json",
+        "{\"error\":{\"message\":\"Pool serialization failed\"}}");
+    free(json);yyjson_mut_doc_free(d);
+}
 /* Retry only when connection setup definitively failed before receiving an
  * HTTP response. Timeouts are ambiguous; never retry those. */
 int upstream_for_model(const yag_config *c,const char *model,const char *path,
@@ -232,6 +316,36 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         if(!strcmp(model,c->routes[i].model)){stats=&state->routes[i].stats;break;}
     yag_config selected={0};
     const yag_config *target=config_for_model(c,model,&selected);
+    if(target==c && c->pool_count) {
+        int index=pool_choose(state);
+        if(index<0) {
+            if(status)*status=0;
+            return CURLE_COULDNT_CONNECT;
+        }
+        const yag_config *replica=c;
+        if(index>0) {
+            selected.upstream=c->pool[index-1].url;
+            selected.upstream_key=c->pool[index-1].key;
+            selected.timeout=c->timeout;
+            replica=&selected;
+        }
+        yag_provider_stats *entry=index==0?
+            &state->default_provider_stats:&state->pool[index-1].stats;
+        int rc=measured_upstream(state,replica,entry,path,body,len,
+                                 cb,ctx,status,cancel_fd);
+        long code=status?*status:0;
+        pool_complete(state,index,rc,code);
+        if(index>0 && c->fallback_to_default && !code
+            && (rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)) {
+            pthread_mutex_lock(&state->lock);
+            entry->fallthroughs++;
+            pthread_mutex_unlock(&state->lock);
+            if(status)*status=0;
+            return measured_upstream(state,c,&state->default_provider_stats,
+                path,body,len,cb,ctx,status,cancel_fd);
+        }
+        return rc;
+    }
     if(target!=c && !route_admitted(state,stats)) {
         if(c->fallback_to_default) {
             pthread_mutex_lock(&state->lock);

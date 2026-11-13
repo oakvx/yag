@@ -1,0 +1,35 @@
+.control-plane .page-heading{margin-bottom:24px}
+.control-plane .panel-head h2{display:flex;align-items:center;gap:9px}
+.control-plane>.info-block{margin:0 0 22px}
+.control-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.control-grid>.panel{align-self:start;min-width:0}
+.control-wide{grid-column:1/-1}
+.control-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:17px 20px;border-bottom:1px solid #edf0eb}
+.control-form input,.control-form select{min-width:170px;flex:1;border:1px solid #dfe5dc;background:#fff;padding:11px;color:#3b513d;font-size:12px}
+.control-form select{max-width:215px}
+.control-form .primary-button{white-space:nowrap}
+.control-table{width:100%}
+.control-model{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #edf0eb;padding:14px 20px;min-width:0}
+.control-model>div:first-child{min-width:0}
+.control-model b{display:block;font-size:12px;color:#435343;overflow-wrap:anywhere}
+.control-model small{display:block;margin-top:7px;font-size:10px;color:#899689}
+.control-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+.control-actions .outline-button{white-space:nowrap}
+.control-actions .danger{color:#963b3b;border-color:#ecd2cf}
+.control-actions .danger:hover{background:#fef2f0}
+.control-empty{padding:24px 20px;font-size:11px;color:#849284}
+.control-job,.control-notice{display:flex;align-items:center;gap:8px;padding:13px 20px;background:#f1f7ed;color:#45683e;font-size:11px}
+.control-notice{margin-bottom:18px;border:1px solid #deecd7}
+.control-job{border-bottom:1px solid #e5ebdf}
+.control-error{background:#fff3ee;color:#96533f;font-size:11px;padding:12px 20px;line-height:1.5}
+.control-footnote{padding:14px 20px;color:#899689;font-size:11px;line-height:1.7;overflow-wrap:anywhere}
+.control-footnote code,.control-grid .setting-row code{font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;color:#486549}
+.control-footnote svg{vertical-align:middle}
+.control-key{display:flex;flex-wrap:wrap;align-items:center;gap:9px;background:#f2f8f0;padding:14px 20px;border-bottom:1px solid #e4ece0}
+.control-key b{flex-basis:100%;font-size:11px;color:#425c3e}
+.control-key code{min-width:0;flex:1;overflow-wrap:anywhere;font:12px ui-monospace,SFMono-Regular,Consolas,monospace;color:#283b2e}
+.control-plane .setting-row{align-items:center}
+.control-plane .setting-row b:last-child{text-align:right}
+.control-plane .setting-row code{text-align:right;max-width:55%}
+@media(max-width:950px){.control-grid{grid-template-columns:1fr}.control-wide{grid-column:auto}}
+@media(max-width:650px){.control-model{flex-direction:column;align-items:stretch}.control-actions{justify-content:flex-start}.control-form{flex-direction:column;align-items:stretch}.control-form input,.control-form select{max-width:100%;width:100%}.control-plane .setting-row{align-items:flex-start;flex-direction:column}.control-plane .setting-row code{max-width:100%;text-align:left}}

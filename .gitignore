@@ -10,3 +10,4 @@ __pycache__/
 .env.lan
 lan-clients.txt
 lan-root-ca.crt
+backups/

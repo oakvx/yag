@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client'
 import ReactMarkdown from 'react-markdown'
 import { Activity, ArrowDownLeft, ArrowUpRight, Box, Braces, Check, ChevronDown, CircleHelp, Clipboard, Clock3, Code2, Cpu, ExternalLink, KeyRound, Layers3, LayoutDashboard, LockKeyhole, Menu, MessageSquare, RefreshCw, Send, Server, Settings2, ShieldCheck, Square, Terminal, X } from 'lucide-react'
 import './styles.css'
+import ControlPlane from './ControlPlane'
 
-type Page = 'Overview' | 'Playground' | 'Models' | 'Integrations' | 'Requests' | 'Settings'
+type Page = 'Overview' | 'Playground' | 'Models' | 'Control' | 'Integrations' | 'Requests' | 'Settings'
 type Model = { id: string; owned_by?: string }
 type Route = { model: string }
 type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;successes:number;
@@ -18,7 +19,7 @@ type ClientUsage = {id:string;scope:string;accepted_requests:number;rate_limited
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
-  { title: 'GATEWAY', items: [{ name: 'Integrations', icon: Braces }, { name: 'Requests', icon: Activity }, { name: 'Settings', icon: Settings2 }] },
+  { title: 'GATEWAY', items: [{ name: 'Control', icon: Server }, { name: 'Integrations', icon: Braces }, { name: 'Requests', icon: Activity }, { name: 'Settings', icon: Settings2 }] },
 ]
 const api = async (path: string, key: string, options: RequestInit = {}) => {
   const res = await fetch(path, { ...options, headers: { Authorization: `Bearer ${key}`, ...options.headers } })
@@ -68,6 +69,7 @@ function App() {
         {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
         {page === 'Models' && <Models apiKey={key} models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
+        {page === 'Control' && <ControlPlane apiKey={key} onUseModel={name => {setModel(name);go('Playground')}}/>}
         {page === 'Requests' && <Requests apiKey={key} status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
       </div><footer><span>YAG <span className="footer-sep">/</span> ONE HOST. MULTIPLE MODELS. EVERY INTERFACE.</span><span>SELF-HOSTED INFERENCE GATEWAY</span></footer>
