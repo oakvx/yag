@@ -84,7 +84,7 @@ class LanOperationsTest(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 lan_ops.configure_provider(path,"list")
             self.assertIn("glm-test",out.getvalue())
-            for invalid in ([],["a","a"],["invalid\\nmodel"],
+            for invalid in ([],["a","a"],["invalid\nmodel"],
                             ["x"]*33,[42]):
                 with self.subTest(invalid=invalid),self.assertRaises(ValueError):
                     lan_ops.configure_provider(path,"add",
