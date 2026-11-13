@@ -16,7 +16,7 @@ services:
     environment:
       YAG_LAN_IP: ${YAG_LAN_IP:?Set the central machine private LAN IPv4 address}
     ports:
-      - "${YAG_LAN_IP:?Set YAG_LAN_IP}:443:443/tcp"
+      - "${YAG_LAN_IP:?Set YAG_LAN_IP}:${YAG_LAN_HTTPS_PORT:-443}:443/tcp"
     volumes:
       - ./deploy/lan/Caddyfile:/etc/caddy/Caddyfile:ro
       - yag-caddy-data:/data
