@@ -6,6 +6,17 @@
 #include <string.h>
 static const char *env(const char *key, const char *fallback) { const char *v=getenv(key); return v && *v ? v : fallback; }
 
+static int env_limit(const char *name,const char *fallback,unsigned max,unsigned *dest) {
+    const char *value=env(name,fallback),*end=value;
+    errno=0;
+    unsigned long n=strtoul(value,(char **)&end,10);
+    if(errno || end==value || *end || n>max) {
+        fprintf(stderr,"Invalid bounded numeric setting: %s\n",name);
+        return -1;
+    }
+    *dest=(unsigned)n;
+    return 0;
+}
 static int valid_url(const char *url) {
     size_t n=strlen(url);
     return n && (!strncmp(url,"http://",7) || !strncmp(url,"https://",8))
@@ -241,16 +252,35 @@ int config_load(yag_config *c) {
         return -1;
     }
     c->enforce_model_capabilities=!strcmp(enforce,"1");
+    if(env_limit("YAG_MAX_INFERENCE","0",32,&c->max_inference)
+        || env_limit("YAG_MAX_INFERENCE_PER_KEY","0",32,&c->max_per_key)
+        || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms))
+        return -1;
+    c->client_store=env("YAG_CLIENT_STORE","");
+    c->static_key_count=c->extra_key_count;
+    for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
+
     if (load_routes(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
         pthread_mutex_destroy(&c->lock);return -1;
     }
+    if(pthread_cond_init(&c->inference_available,NULL)) {
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
+    if(client_registry_load(c)) {
+        pthread_cond_destroy(&c->inference_available);
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
     return 0;
 }
 
 void config_free(yag_config *c) {
+    client_registry_free(c);
+    pthread_cond_destroy(&c->inference_available);
     pthread_cond_destroy(&c->drained);
     pthread_mutex_destroy(&c->lock);
     for(size_t i=0;i<c->route_count;i++) {
