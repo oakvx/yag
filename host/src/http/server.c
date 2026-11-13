@@ -448,6 +448,10 @@ static void handle(int fd,yag_config *c) {
     else if(!strcmp(uri,"/api/clients") && !strcmp(method,"GET")) clients_status(fd,c);
     else if(!strcmp(uri,"/api/scheduler") && !strcmp(method,"GET")) scheduler_status(fd,c);
     else if(!strcmp(uri,"/api/system/resources") && !strcmp(method,"GET")) system_resources_handle(fd);
+    else if(!strncmp(uri,"/api/admin/ollama/",18)) {
+        if(!ollama_admin_handle(fd,c,method,uri,body,length))
+            error(fd,404,"Not found");
+    }
     else if(!strncmp(uri,"/api/admin/clients",18)) {
         if(!client_registry_handle(fd,c,method,uri,body,length))
             error(fd,404,"Not found");
