@@ -118,6 +118,7 @@ class HttpRobustness(unittest.TestCase):
             ('header-control-02',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x02b\r\n\r\n',400),
             ('header-control-03',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x03b\r\n\r\n',400),
             ('header-control-04',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x04b\r\n\r\n',400),
+            ('header-control-05',b'GET /health HTTP/1.1\r\nHost: local\r\nX-Control: a\x05b\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
