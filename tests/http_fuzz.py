@@ -165,6 +165,7 @@ class HttpRobustness(unittest.TestCase):
             ('invalid-length-05',post+b'Content-Length: 1,2\r\n\r\n',400),
             ('invalid-length-06',post+b'Content-Length: 1.0\r\n\r\n',400),
             ('invalid-length-07',post+b'Content-Length: 0x0\r\n\r\n',400),
+            ('invalid-length-08',post+b'Content-Length: 1e2\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
