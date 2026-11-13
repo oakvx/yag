@@ -40,6 +40,11 @@ static int load_pool(yag_config *cfg) {
         yyjson_val *url=yyjson_obj_get(entry,"url");
         yyjson_val *key=yyjson_obj_get(entry,"key_env");
         yyjson_val *models=yyjson_obj_get(entry,"models");
+        yyjson_val *max=yyjson_obj_get(entry,"max_inflight");
+        yyjson_val *budget=yyjson_obj_get(entry,"vram_budget_mb");
+        yyjson_val *reserve=yyjson_obj_get(entry,"vram_reservation_mb");
+        unsigned mb=budget?(unsigned)yyjson_get_uint(budget):0;
+        unsigned mr=reserve?(unsigned)yyjson_get_uint(reserve):0;
         if(!yyjson_is_obj(entry) || !yyjson_is_str(url)
             || !yyjson_get_len(url) || yyjson_get_len(url)>1024
             || strlen(yyjson_get_str(url))!=yyjson_get_len(url)
@@ -48,7 +53,12 @@ static int load_pool(yag_config *cfg) {
                 || strlen(yyjson_get_str(key))!=yyjson_get_len(key)))
             || (models && (!yyjson_is_arr(models) || !yyjson_arr_size(models)
                 || yyjson_arr_size(models)>32))
-            || yyjson_obj_size(entry)!=(size_t)(1+(key?1:0)+(models?1:0))
+            || (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32))
+            || (budget && (!yyjson_is_uint(budget) || yyjson_get_uint(budget)>262144))
+            || (reserve && (!yyjson_is_uint(reserve) || yyjson_get_uint(reserve)>262144))
+            || (!!mb!=!!mr) || (mr && mr>mb)
+            || yyjson_obj_size(entry)!=(size_t)(1+(key?1:0)+(models?1:0)
+                                           +(max?1:0)+(budget?1:0)+(reserve?1:0))
             || !strcmp(yyjson_get_str(url),cfg->upstream)) {
             ok=0;break;
         }
@@ -88,6 +98,9 @@ static int load_pool(yag_config *cfg) {
         backend->key=secret;
         backend->enabled=1;
         backend->priority=50;
+        backend->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
+        backend->vram_budget_mb=mb;
+        backend->vram_reservation_mb=mr;
         if(key)backend->key_env=strdup(yyjson_get_str(key));
         if(!backend->url || (key && !backend->key_env)){ok=0;break;}
         cfg->pool_count++;
@@ -100,7 +113,7 @@ static int load_pool(yag_config *cfg) {
     }
     yyjson_doc_free(doc);
     if(!ok)fprintf(stderr,
-        "YAG_UPSTREAM_POOL: expected up to 8 distinct URL replicas, optional key_env and optional nonempty models array (max 32)\n");
+        "YAG_UPSTREAM_POOL: invalid replica URL, key alias, models or resource limits (up to 8)\n");
     return ok?0:-1;
 }
 static int load_routes(yag_config *c) {
@@ -362,7 +375,9 @@ int config_load(yag_config *c) {
     c->enforce_model_capabilities=!strcmp(enforce,"1");
     if(env_limit("YAG_MAX_INFERENCE","0",32,&c->max_inference)
         || env_limit("YAG_MAX_INFERENCE_PER_KEY","0",32,&c->max_per_key)
-        || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms))
+        || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms)
+        || env_limit("YAG_PRIMARY_MAX_INFLIGHT","0",32,&c->primary_max_inflight)
+        || env_limit("YAG_POOL_WAIT_MS","0",30000,&c->pool_wait_ms))
         return -1;
     c->client_store=env("YAG_CLIENT_STORE","");
     c->provider_store=env("YAG_PROVIDER_STORE","");
@@ -390,7 +405,14 @@ int config_load(yag_config *c) {
         pthread_cond_destroy(&c->drained);
         pthread_mutex_destroy(&c->lock);return -1;
     }
+    if(pthread_cond_init(&c->pool_available,NULL)) {
+        pthread_cond_destroy(&c->ollama_job_done);
+        pthread_cond_destroy(&c->inference_available);
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
     if(client_registry_load(c)) {
+        pthread_cond_destroy(&c->pool_available);
         pthread_cond_destroy(&c->ollama_job_done);
         pthread_cond_destroy(&c->inference_available);
         pthread_cond_destroy(&c->drained);
@@ -406,6 +428,7 @@ void config_free(yag_config *c) {
         pthread_cond_wait(&c->ollama_job_done,&c->lock);
     pthread_mutex_unlock(&c->lock);
     client_registry_free(c);
+    pthread_cond_destroy(&c->pool_available);
     pthread_cond_destroy(&c->ollama_job_done);
     pthread_cond_destroy(&c->inference_available);
     pthread_cond_destroy(&c->drained);
