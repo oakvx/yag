@@ -178,6 +178,7 @@ class HttpRobustness(unittest.TestCase):
             ('security-edge-empty-host',b'GET /health HTTP/1.1\r\nHost: \r\n\r\n',400),
             ('security-edge-duplicate-authorization',post+b'Authorization: Bearer again\r\nContent-Length: 0\r\n\r\n',400),
             ('security-edge-duplicate-native-key',b'POST /v1/messages HTTP/1.1\r\nX-API-Key: one\r\nX-API-Key: two\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-ambiguous-chat-auth',post+b'X-API-Key: '+KEY.encode()+b'\r\nContent-Length: 0\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
