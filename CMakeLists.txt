@@ -65,4 +65,5 @@ endif()
 
 if(Python3_Interpreter_FOUND)
  add_test(NAME control_plane COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/control_plane.py $<TARGET_FILE:yag>)
+ add_test(NAME admin_audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/admin_audit.py $<TARGET_FILE:yag>)
 endif()
