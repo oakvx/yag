@@ -149,6 +149,23 @@ qualified** for the complete tool, reasoning and streaming behavior expected
 by those agents. Never grant tool execution permissions solely on the basis
 of model discovery.
 
+### Real Ollama qualification (opt-in)
+
+Once YAG is running and a chat model plus an embedding model are installed,
+run the existing real-model probe with the optional universal endpoints:
+
+```sh
+export YAG_CHAT_MODEL='YOUR_INSTALLED_CHAT_MODEL'
+export YAG_EMBED_MODEL='YOUR_INSTALLED_EMBEDDING_MODEL'
+python3 tests/live_model.py --model "$YAG_CHAT_MODEL" \
+  --protocol chat --embedding-model "$YAG_EMBED_MODEL" --completions
+```
+
+The `--completions` flag is optional: omit it if your Ollama version or
+selected model does not implement legacy completions. Similarly, omit
+`--embedding-model` until you have an embedding-capable model installed.
+These tests make real inference requests; the default CI uses mock models.
+
 ## 4. Additional providers
 
 Set `YAG_MODEL_ROUTES` to forward selected exact model IDs to other
