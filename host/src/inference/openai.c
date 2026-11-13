@@ -454,8 +454,11 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
             stats->fallthroughs++;
             pthread_mutex_unlock(&state->lock);
             if(status)*status=0;
-            return measured_upstream(state,c,&state->default_provider_stats,
+            if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+            int frc=measured_upstream(state,c,&state->default_provider_stats,
                 path,body,len,cb,ctx,status,cancel_fd);
+            pool_complete(state,0,frc,status?*status:0);
+            return frc;
         }
         if(status)*status=0;
         return CURLE_COULDNT_CONNECT;
@@ -467,8 +470,11 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         stats->fallthroughs++;
         pthread_mutex_unlock(&state->lock);
         if(status)*status=0;
-        return measured_upstream(state,c,&state->default_provider_stats,
+        if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+        int frc=measured_upstream(state,c,&state->default_provider_stats,
             path,body,len,cb,ctx,status,cancel_fd);
+        pool_complete(state,0,frc,status?*status:0);
+        return frc;
     }
     return rc;
 }
