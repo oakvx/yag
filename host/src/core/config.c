@@ -6,10 +6,71 @@
 #include <string.h>
 static const char *env(const char *key, const char *fallback) { const char *v=getenv(key); return v && *v ? v : fallback; }
 
+static int env_limit(const char *name,const char *fallback,unsigned max,unsigned *dest) {
+    const char *value=env(name,fallback),*end=value;
+    errno=0;
+    unsigned long n=strtoul(value,(char **)&end,10);
+    if(errno || end==value || *end || n>max) {
+        fprintf(stderr,"Invalid bounded numeric setting: %s\n",name);
+        return -1;
+    }
+    *dest=(unsigned)n;
+    return 0;
+}
 static int valid_url(const char *url) {
     size_t n=strlen(url);
     return n && (!strncmp(url,"http://",7) || !strncmp(url,"https://",8))
         && !strpbrk(url,"\r\n?#") && url[n-1]!='/';
+}
+/* All pool backends must expose the SAME model IDs and semantics.
+ * The default upstream remains the model-discovery authority. Optional
+ * replicas receive inference only and are selected by least outstanding
+ * requests with a small passive health cooldown. */
+static int load_pool(yag_config *cfg) {
+    const char *raw=getenv("YAG_UPSTREAM_POOL");
+    if(!raw || !*raw)return 0;
+    yyjson_doc *doc=yyjson_read(raw,strlen(raw),0);
+    yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+    int ok=yyjson_is_arr(root) && yyjson_arr_size(root)<=8;
+    if(ok)for(size_t i=0;i<yyjson_arr_size(root);i++) {
+        yyjson_val *entry=yyjson_arr_get(root,i);
+        yyjson_val *url=yyjson_obj_get(entry,"url");
+        yyjson_val *key=yyjson_obj_get(entry,"key_env");
+        if(!yyjson_is_obj(entry) || !yyjson_is_str(url)
+            || !yyjson_get_len(url) || yyjson_get_len(url)>1024
+            || strlen(yyjson_get_str(url))!=yyjson_get_len(url)
+            || !valid_url(yyjson_get_str(url))
+            || (key && (!yyjson_is_str(key) || !yyjson_get_len(key)
+                || strlen(yyjson_get_str(key))!=yyjson_get_len(key)))
+            || yyjson_obj_size(entry)!=(size_t)(key?2:1)
+            || !strcmp(yyjson_get_str(url),cfg->upstream)) {
+            ok=0;break;
+        }
+        for(size_t j=0;j<cfg->pool_count;j++)
+            if(!strcmp(yyjson_get_str(url),cfg->pool[j].url))ok=0;
+        if(!ok)break;
+        const char *secret="";
+        if(key) {
+            const char *name=yyjson_get_str(key);
+            if(!((*name>='A'&&*name<='Z') ||
+                (*name>='a'&&*name<='z') || *name=='_')){ok=0;break;}
+            for(const char *p=name+1;*p;p++)
+                if(!((*p>='A'&&*p<='Z') || (*p>='a'&&*p<='z')
+                    || (*p>='0'&&*p<='9') || *p=='_'))ok=0;
+            if(!ok)break;
+            secret=getenv(name);
+            if(!secret || strpbrk(secret,"\r\n")){ok=0;break;}
+        }
+        yag_pool_backend *backend=&cfg->pool[cfg->pool_count];
+        backend->url=strdup(yyjson_get_str(url));
+        backend->key=secret;
+        if(!backend->url){ok=0;break;}
+        cfg->pool_count++;
+    }
+    yyjson_doc_free(doc);
+    if(!ok)fprintf(stderr,
+        "YAG_UPSTREAM_POOL requires up to 8 distinct OpenAI-compatible URL replicas and optional key_env\n");
+    return ok?0:-1;
 }
 static int load_routes(yag_config *c) {
     const char *raw=getenv("YAG_MODEL_ROUTES");
@@ -235,27 +296,69 @@ int config_load(yag_config *c) {
     }
     c->header_deadline_seconds=(unsigned)hv;
     c->body_deadline_seconds=(unsigned)bv;
+    if(env_limit("YAG_MAX_BODY_BYTES","1048576",8388608,&c->max_body_bytes)
+        || c->max_body_bytes<65536) {
+        fprintf(stderr,"YAG_MAX_BODY_BYTES must be 65536..8388608\n");
+        return -1;
+    }
     const char *enforce=env("YAG_ENFORCE_MODEL_CAPABILITIES","0");
     if(strcmp(enforce,"0") && strcmp(enforce,"1")) {
         fprintf(stderr,"YAG_ENFORCE_MODEL_CAPABILITIES must be 0 or 1\n");
         return -1;
     }
     c->enforce_model_capabilities=!strcmp(enforce,"1");
-    if (load_routes(c) || load_capabilities(c)) return -1;
+    if(env_limit("YAG_MAX_INFERENCE","0",32,&c->max_inference)
+        || env_limit("YAG_MAX_INFERENCE_PER_KEY","0",32,&c->max_per_key)
+        || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms))
+        return -1;
+    c->client_store=env("YAG_CLIENT_STORE","");
+    c->ollama_admin_url=env("YAG_OLLAMA_ADMIN_URL","");
+    if(*c->ollama_admin_url && !valid_url(c->ollama_admin_url)) {
+        fprintf(stderr,"YAG_OLLAMA_ADMIN_URL must be a valid HTTP(S) base URL\n");
+        return -1;
+    }
+    c->static_key_count=c->extra_key_count;
+    for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
+
+    if (load_routes(c) || load_pool(c) || load_capabilities(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
+    if(pthread_cond_init(&c->inference_available,NULL)) {
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
+    if(pthread_cond_init(&c->ollama_job_done,NULL)) {
+        pthread_cond_destroy(&c->inference_available);
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
+    if(client_registry_load(c)) {
+        pthread_cond_destroy(&c->ollama_job_done);
+        pthread_cond_destroy(&c->inference_available);
+        pthread_cond_destroy(&c->drained);
         pthread_mutex_destroy(&c->lock);return -1;
     }
     return 0;
 }
 
 void config_free(yag_config *c) {
+    pthread_mutex_lock(&c->lock);
+    c->ollama_job_shutdown=1;
+    while(c->ollama_job_running)
+        pthread_cond_wait(&c->ollama_job_done,&c->lock);
+    pthread_mutex_unlock(&c->lock);
+    client_registry_free(c);
+    pthread_cond_destroy(&c->ollama_job_done);
+    pthread_cond_destroy(&c->inference_available);
     pthread_cond_destroy(&c->drained);
     pthread_mutex_destroy(&c->lock);
     for(size_t i=0;i<c->route_count;i++) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
+    for(size_t i=0;i<c->pool_count;i++)free(c->pool[i].url);
     free(c->extra_keys_storage);
     free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);

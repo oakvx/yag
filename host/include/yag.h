@@ -25,6 +25,13 @@ typedef struct {
     yag_provider_stats stats;
 } yag_route;
 typedef struct {
+    char *url;
+    const char *key;
+    yag_provider_stats stats;
+    unsigned active, consecutive_failures;
+    time_t unavailable_until;
+} yag_pool_backend;
+typedef struct {
     const char *bind, *port, *upstream, *upstream_key, *api_key, *assets;
     char *extra_keys_storage;
     char *extra_scope_storage;
@@ -33,6 +40,10 @@ typedef struct {
     size_t extra_key_count;
     yag_route routes[16];
     size_t route_count;
+    yag_pool_backend pool[8];
+    size_t pool_count;
+    unsigned default_pool_active, default_pool_failures, pool_cursor;
+    time_t default_pool_unavailable_until;
     yag_model_capability capabilities[32];
     size_t capability_count;
     long timeout;
@@ -42,6 +53,7 @@ typedef struct {
     unsigned active;
     unsigned long total;
     unsigned long chat_requests, completions_requests, embeddings_requests;
+    unsigned long image_requests, speech_requests;
     unsigned long responses_requests, anthropic_requests;
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
@@ -49,11 +61,32 @@ typedef struct {
     int enforce_model_capabilities;
     unsigned circuit_threshold, circuit_cooldown_seconds;
     unsigned header_deadline_seconds, body_deadline_seconds;
+    unsigned max_body_bytes;
     yag_provider_stats default_provider_stats;
     time_t rate_windows[17];
     unsigned rate_counts[17];
     unsigned long key_accepted_requests[17];
     unsigned long key_rate_limited_requests[17];
+    /* Bounded, fair per-credential inference admission control. */
+    unsigned max_inference, max_per_key, queue_wait_ms;
+    unsigned inference_active, inference_waiting;
+    unsigned inference_inflight[17];
+    struct yag_waiter *inference_head, *inference_tail;
+    pthread_cond_t inference_available;
+
+    /* Runtime-managed client keys; static ENV keys occupy first slots. */
+    const char *client_store;
+    size_t static_key_count;
+    const char *ollama_admin_url;
+    pthread_cond_t ollama_job_done;
+    unsigned ollama_job_running, ollama_job_state, ollama_job_shutdown;
+    unsigned long ollama_job_sequence;
+    long ollama_job_http_status;
+    char ollama_job_model[256];
+    unsigned char key_enabled[16], key_managed[16];
+    char *key_labels[16];
+    char *managed_key_secrets[16];
+
 } yag_config;
 int config_load(yag_config *c);
 void config_free(yag_config *c);
@@ -73,4 +106,16 @@ void providers_status_handle(int fd,yag_config *cfg);
 void model_capabilities_handle(int fd,const yag_config *cfg);
 int send_all(int fd, const void *data, size_t len);
 void reply(int fd, int status, const char *type, const char *body);
+int scheduler_acquire(yag_config *cfg, int key_index);
+void scheduler_release(yag_config *cfg, int key_index);
+void scheduler_status(int fd, yag_config *cfg);
+void system_resources_handle(int fd);
+void provider_pool_status_handle(int fd,yag_config *cfg);
+int ollama_admin_handle(int fd,yag_config *cfg,const char *method,
+                        const char *uri,const char *body,size_t length);
+int client_registry_load(yag_config *cfg);
+void client_registry_free(yag_config *cfg);
+int client_registry_handle(int fd, yag_config *cfg, const char *method,
+                           const char *uri, const char *body, size_t length);
+
 #endif

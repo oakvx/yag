@@ -8,6 +8,23 @@ services:
       YAG_EXTRA_API_KEYS: ${YAG_EXTRA_API_KEYS:?Run scripts/lan_bootstrap.py first}
       YAG_EXTRA_KEY_SCOPES: ${YAG_EXTRA_KEY_SCOPES:?Run scripts/lan_bootstrap.py first}
       YAG_RATE_LIMIT_PER_MINUTE: ${YAG_RATE_LIMIT_PER_MINUTE:-120}
+      YAG_CLIENT_STORE: /opt/yag/state/clients.json
+      YAG_OLLAMA_ADMIN_URL: ${YAG_OLLAMA_ADMIN_URL:-http://host.docker.internal:11434}
+      YAG_MAX_INFERENCE: ${YAG_MAX_INFERENCE:-6}
+      YAG_MAX_INFERENCE_PER_KEY: ${YAG_MAX_INFERENCE_PER_KEY:-2}
+      YAG_INFERENCE_QUEUE_WAIT_MS: ${YAG_INFERENCE_QUEUE_WAIT_MS:-15000}
+      YAG_MAX_BODY_BYTES: ${YAG_MAX_BODY_BYTES:-4194304}
+      YAG_UPSTREAM_POOL: ${YAG_UPSTREAM_POOL:-}
+      YAG_POOL_KEY_1: ${YAG_POOL_KEY_1:-}
+      YAG_POOL_KEY_2: ${YAG_POOL_KEY_2:-}
+      YAG_POOL_KEY_3: ${YAG_POOL_KEY_3:-}
+      YAG_POOL_KEY_4: ${YAG_POOL_KEY_4:-}
+      YAG_POOL_KEY_5: ${YAG_POOL_KEY_5:-}
+      YAG_POOL_KEY_6: ${YAG_POOL_KEY_6:-}
+      YAG_POOL_KEY_7: ${YAG_POOL_KEY_7:-}
+      YAG_POOL_KEY_8: ${YAG_POOL_KEY_8:-}
+    volumes:
+      - yag-state:/opt/yag/state
     stop_grace_period: 180s
 
   caddy:
@@ -35,3 +52,5 @@ services:
 volumes:
   yag-caddy-data:
   yag-caddy-config:
+
+  yag-state:
