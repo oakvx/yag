@@ -87,4 +87,12 @@ void providers_status_handle(int fd,yag_config *cfg);
 void model_capabilities_handle(int fd,const yag_config *cfg);
 int send_all(int fd, const void *data, size_t len);
 void reply(int fd, int status, const char *type, const char *body);
+int scheduler_acquire(yag_config *cfg, int key_index);
+void scheduler_release(yag_config *cfg, int key_index);
+void scheduler_status(int fd, yag_config *cfg);
+int client_registry_load(yag_config *cfg);
+void client_registry_free(yag_config *cfg);
+int client_registry_handle(int fd, yag_config *cfg, const char *method,
+                           const char *uri, const char *body, size_t length);
+
 #endif
