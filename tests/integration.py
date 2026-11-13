@@ -33,6 +33,24 @@ class Backend(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.headers.get('Authorization') != 'Bearer '+UPKEY: return self.send(401, {'error': {'message':'bad upstream key'}})
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path=='/v1/embeddings':
+            if data['model']=='bad':
+                return self.send(429,{'error':{'message':'embedding backend limit'}})
+            return self.send(200,{
+                'object':'list','data':[{'object':'embedding','index':0,
+                                         'embedding':[0.125,-0.25,0.5]}],
+                'model':data['model'],
+                'usage':{'prompt_tokens':2,'total_tokens':2},
+                'request':data})
+        if self.path=='/v1/completions':
+            if data.get('stream'):
+                payload=(b'data: {"object":"text_completion","choices":'
+                         b'[{"index":0,"text":"Hello","finish_reason":null}]}\\n\\n'
+                         b'data: [DONE]\\n\\n')
+                return self.send(200,payload.replace(b'\\\\n',b'\\n'),'text/event-stream')
+            return self.send(200,{'object':'text_completion','model':data['model'],
+                'choices':[{'text':'Hello','index':0,'finish_reason':'stop'}],
+                'request':data})
         if data['model']=='slow': time.sleep(2); return self.send(200, {})
         if data['model']=='bad': return self.send(429, {'error':{'message':'backend limit'}})
         if data['model']=='anthropic-tools':
