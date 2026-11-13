@@ -94,6 +94,37 @@ class LanOperationsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 lan_ops.configure_provider(path,"remove",url,models=["glm-test"])
 
+    def test_resource_budget_roundtrip_and_invalid_estimates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=new_config(Path(temp))
+            first="http://192.168.1.70:11434/v1"
+            with contextlib.redirect_stdout(io.StringIO()):
+                lan_ops.configure_provider(path,"add",first,
+                    max_inflight=2,vram_budget_mb=8192,vram_reservation_mb=4096)
+            pool=lan_ops.read_pool(path)
+            self.assertEqual(pool[0]["max_inflight"],2)
+            self.assertEqual(pool[0]["vram_budget_mb"],8192)
+            self.assertEqual(pool[0]["vram_reservation_mb"],4096)
+            invalid=(
+                {"max_inflight":-1},
+                {"max_inflight":33},
+                {"vram_budget_mb":4096},
+                {"vram_reservation_mb":128},
+                {"vram_budget_mb":4096,"vram_reservation_mb":8192},
+                {"vram_budget_mb":2.5,"vram_reservation_mb":1},
+                {"max_inflight":True},
+            )
+            for values in invalid:
+                with self.subTest(values=values),self.assertRaises(ValueError):
+                    lan_ops.configure_provider(path,"add",
+                        "http://192.168.1.71:11434/v1",**values)
+                self.assertEqual(lan_ops.read_pool(path),pool)
+            with self.assertRaises(ValueError):
+                lan_ops.configure_provider(path,"remove",first,max_inflight=1)
+            with contextlib.redirect_stdout(io.StringIO()):
+                lan_ops.configure_provider(path,"remove",first)
+            self.assertEqual(lan_ops.read_pool(path),[])
+
     def test_rejects_symlinked_or_readable_environment(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
