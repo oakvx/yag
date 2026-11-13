@@ -210,8 +210,8 @@ const yag_config *config_for_model(const yag_config *c,const char *model,yag_con
 static int open_admin_audit(yag_config *cfg) {
     const char *path=getenv("YAG_ADMIN_AUDIT_FILE");
     if(!path || !*path)return 0;
-    if(path[0]!='/' || strlen(path)>1024 || strpbrk(path,"\\r\\n")) {
-        fputs("YAG_ADMIN_AUDIT_FILE must be an absolute private path\\n",stderr);
+    if(path[0]!='/' || strlen(path)>1024 || strchr(path,13) || strchr(path,10)) {
+        fputs("YAG_ADMIN_AUDIT_FILE must be an absolute private path",stderr);
         return -1;
     }
     int fd=open(path,O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW|O_CLOEXEC|O_NONBLOCK,0600);
@@ -220,7 +220,7 @@ static int open_admin_audit(yag_config *cfg) {
         !S_ISREG(st.st_mode) || (st.st_mode & 0077) ||
         st.st_uid!=geteuid() || st.st_nlink!=1) {
         if(fd>=0)close(fd);
-        fputs("Cannot open YAG_ADMIN_AUDIT_FILE as a private regular file\\n",stderr);
+        fputs("Cannot open YAG_ADMIN_AUDIT_FILE as a private regular file",stderr);
         return -1;
     }
     cfg->admin_audit_fd=fd;
