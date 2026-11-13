@@ -12,14 +12,23 @@
 https://{$YAG_LAN_IP} {
     tls internal
 
-    # LAN clients only need the API. The dashboard stays accessible from
-    # the central host through http://127.0.0.1:8080, not on the LAN.
-    @api path /health /v1/* /api/*
+    # Hub enforces live client keys, scheduling and admin authorization.
+    # The browser dashboard is served through HTTPS only at /hub/.
+    @control path /hub/*
+    handle @control {
+        reverse_proxy hub:8081
+    }
+
+    @api path /v1/* /api/*
     handle @api {
-        reverse_proxy yag:8080 {
-            # Avoid buffering streaming chat and Responses SSE events.
+        reverse_proxy hub:8081 {
             flush_interval -1
         }
+    }
+
+    @health path /health
+    handle @health {
+        reverse_proxy yag:8080
     }
 
     handle {
