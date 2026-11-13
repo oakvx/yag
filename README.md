@@ -230,6 +230,28 @@ existing-host mode instead.
 
 [Full LAN server deployment and client onboarding](docs/deployment/lan-hub.md).
 
+### AI Datacenter control plane
+
+With the LAN Compose overlay, **YAG Hub** now adds a management interface:
+
+**`https://YOUR_LAN_SERVER_IP/hub/`** (requires trusted private CA and the
+primary administrator key). The `/v1` client endpoint stays unchanged.
+
+The Hub manages Ollama models, dynamic per-PC API keys and revocation without
+restart, priority-based concurrency limits, up to eight additional private
+model nodes, visible CPU/RAM/allocated VRAM and automatic local configuration
+snapshots. It runs on the internal Docker network and is accessible only
+through the LAN HTTPS reverse proxy.
+
+- Model loading and GPU scheduling remain the responsibility of Ollama.
+  GPU *utilization* percentages are not reported yet.
+- Extended image-size Chat requests are supported as **upstream passthrough**,
+  not as universal native multimodal translation.
+- Backups are local by default; export to independent encrypted storage
+  for disaster recovery.
+
+[Control plane setup, security model and operations](docs/deployment/hub-control.md).
+
 ## Ollama / Colibri quickstart
 
 If Ollama is installed on the same machine as YAG, point the default upstream
