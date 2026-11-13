@@ -279,7 +279,7 @@ void responses_handle(int fd,const yag_config *c,const char *body,size_t len) {
     if(status>=400 && status<=599 && rc==CURLE_OK) {reply(fd,(int)status,s.content_type[0]?s.content_type:"application/json",s.raw.p?s.raw.p:"");goto done;}
     if(rc!=CURLE_OK || status<200 || status>=300) {
         const char *msg=s.error?s.error:rc==CURLE_OPERATION_TIMEDOUT?"Inference backend timed out":"Inference backend failed or disconnected";
-        if(s.sent)stream_error(&s,msg);else http_error(fd,rc==CURLE_AGAIN?503:rc==CURLE_OPERATION_TIMEDOUT?504:502,msg);goto done;
+        if(s.sent)stream_error(&s,msg);else http_error(fd,rc==YAG_RESOURCE_BUSY?503:rc==CURLE_OPERATION_TIMEDOUT?504:502,msg);goto done;
     }
     if(s.streaming) {
         if(!s.done || !s.finish || s.line.len || s.event.len || !finish_items(&s)) { if(s.sent)stream_error(&s,"Incomplete or unsupported upstream stream");else http_error(fd,502,"Incomplete or unsupported upstream stream");goto done; }
