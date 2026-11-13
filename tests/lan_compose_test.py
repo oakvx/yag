@@ -38,6 +38,13 @@ class LanComposeTest(unittest.TestCase):
             services = config["services"]
             yag = services["yag"]
             caddy = services["caddy"]
+            hub = services["hub"]
+            self.assertFalse(hub.get("ports"), "Hub must never publish a host port")
+            self.assertEqual(hub["environment"]["HUB_YAG_URL"], "http://yag:8080")
+            self.assertEqual(hub["environment"]["HUB_BACKUP_INTERVAL_HOURS"], "24")
+            self.assertEqual(hub["environment"]["HUB_BACKUP_RETAIN"], "14")
+            self.assertTrue(hub["read_only"])
+            self.assertEqual(caddy["depends_on"]["hub"]["condition"], "service_healthy")
             self.assertEqual(yag["environment"]["YAG_EXTRA_KEY_SCOPES"],
                              "inference+models,inference+models,inference+models")
             self.assertEqual(yag["environment"]["YAG_RATE_LIMIT_PER_MINUTE"], "120")
@@ -55,10 +62,14 @@ class LanComposeTest(unittest.TestCase):
                 self.assertFalse(services["ollama"].get("ports"))
                 self.assertEqual(yag["environment"]["YAG_UPSTREAM_URL"],
                                  "http://ollama:11434/v1")
+                self.assertEqual(hub["environment"]["HUB_OLLAMA_URL"],
+                                 "http://ollama:11434")
             else:
                 self.assertNotIn("ollama", services)
                 self.assertEqual(yag["environment"]["YAG_UPSTREAM_URL"],
                                  "http://host.docker.internal:11434/v1")
+                self.assertEqual(hub["environment"]["HUB_OLLAMA_URL"],
+                                 "http://host.docker.internal:11434")
 
     def test_existing_host_ollama(self):
         self.check_topology(False)
