@@ -33,6 +33,8 @@ jobs:
         run: python tests/lan_manager_test.py
       - name: Test private provider pool configuration and encrypted backups
         run: python tests/lan_ops_test.py
+      - name: Test offline encrypted backup verification and safe staging
+        run: python tests/lan_recovery_test.py
 
   host:
     name: C17 host and protocol tests
