@@ -37,6 +37,26 @@ function byteSize(value?: number) {
     : value>=1024**2 ? (value/1024**2).toFixed(1)+' MiB'
     : value.toLocaleString()+' bytes'
 }
+/** Generate local-only operator commands; never send backend addresses or credentials to the API. */
+export function privateReplicaCommand(raw: string): {command:string;error:string} {
+  const url=raw.trim()
+  if(!url || url.length>256 || /[\s"'\x00-\x1f\x7f]/.test(url))
+    return {command:'',error:'Enter a valid private endpoint without whitespace or shell metacharacters.'}
+  let parsed:URL
+  try { parsed=new URL(url) } catch { return {command:'',error:'Invalid URL.'} }
+  if(parsed.protocol!=='http:' || parsed.username || parsed.password ||
+     parsed.pathname!=='/v1' || parsed.search || parsed.hash || !parsed.port)
+    return {command:'',error:'Use http://PRIVATE_IPV4:PORT/v1 with no credentials or query.'}
+  const octets=parsed.hostname.split('.')
+  if(octets.length!==4 || octets.some(v=>!/^\d{1,3}$/.test(v) ||
+       Number(v)>255 || String(Number(v))!==v))
+    return {command:'',error:'Use a literal private IPv4 address (no DNS names).'}
+  const [a,b]=octets.map(Number)
+  if(!(a===10 || (a===172 && b>=16 && b<=31) || (a===192 && b===168)))
+    return {command:'',error:'Only RFC1918 private LAN IPv4 addresses are allowed.'}
+  return {command:'python scripts/lan.py providers add --url '+url,error:''}
+}
+
 function adminPost<T>(key:string,path:string,payload:unknown) {
   return controlRequest<T>(key,path,'POST',payload)
 }
@@ -50,6 +70,8 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [scheduler,setScheduler]=useState<Scheduler|null>(null)
   const [pool,setPool]=useState<Pool['data']>([])
   const [modelInput,setModelInput]=useState('')
+  const [replicaUrl,setReplicaUrl]=useState('')
+  const [replicaCopied,setReplicaCopied]=useState(false)
   const [clientName,setClientName]=useState('')
   const [clientScope,setClientScope]=useState('inference+models')
   const [newKey,setNewKey]=useState<ClientCreated|null>(null)
@@ -274,10 +296,25 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
             <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
             <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
         </table></div>
-        <div className="control-footnote">Configure replica endpoints on the central server with
-          <code> python scripts/lan.py providers add --url http://colibri2:11434/v1</code>,
-          then apply with <code>python scripts/lan.py up</code>. Upstream credentials and addresses
-          are never returned by the monitoring API.</div>
+        <div className="setting-row"><div><b>Register a private inference node</b>
+          <small>Generate a safe operator command for the central machine. No configuration is changed in the browser.</small></div>
+          <input aria-label="Private replica URL" value={replicaUrl}
+            onChange={e=>{setReplicaUrl(e.target.value);setReplicaCopied(false)}}
+            placeholder="http://192.168.1.60:11434/v1" /></div>
+        {replicaUrl.trim() && (()=>{
+          const result=privateReplicaCommand(replicaUrl)
+          return result.error
+            ? <p role="alert" className="control-footnote">{result.error}</p>
+            : <div className="setting-row"><div><b>Run on central server</b>
+                <small>Then run python scripts/lan.py up to apply. Replicas must serve the same models.</small></div>
+                <div><code>{result.command}</code>
+                  <button type="button" onClick={()=>{void navigator.clipboard.writeText(result.command).then(()=>setReplicaCopied(true)).catch(()=>setReplicaCopied(false))}}>
+                    {replicaCopied?'Copied':'Copy command'}
+                  </button></div></div>
+        })()}
+        <div className="control-footnote">Secondary nodes are configured on the central machine, not via browser API.
+          Upstream credentials and addresses are never returned by the monitoring API.
+          For a secured backend, configure the key environment variable on the central machine.</div>
       </section>
       <section className="panel control-wide">
         <div className="panel-head"><div><h2><HardDrive size={16}/> Maintenance and backups</h2>
