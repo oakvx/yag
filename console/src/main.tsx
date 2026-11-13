@@ -14,6 +14,7 @@ type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;suc
 type ModelCapabilities = {model:string;context_window:number|null;features:string[];verified:boolean}
 type Status = { status: string; uptime_seconds: number; active_connections: number; total_connections: number }
 type Metrics = { chat_requests:number; completions_requests:number; embeddings_requests:number; responses_requests:number; anthropic_requests:number; model_list_requests:number; provider_check_requests:number }
+type ClientUsage = {id:string;scope:string;accepted_requests:number;rate_limited_requests:number}
 type Message = { role: 'user' | 'assistant'; content: string }
 const navigation: { title: string; items: { name: Page; icon: typeof Activity }[] }[] = [
   { title: 'WORKSPACE', items: [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Playground', icon: MessageSquare }, { name: 'Models', icon: Box }] },
@@ -67,7 +68,7 @@ function App() {
         {page === 'Playground' && <Playground apiKey={key} models={selectableModels} model={model} setModel={setModel}/>}
         {page === 'Models' && <Models apiKey={key} models={models} routes={routes} routeError={routeError} modelError={modelError} refresh={refresh} go={go}/>}
         {page === 'Integrations' && <Integrations model={model}/>}
-        {page === 'Requests' && <Requests status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
+        {page === 'Requests' && <Requests apiKey={key} status={status} metrics={metrics} metricsError={metricsError} lastUpdated={lastUpdated} refresh={refresh}/>}
         {page === 'Settings' && <Settings keyDraft={keyDraft} setKeyDraft={setKeyDraft} saveKey={saveKey} connected={!!key}/>}
       </div><footer><span>YAG <span className="footer-sep">/</span> ONE HOST. MULTIPLE MODELS. EVERY INTERFACE.</span><span>SELF-HOSTED INFERENCE GATEWAY</span></footer>
     </main>
@@ -251,7 +252,7 @@ function Integrations({model}: {model: string}) {
         </div>
       </section></div></>
 }
-function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
+function Requests({apiKey,status,metrics,metricsError,lastUpdated,refresh}: {apiKey:string;status:Status|null;metrics:Metrics|null;metricsError:string;lastUpdated:Date|null;refresh:() => Promise<void>}) {
   return <><PageHead eyebrow="OBSERVABILITY" title="Requests" description="Aggregate in-memory request counts without storing prompts or responses."
     action={<button className="outline-button" onClick={() => void refresh()}><RefreshCw size={14}/> Refresh</button>}/>
     <div className="metrics">
@@ -266,6 +267,7 @@ function Requests({status,metrics,metricsError,lastUpdated,refresh}: {status:Sta
       <div className="setting-row"><div><b>Provider probes</b><small>POST /api/provider/check requests</small></div><b>{metrics?metrics.provider_check_requests.toLocaleString():'—'}</b></div>
       <div className="setting-row"><div><b>Active HTTP connections</b><small>Includes the status poll itself</small></div><b>{status?status.active_connections.toLocaleString():'—'}</b></div>
     </section>
+    <ClientUsagePanel apiKey={apiKey}/>
     {metricsError && <div className="info-block"><CircleHelp size={16}/><span>{metricsError}</span></div>}
     <div className="info-block"><LockKeyhole size={16}/><span>No prompt text, response bodies or request histories are persisted. Metrics are counts of accepted API requests, including ones that later fail. {lastUpdated ? 'Last refreshed '+lastUpdated.toLocaleTimeString() : ''}</span></div>
   </>
