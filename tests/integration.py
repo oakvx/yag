@@ -264,6 +264,25 @@ class Integration(unittest.TestCase):
 
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
+    def test_get_model_details_uses_merged_inventory_and_models_scope(self):
+        for model,owner in [('glm-test','local'),
+                            ('routed-model','yag-configured-route')]:
+            with self.subTest(model=model):
+                path='/v1/models/'+model
+                status,_,body=request(self.port,'GET',path)
+                self.assertEqual(status,200,body)
+                details=json.loads(body)
+                self.assertEqual(details['id'],model)
+                self.assertEqual(details['object'],'model')
+                self.assertEqual(details['owned_by'],owner)
+                self.assertEqual(request(self.port,'GET',path,
+                    key='models-only-key-123456')[0],200)
+                self.assertEqual(request(self.port,'GET',path,key=None)[0],401)
+        self.assertEqual(request(self.port,'GET','/v1/models/non-existent')[0],404)
+        self.assertEqual(request(self.port,'GET','/v1/models/')[0],404)
+        self.assertNotIn(b'route-secret',
+            request(self.port,'GET','/v1/models/routed-model')[2])
+
     def test_route_inventory_does_not_leak_secrets(self):
         status,_,data=request(self.port,'GET','/api/routes')
         self.assertEqual(status,200,data)
