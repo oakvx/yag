@@ -220,6 +220,20 @@ to 16 additional API keys, 32 active HTTP connections and 1 MiB request
 bodies. For many simultaneous heavy requests, Ollama may queue work or
 exhaust VRAM; benchmark your hardware before increasing client count.
 
+## Per-PC usage monitoring
+
+On the central machine, open `http://127.0.0.1:8080` and enter the
+**administrator key** from `.env.lan`. The Console's **Requests** page
+lists `primary`, `client-01`, `client-02`, etc., with aggregate accepted
+and rate-limited request counts. These labels correspond to the order
+of `YAG_EXTRA_API_KEYS` in the private configuration.
+
+The same information is available to a monitoring-authorized API key
+at `GET /api/clients`. Ordinary `inference+models` client keys receive
+HTTP 403. No key value, IP address, prompt or response body is returned.
+Counters reset when the gateway restarts and do not represent GPU time
+or generated tokens.
+
 ## Network and security boundaries
 
 - **LAN only:** bind TCP 443 to a real RFC1918 server IP, use a firewall
