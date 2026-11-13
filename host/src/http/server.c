@@ -252,7 +252,11 @@ static void handle(int fd,yag_config *c) {
         int n=recv_before_deadline(fd,buf+used,MAX_HEADER-used,&header_start,c->header_deadline_seconds);
         if(n==-2){error(fd,408,"Request headers timed out");goto done;}
         if(n<=0)goto done;
-        used+=(size_t)n;buf[used]=0;
+        used+=(size_t)n;
+        /* Detect NUL before any C-string search. Otherwise a NUL followed
+         * by valid CRLF framing can cause a spurious header timeout. */
+        if(memchr(buf,0,used)){error(fd,400,"Invalid headers");goto done;}
+        buf[used]=0;
         char *p=strstr(buf,"\r\n\r\n");
         if(p){header_len=(size_t)(p-buf)+4;break;}
     }
