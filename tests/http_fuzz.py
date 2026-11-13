@@ -182,6 +182,7 @@ class HttpRobustness(unittest.TestCase):
             ('security-edge-ambiguous-model-auth',b'GET /v1/models HTTP/1.1\r\nHost: local\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nX-API-Key: '+KEY.encode()+b'\r\n\r\n',400),
             ('security-edge-transfer-chunked',post+b'Transfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n',400),
             ('security-edge-transfer-identity',post+b'Transfer-Encoding: identity\r\nContent-Length: 0\r\n\r\n',400),
+            ('security-edge-unsupported-expect',post+b'Expect: 200-ok\r\nContent-Length: 0\r\n\r\n',417),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
