@@ -10,6 +10,39 @@ services:
       YAG_RATE_LIMIT_PER_MINUTE: ${YAG_RATE_LIMIT_PER_MINUTE:-120}
     stop_grace_period: 180s
 
+  hub:
+    build:
+      context: .
+      dockerfile: hub/Dockerfile
+    image: yag-hub:local
+    init: true
+    restart: unless-stopped
+    environment:
+      HUB_ADMIN_KEY: ${YAG_API_KEY:?Set primary YAG_API_KEY}
+      YAG_EXTRA_API_KEYS: ${YAG_EXTRA_API_KEYS:?Generate LAN credentials first}
+      YAG_EXTRA_KEY_SCOPES: ${YAG_EXTRA_KEY_SCOPES:?Generate LAN credentials first}
+      HUB_YAG_URL: http://yag:8080
+      HUB_OLLAMA_URL: ${HUB_OLLAMA_URL:-http://host.docker.internal:11434}
+      HUB_MAX_ACTIVE: ${HUB_MAX_ACTIVE:-4}
+      HUB_MAX_QUEUE: ${HUB_MAX_QUEUE:-16}
+      HUB_QUEUE_SECONDS: ${HUB_QUEUE_SECONDS:-15}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8081"
+    volumes:
+      - yag-hub-state:/data
+    depends_on:
+      yag:
+        condition: service_healthy
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    pids_limit: 128
+    stop_grace_period: 180s
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -22,7 +55,7 @@ services:
       - yag-caddy-data:/data
       - yag-caddy-config:/config
     depends_on:
-      yag:
+      hub:
         condition: service_healthy
     cap_drop: ["ALL"]
     cap_add: ["NET_BIND_SERVICE"]
@@ -35,3 +68,4 @@ services:
 volumes:
   yag-caddy-data:
   yag-caddy-config:
+  yag-hub-state:
