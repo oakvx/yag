@@ -277,36 +277,3 @@ class ControlPlane(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main(argv=[sys.argv[0]])
-)
-            if 'utilization_percent' in device:
-                self.assertGreaterEqual(device['utilization_percent'],0)
-                self.assertLessEqual(device['utilization_percent'],100)
-            if 'temperature_c' in device:
-                self.assertGreaterEqual(device['temperature_c'],0)
-                self.assertLess(device['temperature_c'],200)
-        if 'utilization_percent' in data['cpu']:
-            self.assertGreaterEqual(data['cpu']['utilization_percent'],0)
-            self.assertLessEqual(data['cpu']['utilization_percent'],100)
-        if 'visible_host_total_bytes' in data['memory']:
-            self.assertGreaterEqual(data['memory']['visible_host_total_bytes'],
-                                    data['memory']['visible_host_available_bytes'])
-            self.assertEqual(data['memory']['visible_host_scope'],'proc_meminfo')
-        self.assertEqual(request(self.port,'GET','/api/system/resources',
-            key=CLIENT_KEY)[0],403)
-
-    def test_z_registry_survives_clean_restart(self):
-        status,_,body=request(self.port,'POST','/api/admin/clients',
-            {'name':'Persistent PC','scope':SCOPE})
-        self.assertEqual(status,201,body)
-        info=json.loads(body)
-        cls=type(self)
-        cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
-        cls.launch()
-        self.assertEqual(request(self.port,'GET','/v1/models',
-            key=info['api_key'])[0],200)
-        self.assertEqual(request(self.port,'POST','/api/admin/clients/revoke',
-            {'id':info['id']})[0],200)
-
-
-if __name__=='__main__':
-    unittest.main(argv=[sys.argv[0]])
