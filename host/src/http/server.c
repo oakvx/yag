@@ -413,6 +413,21 @@ static void handle(int fd,yag_config *c) {
         else if(!capability_rejected(fd,c,root))
             upstream_request(fd,c,"/chat/completions",body,length,yyjson_get_str(yyjson_obj_get(root,"model")));
         yyjson_doc_free(doc);
+    } else if(!strcmp(uri,"/v1/completions") && !strcmp(method,"POST")) {
+        increment(c,&c->completions_requests);
+        yyjson_doc *doc=yyjson_read(body,length,0);
+        yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+        yyjson_val *model=yyjson_obj_get(root,"model");
+        yyjson_val *prompt=yyjson_obj_get(root,"prompt");
+        int valid_model=yyjson_is_str(model) && yyjson_get_len(model)>0
+            && strlen(yyjson_get_str(model))==yyjson_get_len(model);
+        int valid_prompt=(yyjson_is_str(prompt) && yyjson_get_len(prompt)>0)
+            || (yyjson_is_arr(prompt) && yyjson_arr_size(prompt)>0);
+        if(!yyjson_is_obj(root) || !valid_model || !valid_prompt)
+            error(fd,400,"Expected JSON object with model and nonempty completion prompt");
+        else if(!capability_rejected(fd,c,root))
+            upstream_request(fd,c,"/completions",body,length,yyjson_get_str(model));
+        yyjson_doc_free(doc);
     } else if(!strcmp(uri,"/v1/embeddings") && !strcmp(method,"POST")) {
         increment(c,&c->embeddings_requests);
         yyjson_doc *doc=yyjson_read(body,length,0);
