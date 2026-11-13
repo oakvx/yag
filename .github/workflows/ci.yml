@@ -31,6 +31,8 @@ jobs:
         run: python tests/lan_bootstrap_test.py
       - name: Test cross-platform lifecycle, Docker commands and TLS verification
         run: python tests/lan_manager_test.py
+      - name: Test private provider pool configuration and encrypted backups
+        run: python tests/lan_ops_test.py
 
   host:
     name: C17 host and protocol tests
