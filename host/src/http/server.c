@@ -289,7 +289,7 @@ static void handle(int fd,yag_config *c) {
         else fprintf(stderr,"YAG request method=%s route=other has_query=%d\n",
             method,strchr(uri,'?')!=NULL);
     }
-    size_t length=0; int have_length=0,have_auth=0,have_native_key=0,have_expect=0,expect_continue=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
+    size_t length=0; int have_length=0,have_host=0,have_auth=0,have_native_key=0,have_expect=0,expect_continue=0,transfer_encoding=0; char *auth=NULL,*native_key=NULL; char *line=line_end+2;
     while(line<buf+header_len-2) { char *end=strstr(line,"\r\n"); if(!end || end==line) break; *end=0; char *colon=strchr(line,':'); if(!colon || colon==line){error(fd,400,"Malformed header");goto done;} *colon=0;
         /* RFC 9110 field names contain token characters only; rejecting whitespace
          * before ':' avoids proxy/backend framing disagreements. */
@@ -314,6 +314,9 @@ static void handle(int fd,yag_config *c) {
                 error(fd,417,"Unsupported expectation");goto done;
             }
             expect_continue=1;
+        }
+        else if(!strcasecmp(line,"Host")) {
+            if(have_host++ || !*v){error(fd,400,"Invalid Host header");goto done;}
         }
         else if(!strcasecmp(line,"Authorization")) { if(have_auth++){error(fd,400,"Duplicate authorization");goto done;} auth=v; }
         else if(!strcasecmp(line,"X-API-Key")) { if(have_native_key++){error(fd,400,"Duplicate API key");goto done;} native_key=v; }
