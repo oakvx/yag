@@ -175,6 +175,7 @@ class HttpRobustness(unittest.TestCase):
             ('invalid-length-15',post+b'Content-Length: 1;2\r\n\r\n',400),
             ('security-edge-duplicate-host',get+b'Host: second\r\n\r\n',400),
             ('security-edge-case-insensitive-duplicate-host',get+b'hOsT: second\r\n\r\n',400),
+            ('security-edge-empty-host',b'GET /health HTTP/1.1\r\nHost: \r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
