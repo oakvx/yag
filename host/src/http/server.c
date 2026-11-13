@@ -260,6 +260,17 @@ static void handle(int fd,yag_config *c) {
     /* Reject NUL and malformed framing to avoid ambiguous request interpretation. */
     if(memchr(buf,0,header_len)){error(fd,400,"Invalid headers");goto done;}
     char *line_end=strstr(buf,"\r\n"); if(!line_end){error(fd,400,"Invalid request");goto done;} *line_end=0;
+    /* Accept exactly one SP between request-line tokens. Tabs, controls and
+     * ambiguous whitespace must never be normalized differently by a proxy. */
+    unsigned spaces=0;
+    int invalid_request_line=0;
+    for(const unsigned char *p=(const unsigned char *)buf;*p;p++) {
+        if(*p==' ')spaces++;
+        else if(*p<0x20 || *p==0x7f)invalid_request_line=1;
+    }
+    if(spaces!=2 || invalid_request_line) {
+        error(fd,400,"Invalid request line");goto done;
+    }
     char method[8],uri[1024],version[16],extra; if(sscanf(buf,"%7s %1023s %15s %c",method,uri,version,&extra)!=3 || (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) || uri[0]!='/'){error(fd,400,"Invalid request line");goto done;}
     /* Claude Code sends POST /v1/messages?beta=true.
      * Match the API path separately and support only the known query marker;
