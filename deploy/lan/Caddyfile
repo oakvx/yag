@@ -14,6 +14,12 @@ https://{$YAG_LAN_IP} {
 
     # LAN clients only need the API. The dashboard stays accessible from
     # the central host through http://127.0.0.1:8080, not on the LAN.
+    # Administration stays on the central host, never on the LAN listener.
+    @admin path /api/admin/*
+    handle @admin {
+        respond "Not found" 404
+    }
+
     @api path /health /v1/* /api/*
     handle @api {
         reverse_proxy yag:8080 {
