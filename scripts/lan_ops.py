@@ -100,6 +100,20 @@ def save_environment(path, name, value):
     secure_replace(path, "\n".join(lines) + "\n")
 
 
+def validate_models(models):
+    if models is None:
+        return None
+    if not isinstance(models, list) or not 1 <= len(models) <= 32:
+        raise ValueError("Replica models must contain 1..32 model identifiers")
+    if any(not isinstance(model, str) or not model or len(model.encode("utf-8")) > 255
+           or any(ord(char) < 32 or ord(char) == 127 for char in model)
+           for model in models):
+        raise ValueError("Invalid replica model identifier")
+    if len(set(models)) != len(models):
+        raise ValueError("Duplicate replica model identifier")
+    return models
+
+
 def read_pool(path):
     _, env = read_entries(path)
     raw = env.get("YAG_UPSTREAM_POOL", "[]")
@@ -113,24 +127,34 @@ def read_pool(path):
         if not isinstance(entry, dict) or not isinstance(entry.get("url"), str):
             raise ValueError("Invalid pool entry")
         validate_backend(entry["url"])
+        if set(entry) - {"url", "key_env", "models"}:
+            raise ValueError("Unknown replica configuration field")
+        validate_models(entry.get("models"))
     return pool
 
 
-def configure_provider(path, action, url=None, key_env=None):
+def configure_provider(path, action, url=None, key_env=None, models=None):
     pool = read_pool(path)
     if action == "list":
         for index, entry in enumerate(pool, 1):
             print(f"replica-{index}: {entry['url']}" +
-                  (" (external key)" if entry.get("key_env") else ""))
+                  (" (external key)" if entry.get("key_env") else "") +
+                  (" (models: " + ", ".join(entry["models"]) + ")"
+                   if entry.get("models") else " (unrestricted models)"))
         if not pool:
             print("No replicas configured. Default upstream remains active.")
         return
     validate_backend(url)
+    if action != "add" and models is not None:
+        raise ValueError("Model allowlist is supported only when adding a replica")
+    models = validate_models(models)
     _, env = read_entries(path)
     if action == "add":
         if len(pool) >= 8 or any(item["url"] == url for item in pool):
             raise ValueError("Replica pool full or backend already configured")
         entry = {"url": url}
+        if models is not None:
+            entry["models"] = models
         if key_env:
             if not re.fullmatch(r"YAG_POOL_KEY_[1-8]", key_env):
                 raise ValueError("Use one of YAG_POOL_KEY_1..8 for private replica credentials")

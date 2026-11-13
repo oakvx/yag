@@ -72,6 +72,28 @@ class LanOperationsTest(unittest.TestCase):
             if os.name != "nt":
                 self.assertEqual(path.stat().st_mode & 0o777,0o600)
 
+    def test_replica_model_allowlist_roundtrip_and_validation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=new_config(Path(temp))
+            url="http://192.168.1.61:11434/v1"
+            with contextlib.redirect_stdout(io.StringIO()):
+                lan_ops.configure_provider(path,"add",url,models=["glm-test","llama3.2"])
+            self.assertEqual(lan_ops.read_pool(path)[0]["models"],
+                             ["glm-test","llama3.2"])
+            out=io.StringIO()
+            with contextlib.redirect_stdout(out):
+                lan_ops.configure_provider(path,"list")
+            self.assertIn("glm-test",out.getvalue())
+            for invalid in ([],["a","a"],["invalid\nmodel"],
+                            ["x"]*33,[42]):
+                with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                    lan_ops.configure_provider(path,"add",
+                                               "http://192.168.1.62:11434/v1",
+                                               models=invalid)
+            self.assertEqual(len(lan_ops.read_pool(path)),1)
+            with self.assertRaises(ValueError):
+                lan_ops.configure_provider(path,"remove",url,models=["glm-test"])
+
     def test_rejects_symlinked_or_readable_environment(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)

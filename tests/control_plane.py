@@ -78,7 +78,8 @@ class ControlPlane(unittest.TestCase):
             YAG_OLLAMA_ADMIN_URL='http://127.0.0.1:'+str(cls.ollama.server_port),
             YAG_CLIENT_STORE=str(Path(cls.tmp.name)/'clients.json'),
             YAG_UPSTREAM_POOL=json.dumps([{'url':'http://127.0.0.1:'+
-                                           str(cls.replica.server_port)+'/v1'}]),
+                                           str(cls.replica.server_port)+'/v1',
+                                           'models':['glm-test']}]),
             YAG_MAX_INFERENCE='2',YAG_MAX_INFERENCE_PER_KEY='1',
             YAG_INFERENCE_QUEUE_WAIT_MS='500',NO_PROXY='127.0.0.1,localhost')
         cls.proc=subprocess.Popen([cls.binary],env=env,
@@ -196,6 +197,25 @@ class ControlPlane(unittest.TestCase):
         self.assertEqual(len(rows),2)
         self.assertGreaterEqual(sum(x['attempts'] for x in rows),6)
         self.assertNotIn(str(self.replica.server_port).encode(),body)
+        self.assertTrue(rows[1]['model_allowlist_enabled'])
+        self.assertEqual(rows[1]['declared_models'],['glm-test'])
+        self.assertFalse(rows[0]['model_allowlist_enabled'])
+        for _ in range(4):
+            status,_,body=request(self.port,'POST','/v1/chat/completions',
+                                  {'model':'unlisted-model','messages':[]})
+            self.assertEqual(status,200,body)
+            self.assertNotEqual(json.loads(body).get('source'),'replica')
+
+    def test_invalid_replica_model_allowlists_fail_closed(self):
+        base={'url':'http://127.0.0.1:29998/v1'}
+        for models in ([], ['glm-test','glm-test'], ['bad\nname'],
+                       [str(i) for i in range(33)]):
+            env=dict(os.environ,YAG_API_KEY=KEY,
+                     YAG_UPSTREAM_POOL=json.dumps([{**base,'models':models}]))
+            proc=subprocess.run([self.binary],env=env,timeout=5,
+                                stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            self.assertNotEqual(proc.returncode,0,models)
+            self.assertIn(b'YAG_UPSTREAM_POOL',proc.stderr)
 
     def test_scheduler_enforces_per_key_admission(self):
         payload={'model':'slow','messages':[]}
@@ -218,7 +238,26 @@ class ControlPlane(unittest.TestCase):
         self.assertEqual(data['scope'],'gateway_container')
         self.assertIn('cpu',data)
         self.assertIn('memory',data)
-        self.assertEqual(data['gpu']['available'],False)
+        self.assertIsInstance(data['gpu']['available'],bool)
+        self.assertEqual(data['gpu']['scope'],'visible_linux_drm_sysfs')
+        self.assertIsInstance(data['gpu']['devices'],list)
+        self.assertEqual(data['gpu']['available'],bool(data['gpu']['devices']))
+        for device in data['gpu']['devices']:
+            self.assertTrue(device['id'].startswith('card'))
+            self.assertTrue(device['id'][4:].isdigit())
+            if 'utilization_percent' in device:
+                self.assertGreaterEqual(device['utilization_percent'],0)
+                self.assertLessEqual(device['utilization_percent'],100)
+            if 'temperature_c' in device:
+                self.assertGreaterEqual(device['temperature_c'],0)
+                self.assertLess(device['temperature_c'],200)
+        if 'utilization_percent' in data['cpu']:
+            self.assertGreaterEqual(data['cpu']['utilization_percent'],0)
+            self.assertLessEqual(data['cpu']['utilization_percent'],100)
+        if 'visible_host_total_bytes' in data['memory']:
+            self.assertGreaterEqual(data['memory']['visible_host_total_bytes'],
+                                    data['memory']['visible_host_available_bytes'])
+            self.assertEqual(data['memory']['visible_host_scope'],'proc_meminfo')
         self.assertEqual(request(self.port,'GET','/api/system/resources',
             key=CLIENT_KEY)[0],403)
 

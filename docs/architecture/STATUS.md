@@ -50,16 +50,21 @@ The FIFO inference admission queue enforces optional global/per-key
 concurrency and a finite waiting deadline; it does **not** reserve or
 schedule GPU VRAM. The default pool can balance across up to eight
 additional OpenAI-compatible replicas by least in-flight requests and
-suppresses repeatedly failing replicas for 30 seconds. It requires every
-replica to serve equivalent model IDs and semantics; it does not currently
-verify cross-host model inventory or migrate an active request.
+suppresses repeatedly failing replicas for 30 seconds. Optional explicit model allowlists restrict which replicas may serve a given
+model ID; an unrestricted replica retains the legacy equivalent-inventory
+assumption. Model semantics and inventories remain operator-asserted, never
+verified automatically, and active requests are not migrated.
 
-Resource telemetry is intentionally labeled **gateway container scope**:
-Linux cgroup memory and /proc load averages, plus Ollama-reported loaded
-model VRAM from the native API. NVIDIA/AMD/Apple GPU utilization, total
-VRAM availability and full host OS telemetry remain unsupported.
+Resource telemetry distinguishes **gateway container scope** (cgroup memory)
+from Linux kernel-visible /proc CPU deltas, load averages and host RAM.
+Linux DRM sysfs exposes optional per-GPU utilization, VRAM and temperature
+where drivers and container mounts provide those sensors. Missing data is
+not inferred. NVIDIA NVML, Apple/Windows GPU telemetry and comprehensive
+hardware inventory remain unsupported. Ollama-reported loaded-model VRAM
+is separate from physical GPU VRAM utilization.
 
-The operator CLI can change the replica configuration, pull model images,
+The operator CLI can change the replica configuration (including model
+allowlists), pull model images,
 perform controlled image updates and write encrypted `age` configuration
 backups (credentials and available Caddy CA materials). Backups do not
 contain Ollama model weights and do not constitute a tested disaster-recovery
@@ -85,8 +90,25 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 - A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime provider editing, scheduled health polling and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
 - A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and structured/audit logs. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
-- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
+- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring on all drivers, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
+
+## Increment: model-aware pool and Linux sensor visibility
+
+- Pool replicas can declare an exact-match list of supported model IDs, validated
+  at startup and configurable using repeated `lan.py providers add --model`
+  options. Primary routing still depends on the original upstream, and this
+  declaration is not an inventory probe or automatic capability verification.
+- `GET /api/providers/pool` exposes each replica's declared model names
+  without revealing upstream URLs or credentials.
+- `GET /api/system/resources` now adds CPU utilization sampled across
+  requests, kernel-visible RAM, and available DRM/sysfs GPU metrics (including
+  temperature where present). These sensors are optional and not a universal
+  NVIDIA/Windows/macOS exporter; an unavailable sensor is never reported as
+  0% utilization.
+- The React Console labels scope explicitly and displays the available
+  metrics. Mock integration and LAN CLI regression tests enforce the
+  new interfaces.
 
 ## Intended next increments
 
