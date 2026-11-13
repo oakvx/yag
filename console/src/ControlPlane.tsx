@@ -418,6 +418,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <code>{p.url}</code>
               <small>Credentials: {p.key_env || 'none'} · Declared models: {
                 p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
+              <small>Admission: {p.max_inflight? p.max_inflight+' active max':'unbounded'} ·
+                VRAM estimate: {p.vram_budget_mb
+                ? p.vram_reservation_mb+' / '+p.vram_budget_mb+' MiB per request / budget'
+                : 'not configured'}</small>
               <small>Probe: {providerChecks[p.index]
                 ? (providerChecks[p.index].available?'Healthy':'Unavailable')+
                   ' · HTTP '+providerChecks[p.index].http_status+
@@ -465,6 +469,18 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <input type="number" min="0" max="100" value={providerPriority}
                 onChange={e=>setProviderPriority(Number(e.target.value))}
                 disabled={!providerEditable||!!busy}/></label>
+            <label>Maximum concurrent inferences (0 = unlimited)
+              <input type="number" min="0" max="32" value={providerMaxInflight}
+                onChange={e=>setProviderMaxInflight(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+            <label>VRAM budget in MiB (operator estimate, 0 = off)
+              <input type="number" min="0" max="262144" value={providerBudget}
+                onChange={e=>setProviderBudget(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+            <label>VRAM reservation per inference in MiB (0 = off)
+              <input type="number" min="0" max="262144" value={providerReservation}
+                onChange={e=>setProviderReservation(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
           </div>
           <div className="control-actions">
             {providerEditing!==null && <button type="button" className="outline-button small"
@@ -477,18 +493,26 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           </div>
         </form>
         <div className="control-footnote">
-          Routing selects a backend by least concurrent requests, then numeric priority.
+          Inference admission respects each backend's concurrency limit and reserved VRAM
+          budget before selecting by least concurrent requests, then numeric priority.
+          VRAM values are operator-estimated reservations, not live physical GPU measurements.
           Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
           while the Console is open; reported IDs are not proof of model capabilities.
           Secrets remain in server-side environment variables and are never included in API responses.
           Private LAN connections and endpoint validation remain required.
         </div>
+        <div className="control-footnote">
+          Resource pool waiting: {poolCapacity.waiting} · Rejected after capacity limits:
+          {' '}{poolCapacity.rejected} · Maximum admission wait: {poolCapacity.waitMs} ms
+        </div>
         <div className="provider-table-wrap"><table className="provider-table">
-          <thead><tr><th>BACKEND</th><th>ACTIVE</th><th>ATTEMPTS</th>
-            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
+          <thead><tr><th>BACKEND</th><th>ACTIVE / LIMIT</th><th>VRAM RESERVED / BUDGET</th>
+            <th>CAPACITY SKIPS</th><th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
-            <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
-            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
+            <td>{p.active_requests} / {p.max_inflight||'∞'}</td>
+            <td>{p.vram_budget_mb ? p.vram_reserved_mb+' / '+p.vram_budget_mb+' MiB':'Not configured'}</td>
+            <td>{p.capacity_skips||0}</td><td>{p.successes}</td><td>{p.failures}</td>
+            <td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
         </table></div>
       </section>
       <section className="panel control-wide">
