@@ -20,7 +20,7 @@ type ClientCreated = {id:number;api_key:string;enabled:boolean}
 type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean}
 type ProviderList = {editable:boolean;data:ProviderConfig[]}
 type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
-type ProviderPayload = Omit<ProviderConfig,'index'>
+type ProviderPayload = {url:string;models:string[];enabled:boolean;priority:number;key_env?:string}
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
   if (!key) throw new Error('Enter the primary administrator API key in Settings')
@@ -150,7 +150,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   }
   function payloads():ProviderPayload[]{
     return providers.map(({url,key_env,models,enabled,priority})=>({
-      url,key_env,models,enabled,priority
+      url,models,enabled,priority,...(key_env?{key_env}:{})
     }))
   }
   function editProvider(item:ProviderConfig){
@@ -165,9 +165,9 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     const entry:ProviderPayload={
       url:providerUrl.trim(),
       models:Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean))),
-      key_env:providerKey,priority:providerPriority,enabled:selected?.enabled??true
+      ...(providerKey?{key_env:providerKey}:{}),
+      priority:providerPriority,enabled:selected?.enabled??true
     }
-    if(!entry.key_env)delete (entry as Partial<ProviderPayload>).key_env
     if(selected)next[selected.index-1]=entry
     else next.push(entry)
     await persistProviders(next)
