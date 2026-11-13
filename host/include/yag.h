@@ -41,7 +41,8 @@ typedef struct {
     pthread_cond_t drained;
     unsigned active;
     unsigned long total;
-    unsigned long chat_requests, responses_requests, anthropic_requests;
+    unsigned long chat_requests, completions_requests, embeddings_requests;
+    unsigned long responses_requests, anthropic_requests;
     unsigned long model_list_requests, provider_check_requests;
     unsigned rate_limit_per_minute;
     int fallback_to_default;
