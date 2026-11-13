@@ -419,7 +419,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         int index=pool_choose(state,model);
         if(index<0) {
             if(status)*status=0;
-            return index==-2?CURLE_AGAIN:CURLE_COULDNT_CONNECT;
+            return index==-2?YAG_RESOURCE_BUSY:CURLE_COULDNT_CONNECT;
         }
         const yag_config *replica=c;
         if(index>0) {
@@ -440,7 +440,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
             entry->fallthroughs++;
             pthread_mutex_unlock(&state->lock);
             if(status)*status=0;
-            if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+            if(!pool_primary_fallback_acquire(state))return YAG_RESOURCE_BUSY;
             rc=measured_upstream(state,c,&state->default_provider_stats,
                 path,body,len,cb,ctx,status,cancel_fd);
             pool_complete(state,0,rc,status?*status:0);
@@ -454,7 +454,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
             stats->fallthroughs++;
             pthread_mutex_unlock(&state->lock);
             if(status)*status=0;
-            if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+            if(!pool_primary_fallback_acquire(state))return YAG_RESOURCE_BUSY;
             int frc=measured_upstream(state,c,&state->default_provider_stats,
                 path,body,len,cb,ctx,status,cancel_fd);
             pool_complete(state,0,frc,status?*status:0);
@@ -470,7 +470,7 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         stats->fallthroughs++;
         pthread_mutex_unlock(&state->lock);
         if(status)*status=0;
-        if(!pool_primary_fallback_acquire(state))return CURLE_AGAIN;
+        if(!pool_primary_fallback_acquire(state))return YAG_RESOURCE_BUSY;
         int frc=measured_upstream(state,c,&state->default_provider_stats,
             path,body,len,cb,ctx,status,cancel_fd);
         pool_complete(state,0,frc,status?*status:0);
@@ -486,7 +486,7 @@ static size_t proxy_write(void *ctx,long status,const char *type,const char *dat
 void upstream_request(int fd, const yag_config *c, const char *path, const char *body, size_t len, const char *model) {
     transfer t={.fd=fd}; long status=0;
     int res=upstream_for_model(c,model,path,body,len,proxy_write,&t,&status,fd);
-    if(res==CURLE_AGAIN && !t.sent)
+    if(res==YAG_RESOURCE_BUSY && !t.sent)
         reply(fd,503,"application/json",
             "{\"error\":{\"message\":\"Inference pool at configured resource capacity\",\"type\":\"resource_capacity\"}}");
     else if(res!=CURLE_OK && !t.sent) reply(fd,res==CURLE_OPERATION_TIMEDOUT?504:502,"application/json","{\"error\":{\"message\":\"Inference backend unavailable or timed out\",\"type\":\"upstream_error\"}}");
