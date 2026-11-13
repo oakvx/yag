@@ -33,7 +33,10 @@ class Scheduler:
         with self.lock:
             self.sequence += 1
             ticket = (-priority, self.sequence, client_id)
-            if len(self.waiters) >= self.max_waiting:
+            # The waiting limit excludes requests that can start immediately.
+            immediate = self.active < self.max_active and not self.waiters and (
+                self.per_client.get(client_id, 0) < client_limit)
+            if not immediate and len(self.waiters) >= self.max_waiting:
                 raise Busy("Inference queue is full")
             self.waiters.append(ticket)
             if not hasattr(self, "_limits"):
