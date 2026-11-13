@@ -194,7 +194,7 @@ static void capabilities(int fd,const yag_config *cfg) {
         "\"anthropic_messages\":{\"streaming\":true,\"function_tools\":true,"
             "\"tool_result_replay\":true,\"thinking\":\"best_effort_effort_mapping\","
             "\"count_tokens\":false,\"multimodal\":false}},"
-        "\"limits\":{\"max_body_bytes\":%d,\"max_connections\":%d}}",
+        "\"limits\":{\"max_body_bytes\":%u,\"max_connections\":%d}}",
         cfg->route_count,cfg->fallback_to_default?"true":"false",
         cfg->max_body_bytes,MAX_CONNECTIONS);
     if(n<0 || (size_t)n>=sizeof body)error(fd,500,"Could not describe capabilities");
