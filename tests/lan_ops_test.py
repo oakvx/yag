@@ -107,6 +107,11 @@ class LanOperationsTest(unittest.TestCase):
                     destination.write_text("snapshot private bytes")
                 return subprocess.CompletedProcess(cmd,0,"","")
             def fake_age(cmd,**kwargs):
+                if cmd[0]=="whoami":
+                    return subprocess.CompletedProcess(cmd,0,
+                        '"user","S-1-5-21-111-222-333-1001"\n',"")
+                if cmd[0]=="icacls":
+                    return subprocess.CompletedProcess(cmd,0,"","")
                 self.assertEqual(cmd[0],"age")
                 with tarfile.open(cmd[-1],"r:gz") as archive:
                     seen.extend(archive.getnames())
