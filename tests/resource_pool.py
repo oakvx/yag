@@ -184,11 +184,9 @@ class ResourcePool(unittest.TestCase):
                 self.assertNotEqual(proc.returncode,0)
                 self.assertIn(b"YAG_UPSTREAM_POOL",proc.stderr)
         self.launch()
-        live={"url":self.replica_url,"max_inflight":1,
-              "vram_budget_mb":512,"vram_reservation_mb":256}
         for policy in invalid:
             with self.subTest(admin=policy):
-                payload={"replicas":[{**live,**policy}]}
+                payload={"replicas":[{**base,**policy}]}
                 self.assertEqual(request(self.port,"POST",
                     "/api/admin/providers/apply",payload)[0],400)
         code,_,body=request(self.port,"GET","/api/admin/providers")
