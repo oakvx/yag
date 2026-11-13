@@ -5,10 +5,14 @@ This command never prints secrets or overwrites existing credentials.
 Requires only Python 3.9+ (standard library).
 """
 import argparse
+import csv
+import io
 import ipaddress
 import os
 from pathlib import Path
 import secrets
+import re
+import subprocess
 import sys
 
 RFC1918 = tuple(ipaddress.ip_network(cidr) for cidr in (
@@ -39,11 +43,39 @@ def client_count(value):
     return count
 
 
+def secure_windows_acl(path):
+    """Limit generated secret files to the invoking Windows user.
+
+    Windows ignores POSIX 0600 permissions. Resolve the user SID instead
+    of relying on localized account/group names. Fail closed if ACL
+    hardening is unavailable.
+    """
+    user = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"],
+                          capture_output=True, text=True, check=True)
+    rows = list(csv.reader(io.StringIO(user.stdout)))
+    if len(rows) != 1 or len(rows[0]) < 2:
+        raise OSError("Unable to identify the current Windows user SID")
+    sid = rows[0][1].strip()
+    if not re.fullmatch(r"S-1-(?:[0-9]+-)+[0-9]+", sid):
+        raise OSError("Invalid Windows user SID")
+    acl = subprocess.run(["icacls", str(path), "/inheritance:r",
+                          "/grant:r", "*" + sid + ":(F)"],
+                         capture_output=True, text=True, check=False)
+    if acl.returncode:
+        raise OSError("Unable to secure Windows ACL for generated credentials")
+
+
 def write_private(path, content):
-    """Exclusive creation; never follow a symlink or overwrite an existing key."""
+    """Exclusive creation; restrict generated secrets to their owner."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
-        output.write(content)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
+            output.write(content)
+        if os.name == "nt":
+            secure_windows_acl(path)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
 
 
 def main(argv=None):
