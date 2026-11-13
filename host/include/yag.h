@@ -30,6 +30,10 @@ typedef struct {
     char *key_env;
     unsigned priority;
     int enabled;
+    /* Operator-set admission controls, not measured GPU utilization. */
+    unsigned max_inflight;
+    unsigned vram_budget_mb, vram_reservation_mb, vram_reserved_mb;
+    unsigned long admission_capacity_skips;
     /* Optional operator-declared per-replica model allowlist (not auto-discovery). */
     char *models[32];
     size_t model_count;
@@ -49,6 +53,9 @@ typedef struct {
     yag_pool_backend pool[8];
     size_t pool_count;
     unsigned default_pool_active, default_pool_failures, pool_cursor;
+    unsigned primary_max_inflight, pool_wait_ms, pool_waiting;
+    unsigned long pool_capacity_rejections;
+    pthread_cond_t pool_available;
     time_t default_pool_unavailable_until;
     yag_model_capability capabilities[32];
     size_t capability_count;
