@@ -17,6 +17,10 @@ type ResourceMetrics = {
 type Scheduler = {max_inference:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
 type Pool = {data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
+type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean}
+type ProviderList = {editable:boolean;data:ProviderConfig[]}
+type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
+type ProviderPayload = Omit<ProviderConfig,'index'>
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
   if (!key) throw new Error('Enter the primary administrator API key in Settings')
@@ -49,6 +53,14 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [resources,setResources]=useState<ResourceMetrics|null>(null)
   const [scheduler,setScheduler]=useState<Scheduler|null>(null)
   const [pool,setPool]=useState<Pool['data']>([])
+  const [providers,setProviders]=useState<ProviderConfig[]>([])
+  const [providerEditable,setProviderEditable]=useState(false)
+  const [providerChecks,setProviderChecks]=useState<Record<number,ProviderProbe>>({})
+  const [providerUrl,setProviderUrl]=useState('')
+  const [providerModels,setProviderModels]=useState('')
+  const [providerKey,setProviderKey]=useState('')
+  const [providerPriority,setProviderPriority]=useState(50)
+  const [providerEditing,setProviderEditing]=useState<number|null>(null)
   const [modelInput,setModelInput]=useState('')
   const [clientName,setClientName]=useState('')
   const [clientScope,setClientScope]=useState('inference+models')
@@ -90,14 +102,94 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
       setErrors(prev=>({...prev,infra:''}))
     }catch(e){setErrors(prev=>({...prev,infra:(e as Error).message}))}
   },[apiKey])
+  const loadProviders=useCallback(async()=>{
+    if(!apiKey){setProviders([]);setProviderEditable(false);return}
+    try {
+      const result=await controlRequest<ProviderList>(apiKey,'/api/admin/providers')
+      setProviders(Array.isArray(result.data)?result.data:[])
+      setProviderEditable(!!result.editable)
+      setErrors(previous=>({...previous,providers:''}))
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+  },[apiKey])
   const refresh=useCallback(async()=>{
-    await Promise.all([loadModels(),loadClients(),loadInfra()])
-  },[loadModels,loadClients,loadInfra])
+    await Promise.all([loadModels(),loadClients(),loadInfra(),loadProviders()])
+  },[loadModels,loadClients,loadInfra,loadProviders])
   useEffect(()=>{
     void refresh()
     const timer=setInterval(()=>void refresh(),10000)
     return ()=>clearInterval(timer)
   },[refresh])
+  useEffect(()=>{
+    if(!apiKey)return
+    let alive=true
+    const probe=async(index:number)=>{
+      try {
+        const info=await adminPost<ProviderProbe>(apiKey,'/api/admin/providers/check',{index})
+        if(alive)setProviderChecks(previous=>({...previous,[index]:info}))
+      }catch{/* A failed admin key or unavailable endpoint is surfaced by the manager. */}
+    }
+    const check=()=>{for(const index of [0,...providers.map(p=>p.index)])void probe(index)}
+    check()
+    const timer=setInterval(check,60000)
+    return ()=>{alive=false;clearInterval(timer)}
+  },[apiKey,providers.map(p=>p.index+':'+p.url).join('|')])
+  function resetProviderForm(){
+    setProviderUrl('');setProviderModels('');setProviderKey('')
+    setProviderPriority(50);setProviderEditing(null)
+  }
+  async function persistProviders(next:ProviderPayload[]){
+    if(busy || !providerEditable)return
+    setBusy('providers');setNotice('')
+    try {
+      await adminPost(apiKey,'/api/admin/providers/apply',{replicas:next})
+      resetProviderForm();setProviderChecks({})
+      setNotice('Provider configuration persisted and applied live.')
+      await Promise.all([loadProviders(),loadInfra()])
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+    finally{setBusy('')}
+  }
+  function payloads():ProviderPayload[]{
+    return providers.map(({url,key_env,models,enabled,priority})=>({
+      url,key_env,models,enabled,priority
+    }))
+  }
+  function editProvider(item:ProviderConfig){
+    setProviderEditing(item.index);setProviderUrl(item.url)
+    setProviderModels(item.models.join(', '));setProviderKey(item.key_env)
+    setProviderPriority(item.priority)
+  }
+  async function saveProvider(event:React.FormEvent){
+    event.preventDefault()
+    const next=payloads()
+    const selected=providerEditing===null?null:providers.find(p=>p.index===providerEditing)
+    const entry:ProviderPayload={
+      url:providerUrl.trim(),
+      models:Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean))),
+      key_env:providerKey,priority:providerPriority,enabled:selected?.enabled??true
+    }
+    if(!entry.key_env)delete (entry as Partial<ProviderPayload>).key_env
+    if(selected)next[selected.index-1]=entry
+    else next.push(entry)
+    await persistProviders(next)
+  }
+  async function changeProvider(index:number,action:'remove'|'toggle'|'up'|'down'){
+    if(!providerEditable || busy)return
+    const next=payloads(),slot=index-1
+    if(action==='remove'){
+      if(!window.confirm('Remove this backend from live inference routing?'))return
+      next.splice(slot,1)
+    }else if(action==='toggle')next[slot].enabled=!next[slot].enabled
+    else if(action==='up' && slot>0)[next[slot-1],next[slot]]=[next[slot],next[slot-1]]
+    else if(action==='down' && slot<next.length-1)[next[slot],next[slot+1]]=[next[slot+1],next[slot]]
+    await persistProviders(next)
+  }
+  async function checkProvider(index:number){
+    try {
+      const info=await adminPost<ProviderProbe>(apiKey,'/api/admin/providers/check',{index})
+      setProviderChecks(previous=>({...previous,[index]:info}))
+      setErrors(previous=>({...previous,providers:''}))
+    }catch(e){setErrors(previous=>({...previous,providers:(e as Error).message}))}
+  }
   async function pullModel() {
     const name=modelInput.trim()
     if(!name || busy)return
