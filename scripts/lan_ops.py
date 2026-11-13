@@ -114,6 +114,20 @@ def validate_models(models):
     return models
 
 
+def validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb):
+    for label, value, limit in (
+        ("max_inflight", max_inflight, 32),
+        ("vram_budget_mb", vram_budget_mb, 262144),
+        ("vram_reservation_mb", vram_reservation_mb, 262144),
+    ):
+        if type(value) is not int or not 0 <= value <= limit:
+            raise ValueError(label + " must be an integer between 0 and " + str(limit))
+    if bool(vram_budget_mb) != bool(vram_reservation_mb):
+        raise ValueError("VRAM budget and per-request reservation must both be set or both be zero")
+    if vram_reservation_mb > vram_budget_mb:
+        raise ValueError("Per-request VRAM reservation exceeds the backend VRAM budget")
+
+
 def read_pool(path):
     _, env = read_entries(path)
     raw = env.get("YAG_UPSTREAM_POOL", "[]")
@@ -127,20 +141,28 @@ def read_pool(path):
         if not isinstance(entry, dict) or not isinstance(entry.get("url"), str):
             raise ValueError("Invalid pool entry")
         validate_backend(entry["url"])
-        if set(entry) - {"url", "key_env", "models"}:
+        if set(entry) - {"url", "key_env", "models", "max_inflight",
+                         "vram_budget_mb", "vram_reservation_mb"}:
             raise ValueError("Unknown replica configuration field")
         validate_models(entry.get("models"))
+        validate_resource_policy(entry.get("max_inflight", 0),
+                                 entry.get("vram_budget_mb", 0),
+                                 entry.get("vram_reservation_mb", 0))
     return pool
 
 
-def configure_provider(path, action, url=None, key_env=None, models=None):
+def configure_provider(path, action, url=None, key_env=None, models=None,
+                       max_inflight=0, vram_budget_mb=0, vram_reservation_mb=0):
     pool = read_pool(path)
     if action == "list":
         for index, entry in enumerate(pool, 1):
             print(f"replica-{index}: {entry['url']}" +
                   (" (external key)" if entry.get("key_env") else "") +
                   (" (models: " + ", ".join(entry["models"]) + ")"
-                   if entry.get("models") else " (unrestricted models)"))
+                   if entry.get("models") else " (unrestricted models)") +
+                  " (max-inflight: " + str(entry.get("max_inflight", 0)) +
+                  ", VRAM: " + str(entry.get("vram_reservation_mb", 0)) +
+                  "/" + str(entry.get("vram_budget_mb", 0)) + " MiB)")
         if not pool:
             print("No replicas configured. Default upstream remains active.")
         return
@@ -148,11 +170,19 @@ def configure_provider(path, action, url=None, key_env=None, models=None):
     if action != "add" and models is not None:
         raise ValueError("Model allowlist is supported only when adding a replica")
     models = validate_models(models)
+    validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb)
+    if action != "add" and (max_inflight or vram_budget_mb or vram_reservation_mb):
+        raise ValueError("Resource policy changes require adding a replica")
     _, env = read_entries(path)
     if action == "add":
         if len(pool) >= 8 or any(item["url"] == url for item in pool):
             raise ValueError("Replica pool full or backend already configured")
         entry = {"url": url}
+        if max_inflight:
+            entry["max_inflight"] = max_inflight
+        if vram_budget_mb:
+            entry["vram_budget_mb"] = vram_budget_mb
+            entry["vram_reservation_mb"] = vram_reservation_mb
         if models is not None:
             entry["models"] = models
         if key_env:
