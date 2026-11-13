@@ -166,6 +166,10 @@ def main():
     parser.add_argument('--tools',action='store_true',
                         help='Require model-driven function calls and subsequent tool-result replay')
     parser.add_argument('--stream',action='store_true',help='Also require SSE completion')
+    parser.add_argument('--embedding-model',default='',
+        help='Optionally validate /v1/embeddings using a real embedding-capable model')
+    parser.add_argument('--completions',action='store_true',
+        help='Optionally validate /v1/completions with the selected text model')
     args=parser.parse_args()
     key=os.environ.get('YAG_API_KEY','')
     if len(key)<16:parser.error('YAG_API_KEY must be set in the environment')
@@ -185,6 +189,19 @@ def main():
                 exercise(args.base_url.rstrip('/'),key,args.model,protocol,False,True)
         except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
             print('[FAIL]',protocol,type(exc).__name__,str(exc)[:200],file=sys.stderr,flush=True)
+            failed+=1
+    for endpoint,model,payload in [
+        ('embeddings',args.embedding_model,{'input':['YAG local embedding fixture']}),
+        ('completions',args.model if args.completions else '',
+         {'prompt':'Reply with a greeting.','stream':False}),
+    ]:
+        if not model:continue
+        try:
+            exercise_optional_endpoint(args.base_url.rstrip('/'),key,model,
+                                       endpoint,payload)
+        except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
+            print('[FAIL]',endpoint,type(exc).__name__,str(exc)[:200],
+                  file=sys.stderr,flush=True)
             failed+=1
     if failed:print('Real-model qualification FAILED for',failed,'protocol(s)',file=sys.stderr)
     else:print('Real-model qualification PASSED for selected checks')
