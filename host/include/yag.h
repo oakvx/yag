@@ -27,6 +27,9 @@ typedef struct {
 typedef struct {
     char *url;
     const char *key;
+    /* Optional operator-declared per-replica model allowlist (not auto-discovery). */
+    char *models[32];
+    size_t model_count;
     yag_provider_stats stats;
     unsigned active, consecutive_failures;
     time_t unavailable_until;
