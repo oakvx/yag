@@ -5,6 +5,7 @@ Requires Docker Compose v2 for runtime commands. Never prints API keys or
 Docker Compose's resolved environment; never changes host firewall settings.
 """
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import http.client
 import ipaddress
@@ -17,7 +18,7 @@ import ssl
 import subprocess
 import sys
 
-from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
+from lan_bootstrap import main as bootstrap_main, private_lan_ipv4, secure_windows_acl
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env.lan"
@@ -180,6 +181,48 @@ def export_ca(config):
     print("Never export or distribute Caddy's CA private key.")
 
 
+def export_backup(config, destination):
+    """Download a consistent control-plane snapshot over verified LAN HTTPS."""
+    if not CA_PATH.is_file():
+        raise SetupError("Missing public root CA: run 'python scripts/lan.py ca'")
+    directory = Path(destination).resolve()
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    ip = config["YAG_LAN_IP"]
+    port = int(config.get("YAG_LAN_HTTPS_PORT", "443"))
+    if not 1 <= port <= 65535:
+        raise SetupError("Invalid HTTPS port")
+    context = ssl.create_default_context(cafile=str(CA_PATH))
+    connection = http.client.HTTPSConnection(ip, port, timeout=30, context=context)
+    try:
+        connection.request("GET", "/hub/api/backup", headers={
+            "Authorization": "Bearer " + config["YAG_API_KEY"]})
+        response = connection.getresponse()
+        if response.status != 200:
+            raise SetupError("Backup endpoint returned HTTP " + str(response.status))
+        content = response.read(16*1024*1024+1)
+        if len(content) > 16*1024*1024 or not content.startswith(b"SQLite format 3"):
+            raise SetupError("Invalid or oversized SQLite snapshot")
+    except (OSError, ssl.SSLError) as exc:
+        raise SetupError("Cannot download verified backup: " + type(exc).__name__) from exc
+    finally:
+        connection.close()
+    filename = datetime.now(timezone.utc).strftime("yag-hub-%Y%m%dT%H%M%SZ-") + hashlib.sha256(content).hexdigest()[:8] + ".sqlite3"
+    target = directory / filename
+    descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        if os.name == "nt":
+            secure_windows_acl(target)
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
+    print("Verified, owner-only backup saved:", str(target))
+    print("Store backups on independent encrypted storage for disaster recovery.")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     actions = parser.add_subparsers(dest="action", required=True)
@@ -197,6 +240,9 @@ def main(argv=None):
         ("check", "Verify HTTPS and client authorization"),
     ):
         actions.add_parser(name, help=help_text)
+    export = actions.add_parser("backup", help="Export Hub database over verified HTTPS")
+    export.add_argument("--output-dir", type=Path, default=ROOT / "backups")
+    actions.add_parser("update", help="Pull updated images and rebuild/restart the stack")
     models = actions.add_parser("model", help="Pull a model into managed Ollama")
     models.add_argument("model_id", help="e.g. llama3.2")
     args = parser.parse_args(argv)
@@ -217,6 +263,16 @@ def main(argv=None):
         if args.action == "ca":
             export_ca(config)
             return 0
+        if args.action == "backup":
+            export_backup(config, args.output_dir)
+            return 0
+        if args.action == "update":
+            doctor(config)
+            # Buildable YAG/Hub images remain local: update only vendor images.
+            pulled = invoke(compose_command(config, "pull", "--ignore-buildable"))
+            if pulled.returncode:
+                raise SetupError("Vendor image update failed; previous containers are unchanged")
+            return invoke(compose_command(config, "up", "-d", "--build")).returncode
         if args.action == "up":
             doctor(config)
             command = compose_command(config, "up", "--build", "-d")
