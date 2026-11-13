@@ -243,7 +243,23 @@ class ControlPlane(unittest.TestCase):
         self.assertIsInstance(data['gpu']['devices'],list)
         self.assertEqual(data['gpu']['available'],bool(data['gpu']['devices']))
         for device in data['gpu']['devices']:
-            self.assertRegex(device['id'],r'^card[0-9]+
+            self.assertTrue(device['id'].startswith('card'))
+            self.assertTrue(device['id'][4:].isdigit())
+            if 'utilization_percent' in device:
+                self.assertGreaterEqual(device['utilization_percent'],0)
+                self.assertLessEqual(device['utilization_percent'],100)
+            if 'temperature_c' in device:
+                self.assertGreaterEqual(device['temperature_c'],0)
+                self.assertLess(device['temperature_c'],200)
+        if 'utilization_percent' in data['cpu']:
+            self.assertGreaterEqual(data['cpu']['utilization_percent'],0)
+            self.assertLessEqual(data['cpu']['utilization_percent'],100)
+        if 'visible_host_total_bytes' in data['memory']:
+            self.assertGreaterEqual(data['memory']['visible_host_total_bytes'],
+                                    data['memory']['visible_host_available_bytes'])
+            self.assertEqual(data['memory']['visible_host_scope'],'proc_meminfo')
+        self.assertEqual(request(self.port,'GET','/api/system/resources',
+            key=CLIENT_KEY)[0],403)
 
     def test_z_registry_survives_clean_restart(self):
         status,_,body=request(self.port,'POST','/api/admin/clients',
