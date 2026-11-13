@@ -120,12 +120,18 @@ static int parse_replicas(const char *json,size_t length,
         yyjson_val *key=yyjson_obj_get(item,"key_env");
         yyjson_val *enabled=yyjson_obj_get(item,"enabled");
         yyjson_val *priority=yyjson_obj_get(item,"priority");
+        yyjson_val *max=yyjson_obj_get(item,"max_inflight");
+        yyjson_val *budget=yyjson_obj_get(item,"vram_budget_mb");
+        yyjson_val *reserve=yyjson_obj_get(item,"vram_reservation_mb");
+        unsigned mb=budget?(unsigned)yyjson_get_uint(budget):0;
+        unsigned mr=reserve?(unsigned)yyjson_get_uint(reserve):0;
         if(!yyjson_is_obj(item) || !yyjson_is_str(url) ||
             strlen(yyjson_get_str(url))!=yyjson_get_len(url) ||
             !safe_url(yyjson_get_str(url)) ||
             !strcmp(yyjson_get_str(url),cfg->upstream) ||
             yyjson_obj_size(item)!=(size_t)(1+(models?1:0)+(key?1:0)
-                                          +(enabled?1:0)+(priority?1:0)) ||
+                                          +(enabled?1:0)+(priority?1:0)
+                                          +(max?1:0)+(budget?1:0)+(reserve?1:0)) ||
             (models && (!yyjson_is_arr(models) ||
                 yyjson_arr_size(models)>32)) ||
             (key && (!yyjson_is_str(key) ||
@@ -133,7 +139,11 @@ static int parse_replicas(const char *json,size_t length,
                 !private_key_reference(yyjson_get_str(key)))) ||
             (enabled && !yyjson_is_bool(enabled)) ||
             (priority && (!yyjson_is_uint(priority) ||
-                yyjson_get_uint(priority)>100))) {
+                yyjson_get_uint(priority)>100)) ||
+            (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32)) ||
+            (budget && (!yyjson_is_uint(budget) || yyjson_get_uint(budget)>262144)) ||
+            (reserve && (!yyjson_is_uint(reserve) || yyjson_get_uint(reserve)>262144)) ||
+            (!!mb!=!!mr) || (mr && mr>mb)) {
             good=0;break;
         }
         for(size_t j=0;j<*count;j++)
@@ -145,6 +155,9 @@ static int parse_replicas(const char *json,size_t length,
         (*count)++;
         p->enabled=enabled?yyjson_get_bool(enabled):1;
         p->priority=priority?(unsigned)yyjson_get_uint(priority):50;
+        p->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
+        p->vram_budget_mb=mb;
+        p->vram_reservation_mb=mr;
         if(key) {
             p->key_env=strdup(yyjson_get_str(key));
             if(!p->key_env){good=0;break;}
@@ -224,7 +237,11 @@ static char *serialize_pool(const yag_pool_backend pool[8],size_t count) {
         yyjson_mut_val *models=o?yyjson_mut_obj_add_arr(doc,o,"models"):NULL;
         good=models && yyjson_mut_obj_add_str(doc,o,"url",p->url)
             && yyjson_mut_obj_add_bool(doc,o,"enabled",p->enabled!=0)
-            && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority);
+            && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
+            && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
+            && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
+            && yyjson_mut_obj_add_uint(doc,o,"vram_reservation_mb",
+                                       p->vram_reservation_mb);
         if(good && p->key_env)
             good=yyjson_mut_obj_add_str(doc,o,"key_env",p->key_env);
         for(size_t j=0;good && j<p->model_count;j++)
@@ -301,7 +318,11 @@ static void list_providers(int fd,yag_config *cfg) {
             && yyjson_mut_obj_add_str(doc,o,"key_env",
                                       p->key_env?p->key_env:"")
             && yyjson_mut_obj_add_bool(doc,o,"enabled",p->enabled)
-            && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority);
+            && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
+            && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
+            && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
+            && yyjson_mut_obj_add_uint(doc,o,"vram_reservation_mb",
+                                       p->vram_reservation_mb);
         for(size_t j=0;good && j<p->model_count;j++)
             good=yyjson_mut_arr_add_str(doc,models,p->models[j]);
         if(good)good=yyjson_mut_arr_add_val(arr,o);
@@ -329,7 +350,7 @@ static void apply_providers(int fd,yag_config *cfg,const char *body,size_t len) 
         fail(fd,413,"Provider configuration exceeds persistent store limit");return;
     }
     pthread_mutex_lock(&cfg->lock);
-    int busy=cfg->default_pool_active!=0;
+    int busy=cfg->default_pool_active!=0 || cfg->pool_waiting!=0;
     for(size_t i=0;i<cfg->pool_count;i++)if(cfg->pool[i].active)busy=1;
     int persisted=0;
     if(!busy)persisted=write_store(cfg->provider_store,json);
