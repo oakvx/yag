@@ -348,7 +348,12 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
     yyjson_mut_val *items=root?yyjson_mut_obj_add_arr(d,root,"data"):NULL;
     int ok=root && items && yyjson_mut_obj_add_str(d,root,"object","gateway.pool");
     pthread_mutex_lock(&cfg->lock);
-    if(ok)ok=yyjson_mut_obj_add_uint(d,root,"replica_count",cfg->pool_count+1);
+    if(ok)ok=yyjson_mut_obj_add_uint(d,root,"replica_count",cfg->pool_count+1)
+        && yyjson_mut_obj_add_uint(d,root,"resource_queue_wait_ms",cfg->pool_wait_ms)
+        && yyjson_mut_obj_add_uint(d,root,"resource_waiting",cfg->pool_waiting)
+        && yyjson_mut_obj_add_uint(d,root,"resource_rejections",
+                                   cfg->pool_capacity_rejections)
+        && yyjson_mut_obj_add_str(d,root,"vram_source","operator_estimate");
     for(size_t i=0;ok && i<=cfg->pool_count;i++) {
         yag_provider_stats *stats=i==0?&cfg->default_provider_stats:
             &cfg->pool[i-1].stats;
@@ -372,7 +377,17 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
             if(!yyjson_mut_arr_add_str(d,declared,cfg->pool[i-1].models[j])) {
                 ok=0;break;
             }
-        if(ok)ok=yyjson_mut_obj_add_bool(d,item,"model_allowlist_enabled",
+        if(ok)ok=yyjson_mut_obj_add_uint(d,item,"max_inflight",
+                  i==0?cfg->primary_max_inflight:cfg->pool[i-1].max_inflight)
+              && yyjson_mut_obj_add_uint(d,item,"vram_budget_mb",
+                  i==0?0u:cfg->pool[i-1].vram_budget_mb)
+              && yyjson_mut_obj_add_uint(d,item,"vram_reservation_mb",
+                  i==0?0u:cfg->pool[i-1].vram_reservation_mb)
+              && yyjson_mut_obj_add_uint(d,item,"vram_reserved_mb",
+                  i==0?0u:cfg->pool[i-1].vram_reserved_mb)
+              && yyjson_mut_obj_add_uint(d,item,"capacity_skips",
+                  i==0?0u:cfg->pool[i-1].admission_capacity_skips)
+              && yyjson_mut_obj_add_bool(d,item,"model_allowlist_enabled",
                         i>0 && cfg->pool[i-1].model_count>0)
                   && yyjson_mut_obj_add_bool(d,item,"enabled",
                         i==0 || cfg->pool[i-1].enabled)
