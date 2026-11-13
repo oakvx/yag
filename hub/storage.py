@@ -1,5 +1,6 @@
 """Persistent control-plane configuration. API tokens are stored as hashes only."""
 import hashlib
+from datetime import datetime, timezone
 import ipaddress
 import json
 import os
@@ -226,3 +227,26 @@ class Storage:
             return data
         finally:
             Path(path).unlink(missing_ok=True)
+
+    def archive_snapshot(self, folder, retain=14):
+        """Automatic consistent backup; same-volume copies are NOT disaster recovery."""
+        if not 1 <= retain <= 60:
+            raise ValueError("invalid backup retention")
+        root = Path(folder)
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        filename = "hub-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(4) + ".sqlite3"
+        target = root / filename
+        data = self.backup()
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(target, flags, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        saved = sorted((p for p in root.glob("hub-*.sqlite3")
+                        if p.is_file() and not p.is_symlink()), key=lambda p: p.name)
+        for old in saved[:-retain]:
+            old.unlink()
+        return target
