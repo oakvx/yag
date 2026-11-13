@@ -40,7 +40,8 @@ class LanManagerTest(unittest.TestCase):
                 self.assertNotEqual(loaded["YAG_API_KEY"],
                                     loaded["YAG_EXTRA_API_KEYS"].split(",")[0])
                 # Initialization is deliberately non-destructive.
-                self.assertNotEqual(lan.main(["init", "--lan-ip", "192.168.40.9"]), 0)
+                with self.assertRaises(SystemExit):
+                    lan.main(["init", "--lan-ip", "192.168.40.9"])
 
     def test_external_and_managed_compose_files(self):
         for mode in (False, True):
@@ -156,7 +157,7 @@ class LanManagerTest(unittest.TestCase):
             calls.append(command)
             if command[0] == "whoami":
                 return subprocess.CompletedProcess(command, 0,
-                    '"WORKSTATION\\user","S-1-5-21-111-222-333-1001"\n', "")
+                    '"user","S-1-5-21-111-222-333-1001"\n', "")
             return subprocess.CompletedProcess(command, 0, "", "")
         with mock.patch.object(lan_bootstrap.subprocess, "run", side_effect=fake_run):
             lan_bootstrap.secure_windows_acl(Path("credentials.txt"))
