@@ -1,0 +1,31 @@
+{
+    # LAN stack uses a static config. Do not expose Caddy's admin endpoint.
+    admin off
+}
+
+# The host publishes TCP 443 ONLY on the explicit private LAN address.
+# Caddy issues an internal-CA certificate for that IP. Clients must trust
+# the exported root certificate; do not disable TLS verification.
+https://{$YAG_LAN_IP} {
+    tls internal
+
+    # LAN clients only need the API. The dashboard stays accessible from
+    # the central host through http://127.0.0.1:8080, not on the LAN.
+    @api path /health /v1/* /api/*
+    handle @api {
+        reverse_proxy yag:8080 {
+            # Avoid buffering streaming chat and Responses SSE events.
+            flush_interval -1
+        }
+    }
+
+    handle {
+        respond "Not found" 404
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        -Server
+    }
+}
