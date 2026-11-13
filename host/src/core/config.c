@@ -257,6 +257,11 @@ int config_load(yag_config *c) {
         || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms))
         return -1;
     c->client_store=env("YAG_CLIENT_STORE","");
+    c->ollama_admin_url=env("YAG_OLLAMA_ADMIN_URL","");
+    if(*c->ollama_admin_url && !valid_url(c->ollama_admin_url)) {
+        fprintf(stderr,"YAG_OLLAMA_ADMIN_URL must be a valid HTTP(S) base URL\n");
+        return -1;
+    }
     c->static_key_count=c->extra_key_count;
     for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
 
@@ -270,7 +275,13 @@ int config_load(yag_config *c) {
         pthread_cond_destroy(&c->drained);
         pthread_mutex_destroy(&c->lock);return -1;
     }
+    if(pthread_cond_init(&c->ollama_job_done,NULL)) {
+        pthread_cond_destroy(&c->inference_available);
+        pthread_cond_destroy(&c->drained);
+        pthread_mutex_destroy(&c->lock);return -1;
+    }
     if(client_registry_load(c)) {
+        pthread_cond_destroy(&c->ollama_job_done);
         pthread_cond_destroy(&c->inference_available);
         pthread_cond_destroy(&c->drained);
         pthread_mutex_destroy(&c->lock);return -1;
@@ -279,7 +290,13 @@ int config_load(yag_config *c) {
 }
 
 void config_free(yag_config *c) {
+    pthread_mutex_lock(&c->lock);
+    c->ollama_job_shutdown=1;
+    while(c->ollama_job_running)
+        pthread_cond_wait(&c->ollama_job_done,&c->lock);
+    pthread_mutex_unlock(&c->lock);
     client_registry_free(c);
+    pthread_cond_destroy(&c->ollama_job_done);
     pthread_cond_destroy(&c->inference_available);
     pthread_cond_destroy(&c->drained);
     pthread_mutex_destroy(&c->lock);
