@@ -107,9 +107,15 @@ class ControlPlane(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.proc.terminate()
+        if cls.proc.poll() is None:
+            cls.proc.terminate()
         cls.proc.wait(timeout=10)
+        logs=cls.proc.stderr.read().decode(errors='replace')
         cls.proc.stderr.close()
+        if cls.proc.returncode not in (0,-15):
+            print("Gateway exited during control-plane tests: code",
+                  cls.proc.returncode, file=sys.stderr)
+            print(logs[-12000:],file=sys.stderr)
         for backend in (cls.backend,cls.ollama,cls.replica):
             backend.shutdown();backend.server_close()
         cls.tmp.cleanup()
