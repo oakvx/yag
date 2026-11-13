@@ -84,7 +84,7 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
             }
             if(match) {
                 if(!yyjson_mut_obj_get(match,"object"))
-                    good=yyjson_mut_obj_add_str(d,match,"object","model")!=NULL;
+                    good=yyjson_mut_obj_add_str(d,match,"object","model");
                 if(good)yyjson_mut_doc_set_root(d,match);
             } else missing=1;
         } else yyjson_mut_doc_set_root(d,output);
