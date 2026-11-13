@@ -86,7 +86,10 @@ static int load_pool(yag_config *cfg) {
         yag_pool_backend *backend=&cfg->pool[cfg->pool_count];
         backend->url=strdup(yyjson_get_str(url));
         backend->key=secret;
-        if(!backend->url){ok=0;break;}
+        backend->enabled=1;
+        backend->priority=50;
+        if(key)backend->key_env=strdup(yyjson_get_str(key));
+        if(!backend->url || (key && !backend->key_env)){ok=0;break;}
         cfg->pool_count++;
         if(models)for(size_t j=0;j<yyjson_arr_size(models);j++) {
             backend->models[j]=strdup(yyjson_get_str(yyjson_arr_get(models,j)));
@@ -362,6 +365,7 @@ int config_load(yag_config *c) {
         || env_limit("YAG_INFERENCE_QUEUE_WAIT_MS","0",60000,&c->queue_wait_ms))
         return -1;
     c->client_store=env("YAG_CLIENT_STORE","");
+    c->provider_store=env("YAG_PROVIDER_STORE","");
     c->ollama_admin_url=env("YAG_OLLAMA_ADMIN_URL","");
     if(*c->ollama_admin_url && !valid_url(c->ollama_admin_url)) {
         fprintf(stderr,"YAG_OLLAMA_ADMIN_URL must be a valid HTTP(S) base URL\n");
@@ -370,8 +374,8 @@ int config_load(yag_config *c) {
     c->static_key_count=c->extra_key_count;
     for(size_t i=0;i<c->static_key_count;i++)c->key_enabled[i]=1;
 
-    if (load_routes(c) || load_pool(c) || load_capabilities(c)
-        || open_admin_audit(c)) return -1;
+    if (load_routes(c) || load_pool(c) || provider_manager_load(c)
+        || load_capabilities(c) || open_admin_audit(c)) return -1;
     if (strcmp(c->bind,"127.0.0.1") && strcmp(c->bind,"::1")) fprintf(stderr,"WARNING: LAN exposure enabled. HTTP is unencrypted; use a trusted TLS reverse proxy and firewall.\n");
     if(pthread_mutex_init(&c->lock,NULL))return -1;
     if(pthread_cond_init(&c->drained,NULL)) {
@@ -409,10 +413,7 @@ void config_free(yag_config *c) {
     for(size_t i=0;i<c->route_count;i++) {
         free(c->routes[i].model);free(c->routes[i].url);
     }
-    for(size_t i=0;i<c->pool_count;i++) {
-        free(c->pool[i].url);
-        for(size_t j=0;j<c->pool[i].model_count;j++)free(c->pool[i].models[j]);
-    }
+    provider_pool_free(c->pool,c->pool_count);
     free(c->extra_keys_storage);
     free(c->extra_scope_storage);
     for(size_t i=0;i<c->capability_count;i++)free(c->capabilities[i].model);

@@ -87,10 +87,10 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 
 ## Not implemented
 
-- A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime provider editing, scheduled health polling and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
+- A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime editing of static exact-model routes, unattended health polling, automatic capability discovery and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
 - A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and comprehensive structured request logs. An optional private admin-response JSONL audit trail exists, but it is not tamper-evident or a replacement for external security auditing. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.
-- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring on all drivers, full backend settings and provider editing in the Console. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
+- Persistent request history, verified model capabilities, accurate financial spend accounting, CPU/RAM/GPU monitoring on all drivers, full backend settings and editing of static model routes in the Console. LAN replica CRUD, declared-model restrictions, priority tie-breaking and bounded model-list probes are available through the local Provider Manager when enabled. Per-provider request outcomes, observed upstream token usage, total latency and circuit state are now tracked in memory and shown in the Console, but may omit provider usage not reported in bounded responses. Request attempts are not necessarily successful generations.
 - The playground is text-only, and stores conversation only in React state until navigation/reload. It reports malformed/incomplete streams and errors; it does not execute or render tool calls.
 
 ## Increment: model-aware pool and Linux sensor visibility
@@ -121,6 +121,26 @@ supports using the state volume. This is an event trail, not a complete
 tamper-evident identity audit or persistent inference-request history.
 See [admin audit operations](../operations/admin-audit.md).
 
+## Increment: private LAN Provider Manager
+
+- The local-only Console can list, create, edit, enable, disable, reprioritize
+  and delete pool replicas with a primary administrator key. The private
+  `YAG_PROVIDER_STORE` preserves a validated registry across restarts and
+  overrides `YAG_UPSTREAM_POOL` after the first successful edit.
+- Each entry uses a bounded URL, exact model allowlist, optional `key_env`
+  alias (`YAG_POOL_KEY_1`–`YAG_POOL_KEY_8`), enable flag and priority
+  (tie-breaker after least in-flight load). No raw upstream secrets are
+  accepted from the browser or serialized to the provider store.
+- Live replacement is serialized under the gateway configuration mutex and
+  refused with HTTP 409 while any pooled inference is active. Requests
+  already in flight are not migrated, retried or terminated for reconfig.
+- Configured upstreams can be probed for advertised model IDs through
+  a bounded `/models` query. The browser checks these every 60 seconds
+  while its Control page remains open; this does not verify model
+  capabilities or provide unattended health polling.
+- Exact-model static routes and the primary upstream are still configured
+  through private environment settings; editing those live is outside
+  this increment. A full identity/security audit remains outstanding.
 ## Intended next increments
 
 1. Qualify the exact intended runtime and model using [live-model tests](../integrations/live-model.md), then expand the tool-cycle matrix. CLI tests against mocks do not verify real-model capability.

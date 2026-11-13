@@ -229,17 +229,18 @@ static int measured_upstream(yag_config *cfg,const yag_config *target,
  * No ambiguous request is ever replayed. */
 static int pool_choose(yag_config *cfg,const char *model) {
     int chosen=-1;
-    unsigned lowest=0xffffffffu;
+    unsigned lowest=0xffffffffu,best_priority=101u;
     time_t now=time(NULL);
-    size_t total=cfg->pool_count+1;
     pthread_mutex_lock(&cfg->lock);
+    size_t total=cfg->pool_count+1;
     for(size_t offset=0;offset<total;offset++) {
         size_t index=(cfg->pool_cursor+offset)%total;
         unsigned active=index==0?cfg->default_pool_active:
             cfg->pool[index-1].active;
         time_t until=index==0?cfg->default_pool_unavailable_until:
             cfg->pool[index-1].unavailable_until;
-        if(until>now)continue;
+        if(until>now && (index!=0 || cfg->pool_count))continue;
+        if(index>0 && !cfg->pool[index-1].enabled)continue;
         if(index>0 && cfg->pool[index-1].model_count) {
             int supported=0;
             for(size_t j=0;j<cfg->pool[index-1].model_count;j++)
@@ -248,7 +249,10 @@ static int pool_choose(yag_config *cfg,const char *model) {
                 }
             if(!supported)continue;
         }
-        if(active<lowest){lowest=active;chosen=(int)index;}
+        unsigned priority=index==0?50u:cfg->pool[index-1].priority;
+        if(active<lowest || (active==lowest && priority<best_priority)) {
+            lowest=active;best_priority=priority;chosen=(int)index;
+        }
     }
     if(chosen>=0) {
         if(chosen==0)cfg->default_pool_active++;
@@ -284,9 +288,9 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
         "{\"error\":{\"message\":\"Out of memory\"}}");return;}
     yyjson_mut_val *root=yyjson_mut_obj(d);
     yyjson_mut_val *items=root?yyjson_mut_obj_add_arr(d,root,"data"):NULL;
-    int ok=root && items && yyjson_mut_obj_add_str(d,root,"object","gateway.pool")
-        && yyjson_mut_obj_add_uint(d,root,"replica_count",cfg->pool_count+1);
+    int ok=root && items && yyjson_mut_obj_add_str(d,root,"object","gateway.pool");
     pthread_mutex_lock(&cfg->lock);
+    if(ok)ok=yyjson_mut_obj_add_uint(d,root,"replica_count",cfg->pool_count+1);
     for(size_t i=0;ok && i<=cfg->pool_count;i++) {
         yag_provider_stats *stats=i==0?&cfg->default_provider_stats:
             &cfg->pool[i-1].stats;
@@ -312,6 +316,10 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
             }
         if(ok)ok=yyjson_mut_obj_add_bool(d,item,"model_allowlist_enabled",
                         i>0 && cfg->pool[i-1].model_count>0)
+                  && yyjson_mut_obj_add_bool(d,item,"enabled",
+                        i==0 || cfg->pool[i-1].enabled)
+                  && yyjson_mut_obj_add_uint(d,item,"priority",
+                        i==0?50u:cfg->pool[i-1].priority)
                   && yyjson_mut_arr_add_val(items,item);
     }
     pthread_mutex_unlock(&cfg->lock);
@@ -332,7 +340,9 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         if(!strcmp(model,c->routes[i].model)){stats=&state->routes[i].stats;break;}
     yag_config selected={0};
     const yag_config *target=config_for_model(c,model,&selected);
-    if(target==c && c->pool_count) {
+    /* Track even the single-primary case so live pool edits cannot race an
+     * untracked in-flight request (especially when adding first replica). */
+    if(target==c) {
         int index=pool_choose(state,model);
         if(index<0) {
             if(status)*status=0;
