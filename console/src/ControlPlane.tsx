@@ -15,12 +15,12 @@ type ResourceMetrics = {
   gpu: {available: boolean;scope?: string;devices?: {id:string;utilization_percent?:number;vram_used_bytes?:number;vram_total_bytes?:number;temperature_c?:number}[]}
 }
 type Scheduler = {max_inference:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
-type Pool = {data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean}[]}
+type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
-type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean}
+type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
 type ProviderList = {editable:boolean;data:ProviderConfig[]}
 type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
-type ProviderPayload = {url:string;models:string[];enabled:boolean;priority:number;key_env?:string}
+type ProviderPayload = {url:string;models:string[];enabled:boolean;priority:number;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;key_env?:string}
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
   if (!key) throw new Error('Enter the primary administrator API key in Settings')
@@ -53,6 +53,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [resources,setResources]=useState<ResourceMetrics|null>(null)
   const [scheduler,setScheduler]=useState<Scheduler|null>(null)
   const [pool,setPool]=useState<Pool['data']>([])
+  const [poolCapacity,setPoolCapacity]=useState({waiting:0,rejected:0,waitMs:0})
   const [providers,setProviders]=useState<ProviderConfig[]>([])
   const [providerEditable,setProviderEditable]=useState(false)
   const [providerChecks,setProviderChecks]=useState<Record<number,ProviderProbe>>({})
@@ -60,6 +61,9 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [providerModels,setProviderModels]=useState('')
   const [providerKey,setProviderKey]=useState('')
   const [providerPriority,setProviderPriority]=useState(50)
+  const [providerMaxInflight,setProviderMaxInflight]=useState(0)
+  const [providerBudget,setProviderBudget]=useState(0)
+  const [providerReservation,setProviderReservation]=useState(0)
   const [providerEditing,setProviderEditing]=useState<number|null>(null)
   const [modelInput,setModelInput]=useState('')
   const [clientName,setClientName]=useState('')
@@ -99,6 +103,9 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
         controlRequest<Pool>(apiKey,'/api/providers/pool'),
       ])
       setResources(hardware);setScheduler(queue);setPool(backends.data || [])
+      setPoolCapacity({waiting:backends.resource_waiting||0,
+                       rejected:backends.resource_rejections||0,
+                       waitMs:backends.resource_queue_wait_ms||0})
       setErrors(prev=>({...prev,infra:''}))
     }catch(e){setErrors(prev=>({...prev,infra:(e as Error).message}))}
   },[apiKey])
@@ -135,7 +142,8 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   },[apiKey,providers.map(p=>p.index+':'+p.url).join('|')])
   function resetProviderForm(){
     setProviderUrl('');setProviderModels('');setProviderKey('')
-    setProviderPriority(50);setProviderEditing(null)
+    setProviderPriority(50);setProviderMaxInflight(0);setProviderBudget(0)
+    setProviderReservation(0);setProviderEditing(null)
   }
   async function persistProviders(next:ProviderPayload[]){
     if(busy || !providerEditable)return
@@ -149,24 +157,36 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     finally{setBusy('')}
   }
   function payloads():ProviderPayload[]{
-    return providers.map(({url,key_env,models,enabled,priority})=>({
-      url,models,enabled,priority,...(key_env?{key_env}:{})
+    return providers.map(({url,key_env,models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb})=>({
+      url,models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb,
+      ...(key_env?{key_env}:{})
     }))
   }
   function editProvider(item:ProviderConfig){
     setProviderEditing(item.index);setProviderUrl(item.url)
     setProviderModels(item.models.join(', '));setProviderKey(item.key_env)
     setProviderPriority(item.priority)
+    setProviderMaxInflight(item.max_inflight||0)
+    setProviderBudget(item.vram_budget_mb||0)
+    setProviderReservation(item.vram_reservation_mb||0)
   }
   async function saveProvider(event:React.FormEvent){
     event.preventDefault()
     const next=payloads()
     const selected=providerEditing===null?null:providers.find(p=>p.index===providerEditing)
+    if((providerBudget===0)!==(providerReservation===0) ||
+       providerReservation>providerBudget) {
+      setErrors(previous=>({...previous,providers:
+        'VRAM budget and reservation must both be zero, or reservation must fit within the budget.'}))
+      return
+    }
     const entry:ProviderPayload={
       url:providerUrl.trim(),
       models:Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean))),
       ...(providerKey?{key_env:providerKey}:{}),
-      priority:providerPriority,enabled:selected?.enabled??true
+      priority:providerPriority,max_inflight:providerMaxInflight,
+      vram_budget_mb:providerBudget,vram_reservation_mb:providerReservation,
+      enabled:selected?.enabled??true
     }
     if(selected)next[selected.index-1]=entry
     else next.push(entry)
@@ -398,6 +418,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <code>{p.url}</code>
               <small>Credentials: {p.key_env || 'none'} · Declared models: {
                 p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
+              <small>Admission: {p.max_inflight? p.max_inflight+' active max':'unbounded'} ·
+                VRAM estimate: {p.vram_budget_mb
+                ? p.vram_reservation_mb+' / '+p.vram_budget_mb+' MiB per request / budget'
+                : 'not configured'}</small>
               <small>Probe: {providerChecks[p.index]
                 ? (providerChecks[p.index].available?'Healthy':'Unavailable')+
                   ' · HTTP '+providerChecks[p.index].http_status+
@@ -445,6 +469,18 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <input type="number" min="0" max="100" value={providerPriority}
                 onChange={e=>setProviderPriority(Number(e.target.value))}
                 disabled={!providerEditable||!!busy}/></label>
+            <label>Maximum concurrent inferences (0 = unlimited)
+              <input type="number" min="0" max="32" value={providerMaxInflight}
+                onChange={e=>setProviderMaxInflight(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+            <label>VRAM budget in MiB (operator estimate, 0 = off)
+              <input type="number" min="0" max="262144" value={providerBudget}
+                onChange={e=>setProviderBudget(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
+            <label>VRAM reservation per inference in MiB (0 = off)
+              <input type="number" min="0" max="262144" value={providerReservation}
+                onChange={e=>setProviderReservation(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
           </div>
           <div className="control-actions">
             {providerEditing!==null && <button type="button" className="outline-button small"
@@ -457,18 +493,26 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           </div>
         </form>
         <div className="control-footnote">
-          Routing selects a backend by least concurrent requests, then numeric priority.
+          Inference admission respects each backend's concurrency limit and reserved VRAM
+          budget before selecting by least concurrent requests, then numeric priority.
+          VRAM values are operator-estimated reservations, not live physical GPU measurements.
           Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
           while the Console is open; reported IDs are not proof of model capabilities.
           Secrets remain in server-side environment variables and are never included in API responses.
           Private LAN connections and endpoint validation remain required.
         </div>
+        <div className="control-footnote">
+          Resource pool waiting: {poolCapacity.waiting} · Rejected after capacity limits:
+          {' '}{poolCapacity.rejected} · Maximum admission wait: {poolCapacity.waitMs} ms
+        </div>
         <div className="provider-table-wrap"><table className="provider-table">
-          <thead><tr><th>BACKEND</th><th>ACTIVE</th><th>ATTEMPTS</th>
-            <th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
+          <thead><tr><th>BACKEND</th><th>ACTIVE / LIMIT</th><th>VRAM RESERVED / BUDGET</th>
+            <th>CAPACITY SKIPS</th><th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
-            <td>{p.active_requests}</td><td>{p.attempts}</td><td>{p.successes}</td>
-            <td>{p.failures}</td><td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
+            <td>{p.active_requests} / {p.max_inflight||'∞'}</td>
+            <td>{p.vram_budget_mb ? p.vram_reserved_mb+' / '+p.vram_budget_mb+' MiB':'Not configured'}</td>
+            <td>{p.capacity_skips||0}</td><td>{p.successes}</td><td>{p.failures}</td>
+            <td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
         </table></div>
       </section>
       <section className="panel control-wide">

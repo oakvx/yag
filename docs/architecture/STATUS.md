@@ -141,6 +141,26 @@ See [admin audit operations](../operations/admin-audit.md).
 - Exact-model static routes and the primary upstream are still configured
   through private environment settings; editing those live is outside
   this increment. A full identity/security audit remains outstanding.
+## Increment: resource-budget admission
+
+- Pool replicas can specify `max_inflight`, `vram_budget_mb` and
+  `vram_reservation_mb` (all optional; 0 disables a resource limit).
+  VRAM values are operator-declared *per-inference reservations*, not
+  measured GPU memory or verified model memory footprints.
+- Optional `YAG_PRIMARY_MAX_INFLIGHT` limits primary concurrent inference.
+  Optional `YAG_POOL_WAIT_MS` bounds how long a saturated pool waits for
+  resources. Capacity exhaustion is distinguished from upstream failure
+  and reported as HTTP 503 with resource saturation counters.
+- Reservations and admission slots are held through an upstream request,
+  including streaming, then released. The pool uses a condition variable
+  to wake bounded waiting workers; live provider edits are refused while
+  pool work is active or waiting.
+- The LAN CLI and React Console can configure replica policies. Monitoring
+  shows reservations, skips, waiting and capacity rejections, while
+  explicitly identifying VRAM metrics as operator estimates.
+- No verified host-level free-VRAM telemetry, GPU runtime integration,
+  measured per-model memory requirements, or automatic workload sizing is
+  provided. Other processes on the machine are not represented.
 ## Intended next increments
 
 1. Qualify the exact intended runtime and model using [live-model tests](../integrations/live-model.md), then expand the tool-cycle matrix. CLI tests against mocks do not verify real-model capability.

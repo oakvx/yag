@@ -169,6 +169,61 @@ Model IDs returned by probes are advertised inventory, not a verified
 capability registry. There is no background probe scheduler with the UI
 closed. HTTP upstreams must use private IPv4 or local hostnames; remote
 HTTPS is allowed, and only the administrator can configure destinations.
+### Resource-budget admission and bounded backend waiting
+
+YAG supports opt-in, **operator-estimated** per-replica capacity limits, not
+direct control of Ollama's GPU allocator. In the Provider Manager, set:
+
+- `max_inflight`: the maximum number of concurrent requests on that replica
+  (`0` means unlimited, maximum `32`).
+- `vram_budget_mb`: estimated MiB of VRAM reserved for work through YAG
+  (`0` means disabled, maximum `262144`).
+- `vram_reservation_mb`: estimated MiB to reserve *per in-flight request*.
+  When VRAM budgeting is enabled both fields must be positive and the
+  reservation must fit inside the budget. Otherwise both must be zero.
+
+Example configuration for a backend with an **operator-chosen** 8 GiB
+reservation envelope and 4 GiB per-request estimate:
+
+```json
+{"replicas":[{"url":"http://192.168.1.60:11434/v1","models":["llama3.2"],"max_inflight":2,"vram_budget_mb":8192,"vram_reservation_mb":4096,"priority":10,"enabled":true}]}
+```
+
+The primary upstream has a separate optional env limit
+`YAG_PRIMARY_MAX_INFLIGHT=1` (0..32, 0 unlimited).
+The maximum time spent waiting for a saturated resource pool is
+`YAG_POOL_WAIT_MS=1500` (0..30000 milliseconds; **default 0**, immediate
+rejection). These are independent of the gateway-wide FIFO inference
+scheduler. When all model-compatible, healthy backends have exhausted
+their configured resources, the gateway returns HTTP **503** with
+`resource_capacity`, or waits for a completion within that deadline.
+The same capacity failure is mapped to HTTP 503 by the Chat, Responses
+and Anthropic adapters. Live provider edits return HTTP 409 if a worker is
+using or waiting for a pooled backend.
+
+`GET /api/providers/pool` exposes active slots, per-backend limits,
+estimated VRAM reservations, saturation skips and wait/rejection counters.
+The root response labels the VRAM source as `operator_estimate`. Estimates
+are reserved for the **duration of an inference request**, including
+streaming, and released on completion.
+
+**Important:** this is gateway-level accounting, not live free-VRAM
+measurement or a memory guarantee. External Ollama clients, model caches,
+quantization, context/KV caches and non-YAG GPU workloads may consume
+resources beyond this reservation. Do not interpret configured MiB as
+measured hardware capacity. The policy applies a single estimate to
+each request on a replica, regardless of model. Operators must calibrate
+it using real hardware before relying on it for performance planning.
+
+Without a primary limit, the default upstream remains eligible even when
+replica capacities are exhausted. Set both primary and replica limits if
+you need to prevent over-admission across the entire pool.
+
+For standalone LAN operations (rather than dashboard-managed replicas):
+
+```sh
+python scripts/lan.py providers add --url http://192.168.1.60:11434/v1 --model llama3.2 --max-inflight 2 --vram-budget-mb 8192 --vram-reservation-mb 4096
+```
 ### Resource telemetry caveats
 
 `GET /api/system/resources` retains cgroup v2 RAM usage and limits.
