@@ -138,8 +138,8 @@ static void capabilities(int fd,const yag_config *cfg) {
         "\"routing\":{\"configured_routes\":%zu,\"fallback_enabled\":%s},"
         "\"protocols\":{"
         "\"chat_completions\":{\"streaming\":true,\"tool_calls\":\"upstream_passthrough\"},"
-        "\"completions\":{\"streaming\":true,\"mode\":\"upstream_passthrough\"},",
-        "\"embeddings\":{\"mode\":\"upstream_passthrough\"},",
+        "\"completions\":{\"streaming\":true,\"mode\":\"upstream_passthrough\"},"
+        "\"embeddings\":{\"mode\":\"upstream_passthrough\"},"
         "\"responses\":{\"streaming\":true,\"function_tools\":true,"
             "\"namespace_functions\":true,\"stateful\":false,\"web_search\":false},"
         "\"anthropic_messages\":{\"streaming\":true,\"function_tools\":true,"
