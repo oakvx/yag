@@ -196,7 +196,7 @@ static void capabilities(int fd,const yag_config *cfg) {
             "\"count_tokens\":false,\"multimodal\":false}},"
         "\"limits\":{\"max_body_bytes\":%d,\"max_connections\":%d}}",
         cfg->route_count,cfg->fallback_to_default?"true":"false",
-        MAX_BODY,MAX_CONNECTIONS);
+        cfg->max_body_bytes,MAX_CONNECTIONS);
     if(n<0 || (size_t)n>=sizeof body)error(fd,500,"Could not describe capabilities");
     else reply(fd,200,"application/json",body);
 }
@@ -366,7 +366,7 @@ static void handle(int fd,yag_config *c) {
                 error(fd,400,"Invalid header value");goto done;
             }
         }
-        if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>MAX_BODY){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
+        if(!strcasecmp(line,"Content-Length")) { if(have_length++ || !*v){error(fd,400,"Invalid content length");goto done;} for(char *p=v;*p;p++) if(!isdigit((unsigned char)*p)){error(fd,400,"Invalid content length");goto done;} errno=0; unsigned long long x=strtoull(v,NULL,10); if(errno || x>c->max_body_bytes){error(fd,413,"Request too large");goto done;} length=(size_t)x; }
         else if(!strcasecmp(line,"Transfer-Encoding")) transfer_encoding=1;
         else if(!strcasecmp(line,"Expect")) {
             if(have_expect++ || strcasecmp(v,"100-continue")) {
