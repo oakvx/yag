@@ -180,6 +180,7 @@ class HttpRobustness(unittest.TestCase):
             ('security-edge-duplicate-native-key',b'POST /v1/messages HTTP/1.1\r\nX-API-Key: one\r\nX-API-Key: two\r\nContent-Length: 0\r\n\r\n',400),
             ('security-edge-ambiguous-chat-auth',post+b'X-API-Key: '+KEY.encode()+b'\r\nContent-Length: 0\r\n\r\n',400),
             ('security-edge-ambiguous-model-auth',b'GET /v1/models HTTP/1.1\r\nHost: local\r\nAuthorization: Bearer '+KEY.encode()+b'\r\nX-API-Key: '+KEY.encode()+b'\r\n\r\n',400),
+            ('security-edge-transfer-chunked',post+b'Transfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n',400),
             # HTTP_SECURITY_CASES_END
         ]
         for label,payload,expected in cases:
