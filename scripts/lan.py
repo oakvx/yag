@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import http.client
 import ipaddress
+import json
 import os
 from pathlib import Path
 import platform
@@ -20,6 +21,7 @@ import sys
 from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
 from lan_ops import configure_provider, encrypted_backup, provider_key
 from lan_recovery import inspect_backup
+from production_preflight import evaluate as security_preflight, require_live_tls
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env.lan"
@@ -199,6 +201,12 @@ def main(argv=None):
         ("check", "Verify HTTPS and client authorization"),
     ):
         actions.add_parser(name, help=help_text)
+    preflight = actions.add_parser("preflight",
+        help="Validate private LAN credentials, provider egress and TLS isolation")
+    preflight.add_argument("--offline", action="store_true",
+                           help="Inspect config only; explicitly skip live TLS checks")
+    preflight.add_argument("--json", action="store_true",
+                           help="Emit secret-free structured check results")
     models = actions.add_parser("model", help="Pull a model into managed Ollama")
     models.add_argument("model_id", help="e.g. llama3.2")
     remove_model = actions.add_parser("model-remove",
@@ -252,6 +260,22 @@ def main(argv=None):
                            args.output_dir if args.action == "backup-stage" else None)
             return 0
         config = read_config()
+        if args.action == "preflight":
+            report = security_preflight(ENV_PATH, CA_PATH)
+            if args.json:
+                print(json.dumps(report, sort_keys=True))
+            else:
+                for finding in report["checks"]:
+                    print(finding["status"].upper() + ": " + finding["message"])
+            if report["blocked"]:
+                raise SetupError("Release preflight blocked by unsafe configuration")
+            if not args.offline:
+                verify(config)
+                require_live_tls(config, https_status)
+                print("LIVE HTTPS, Caddy admin isolation and credential checks passed")
+            else:
+                print("OFFLINE ONLY: real HTTPS and network isolation are NOT verified")
+            return 0
         if args.action == "doctor":
             doctor(config)
             return 0
