@@ -6,6 +6,8 @@
   <meta name="color-scheme" content="dark">
   <title>YAG Desktop</title>
   <link rel="stylesheet" href="./styles.css">
+  <script src="./workspace.js" defer></script>
+  <script src="./markdown.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -21,6 +23,10 @@
       </button>
       <div class="section-heading model-heading"><span>AVAILABLE MODELS</span><button id="refreshButton" class="icon-button" title="Refresh models" aria-label="Refresh models" type="button">↻</button></div>
       <div id="models" class="models" role="listbox" aria-label="Available AI models"><p class="muted model-placeholder">Connect to a YAG server to discover its models.</p></div>
+      <div class="section-heading chats-heading"><span>CONVERSATIONS</span><button id="newSidebarChat" class="icon-button" type="button" title="New conversation" aria-label="New conversation">＋</button></div>
+      <label class="sr-only" for="chatSearch">Search conversations</label>
+      <input id="chatSearch" class="chat-search" type="search" placeholder="Search local chats…" maxlength="80">
+      <div id="conversationList" class="conversation-list" aria-label="Saved conversations"></div>
       <div class="sidebar-bottom">
         <div class="sidebar-info"><span class="info-dot"></span><span>Inference runs on the host, not on this device.</span></div>
         <button id="newChatButton" class="sidebar-action" type="button"><span>＋</span> New conversation</button>
@@ -31,7 +37,7 @@
     <main class="workspace">
       <header class="topbar">
         <div class="page-title"><span class="eyebrow">WORKSPACE / CHAT</span><strong id="currentModel">Select a model</strong></div>
-        <div class="topbar-actions"><span id="statusText" class="status-text">Disconnected</span><span id="statusPill" class="pill">OFFLINE</span></div>
+        <div class="topbar-actions"><button id="settingsButton" class="secondary-button" type="button">Preferences</button><span id="statusText" class="status-text">Disconnected</span><span id="statusPill" class="pill">OFFLINE</span></div>
       </header>
       <section id="chat" class="chat" aria-label="Conversation" aria-live="polite">
         <div id="emptyState" class="empty-state">
@@ -67,12 +73,35 @@
         <label for="serverUrl">SERVER ADDRESS</label>
         <input id="serverUrl" type="url" required spellcheck="false" autocomplete="url" placeholder="https://192.168.1.50">
         <div class="field-note">Use the HTTPS LAN endpoint. For local development only: http://127.0.0.1:8080</div>
+        <div class="field-note"><button id="discoverButton" class="secondary-button" type="button">Find nearby YAG Hosts</button><span id="discoveryStatus" aria-live="polite"></span></div>
+        <div id="discoveryResults" class="discovery-results"></div>
         <label for="apiKey">CLIENT API KEY</label>
         <input id="apiKey" type="password" required minlength="16" autocomplete="off" spellcheck="false" placeholder="Paste your client key">
         <div class="field-note">Install the host's trusted root CA on this computer. Certificate verification is never bypassed.</div>
         <div id="connectionError" class="dialog-error" role="alert" hidden></div>
         <div class="modal-actions"><button id="disconnectButton" type="button" class="secondary-button">Disconnect</button><button id="connectButton" type="submit" class="primary-button">Connect & discover models <span>↗</span></button></div>
       </form>
+    </section>
+  </div>
+  <div id="settingsDialog" class="modal-backdrop" hidden>
+    <section class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal-header"><div><div class="eyebrow">CLIENT SETTINGS</div><h2 id="settingsTitle">Preferences</h2></div><button id="closeSettingsButton" class="icon-button" type="button" aria-label="Close preferences">×</button></div>
+      <label for="temperature">TEMPERATURE <output id="temperatureValue">0.7</output></label>
+      <input id="temperature" type="range" min="0" max="2" step="0.1" value="0.7">
+      <label for="maxTokens">MAX OUTPUT TOKENS</label>
+      <input id="maxTokens" type="number" min="64" max="8192" step="64" value="1024">
+      <label for="systemPrompt">SYSTEM PROMPT</label>
+      <textarea id="systemPrompt" rows="3" maxlength="4000" placeholder="Optional instructions for the model"></textarea>
+      <div class="settings-divider"></div>
+      <label class="switch-line"><input id="saveHistory" type="checkbox"> Save conversations on this device</label>
+      <p class="field-note">When enabled, conversation text is saved in this application's WebView storage without encryption. No API key is saved. Disabling history immediately deletes it from local storage.</p>
+      <button id="clearHistory" class="secondary-button" type="button">Delete all locally saved conversations</button>
+      <div class="settings-divider"></div>
+      <h3>Local API relay</h3>
+      <p class="field-note">Expose the connected YAG models as a local OpenAI-compatible API on 127.0.0.1 only. A separate temporary token is required, including for local programs.</p>
+      <div class="modal-actions"><button id="startRelay" class="secondary-button" type="button">Start local relay</button><button id="stopRelay" class="secondary-button" type="button" disabled>Stop relay</button></div>
+      <div id="relayDetails" class="relay-details" hidden><strong>Local endpoint</strong><code id="relayUrl"></code><strong>Temporary API key</strong><code id="relayKey"></code><button id="copyRelayKey" class="secondary-button" type="button">Copy token</button></div>
+      <p id="relayError" class="dialog-error" role="alert" hidden></p>
     </section>
   </div>
 </body>
