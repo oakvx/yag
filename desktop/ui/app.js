@@ -5,6 +5,8 @@
 const tauri = window.__TAURI__
 const invoke = tauri.core.invoke
 const Channel = tauri.core.Channel
+const Workspace = window.YagWorkspace
+const Markdown = window.YagMarkdown
 
 const el = (id) => document.getElementById(id)
 const state = {
@@ -15,7 +17,114 @@ const state = {
   messages: [],
   requestId: null,
   running: false,
-  usage: null
+  usage: null,
+  online: false,
+  conversations: Workspace.load(),
+  activeChatId: null,
+  temperature: 0.7,
+  maxTokens: 1024,
+  systemPrompt: '',
+  relay: null
+}
+
+
+function saveActive() {
+  if (!state.activeChatId) return
+  const record = state.conversations.find(c => c.id === state.activeChatId)
+  if (!record) return
+  record.messages = state.messages.map(m => ({ role: m.role, content: m.content }))
+  record.model = state.model
+  record.updated = Date.now()
+  const first = record.messages.find(m => m.role === 'user')
+  if (record.title === 'New conversation' && first) record.title = first.content.slice(0, 60)
+  state.conversations.sort((a, b) => b.updated - a.updated)
+  if (state.conversations.length > Workspace.limits.chats) state.conversations.length = Workspace.limits.chats
+  if (Workspace.enabled() && !Workspace.save(state.conversations)) {
+    showError('Local conversation storage is full. Free space or disable history in Preferences.')
+  }
+  renderConversations()
+}
+function ensureChat() {
+  if (state.activeChatId) return
+  const record = Workspace.makeChat(state.url, state.model)
+  state.activeChatId = record.id
+  state.conversations.unshift(record)
+  renderConversations()
+}
+function renderConversations() {
+  const root = el('conversationList')
+  root.replaceChildren()
+  const query = el('chatSearch').value.toLocaleLowerCase().trim()
+  const matching = state.conversations.filter(c => c.host === state.url &&
+    (c.title.toLocaleLowerCase().includes(query) || c.model.toLocaleLowerCase().includes(query)))
+  if (!matching.length) {
+    const p = document.createElement('p')
+    p.className = 'conversation-placeholder'
+    p.textContent = state.url ? 'No conversations on this host.' : 'Connect to a YAG Host first.'
+    root.append(p)
+  }
+  for (const chat of matching) {
+    const row = document.createElement('div')
+    row.className = 'conversation-row' + (chat.id === state.activeChatId ? ' active' : '')
+    const main = document.createElement('button')
+    main.type = 'button'
+    main.className = 'conversation-main'
+    const title = document.createElement('strong')
+    title.textContent = chat.title || 'Conversation'
+    const detail = document.createElement('small')
+    detail.textContent = chat.model
+    main.append(title, detail)
+    main.disabled = state.running
+    main.addEventListener('click', () => {
+      if (state.running || chat.id === state.activeChatId) return
+      if (!state.models.some(m => m.id === chat.model)) {
+        showError('That model is no longer offered by this server.')
+        return
+      }
+      saveActive()
+      state.activeChatId = chat.id
+      state.model = chat.model
+      state.messages = chat.messages.map(m => ({ ...m }))
+      state.usage = null
+      el('usageText').textContent = 'Saved conversation'
+      renderModels()
+      renderConversations()
+      renderMessages()
+      setStatus(state.online)
+    })
+    const rename = document.createElement('button')
+    rename.type = 'button'
+    rename.className = 'conversation-action'
+    rename.title = 'Rename conversation'
+    rename.textContent = '✎'
+    rename.disabled = state.running
+    rename.addEventListener('click', () => {
+      const name = window.prompt('Rename conversation', chat.title)
+      if (name === null || !name.trim()) return
+      chat.title = name.trim().slice(0, 100)
+      Workspace.save(state.conversations)
+      renderConversations()
+    })
+    const del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'conversation-action'
+    del.title = 'Delete conversation'
+    del.textContent = '×'
+    del.disabled = state.running
+    del.addEventListener('click', () => {
+      if (!window.confirm('Permanently delete this conversation from this device?')) return
+      state.conversations = state.conversations.filter(c => c.id !== chat.id)
+      if (state.activeChatId === chat.id) {
+        state.activeChatId = null
+        state.messages = []
+        renderMessages()
+      }
+      Workspace.save(state.conversations)
+      renderConversations()
+    })
+    row.append(main, rename, del)
+    root.append(row)
+  }
 }
 
 function showError(message) {
