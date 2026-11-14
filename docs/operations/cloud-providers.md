@@ -1,7 +1,7 @@
 # Cloud OpenAI-compatible backends (manual BYOK)
 
 YAG Host can route selected model IDs through HTTPS upstreams. This is the
-**first cloud-provider compatibility layer**, not a general OpenRouter-like
+**OpenAI-compatible cloud routing layer**, not a full OpenRouter-like
 catalog or a billing system. No public provider credentials belong in YAG
 Desktop or in the GitHub repository.
 
@@ -36,7 +36,12 @@ On the **central YAG Host**:
 4. Locally open the operator Console and Provider Manager, then configure
    the HTTPS base URL, credential alias `YAG_POOL_KEY_1`, and an **explicit
    list of model IDs** to offer through that backend.
-5. Check reachability and run a small real-model Chat test. The model must
+5. In the local Console, select **Dedicated model IDs** for a cloud backend and
+   supply at least one exact provider model identifier. Or add the backend with
+   `--exclusive-models` in the CLI. This publishes its configured IDs in
+   `GET /v1/models` and prevents fallback to Colibri's default Ollama
+   backend, even if `YAG_FALLBACK_TO_DEFAULT=1`.
+6. Check reachability and run a small real-model Chat test. The model must
    genuinely support the fields the application sends; model lists alone
    are not proof of capability.
 
@@ -46,7 +51,8 @@ The CLI also accepts approved HTTPS base paths, for example:
 python scripts/lan.py providers add \
   --url https://openrouter.ai/api/v1 \
   --key-env YAG_POOL_KEY_1 \
-  --model openai/gpt-4o-mini
+  --model openai/gpt-4o-mini \
+  --exclusive-models
 ```
 
 The preceding model ID is an **illustration only**: verify the exact current
@@ -62,6 +68,14 @@ listing, token accounting and pricing can change.
 - The existing private environment store is **not encrypted at rest** by
   YAG. Use operating-system access controls, an external secrets manager
   or disk encryption where appropriate.
+- Dedicated model IDs use only enabled backends that declare those IDs and
+  `exclusive_models: true`. Disabled, unreachable or saturated dedicated
+  backends fail closed. A model list entry reflects configuration, **not**
+  provider reachability or capability. If multiple dedicated replicas declare
+  the same ID, load balancing is limited to those dedicated replicas.
+- **A declared model ID is not a billing policy.** Requests routed to a
+  third-party HTTPS endpoint may incur charges and be subject to its data
+  retention policies. 
 - Using a cloud provider **sends inference content outside your LAN**.
   YAG does not currently offer per-request user consent, cost estimates,
   automatic cloud fallback decisions or billing enforcement.
