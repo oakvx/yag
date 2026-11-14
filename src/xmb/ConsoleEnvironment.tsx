@@ -10,6 +10,7 @@ import { AudioControls } from "./AudioControls";
 import { useBrandFont } from "./brandFont";
 import { BootScreen, useBootSequence } from "./BootScreen";
 import { EasterEgg, useEasterEgg } from "./EasterEgg";
+import { CommitNotifications } from "./CommitNotifications";
 
 /* Pointer sensitivity: one deliberate input = one step, as with the PS3 D-pad. */
 /** px the pointer must travel over the same category/item before hover selects it. */
@@ -68,6 +69,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const boot = useBootSequence();
   const [hoverAnchor, setHoverAnchor] = useState<number | null>(null);
   const [easterOpen, setEasterOpen] = useState(false);
+  const [noticesOpen, setNoticesOpen] = useState(false);
   const brandFont = useBrandFont();
   const wordmarkTaps = useRef(0);
   const memory = useRef(CATEGORIES.map(() => 0));
@@ -252,9 +254,10 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const selectionOffset = selectionDelta < 0 ? selectionDelta - 1.35 : selectionDelta;
 
   return (
-    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping}>
+    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
       <ConsoleClock />
+      <CommitNotifications active={!isApp} open={noticesOpen} onOpenChange={setNoticesOpen} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
       {/* The menu itself is the home screen. No application is mounted underneath. */}
