@@ -128,6 +128,46 @@ pub(crate) async fn start(upstream: String, upstream_key: String) -> Result<(Rel
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn localhost_relay_passes_models_and_chat_without_exposing_upstream_key() {
+        let backend = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let upstream = format!("http://{}", backend.local_addr().unwrap());
+        let routes = Router::new()
+            .route("/v1/models", get(|| async {
+                ([(header::CONTENT_TYPE, "application/json")],
+                r#"{"data":[{"id":"unit-model"}],"object":"list"}"#)
+            }))
+            .route("/v1/chat/completions", post(|| async {
+                ([(header::CONTENT_TYPE, "text/event-stream")],
+                "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+            }));
+        let server = tokio::spawn(async move { axum::serve(backend, routes).await.unwrap(); });
+        let (info, handle) = start(upstream, "host-private-key".into()).await.unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let unauthorized = client.get(format!("{}/v1/models", info.url))
+            .bearer_auth("wrong").send().await.unwrap();
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+        let forbidden_browser = client.get(format!("{}/v1/models", info.url))
+            .bearer_auth(&info.token).header(header::ORIGIN, "https://evil.test")
+            .send().await.unwrap();
+        assert_eq!(forbidden_browser.status(), StatusCode::UNAUTHORIZED);
+        let models = client.get(format!("{}/v1/models", info.url))
+            .bearer_auth(&info.token).send().await.unwrap();
+        assert_eq!(models.status(), StatusCode::OK);
+        assert!(models.text().await.unwrap().contains("unit-model"));
+        let chat = client.post(format!("{}/v1/chat/completions", info.url))
+            .bearer_auth(&info.token)
+            .json(&serde_json::json!({"model":"unit-model","messages":[{"role":"user","content":"hi"}],"stream":true}))
+            .send().await.unwrap();
+        assert_eq!(chat.status(), StatusCode::OK);
+        assert!(chat.text().await.unwrap().contains("[DONE]"));
+        let wrong_route = client.get(format!("{}/v1/something-else", info.url))
+            .bearer_auth(&info.token).send().await.unwrap();
+        assert_eq!(wrong_route.status(), StatusCode::NOT_FOUND);
+        handle.cancel.cancel();
+        server.abort();
+    }
+
     #[test]
     fn relay_rejects_bad_hosts_origins_and_missing_tokens() {
         let mut headers = HeaderMap::new();
