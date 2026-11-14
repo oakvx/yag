@@ -1,6 +1,6 @@
 # Go-live checklist — Colibri + BYOK providers
 
-YAG remains experimental until the checks below have been completed on the
+The [first-release guide](first-release.md) separates prerelease artifacts from production acceptance. YAG remains experimental until the checks below have been completed on the
 **actual hardware and model versions** intended for use. A passing mock CI
 pipeline does not qualify real inference.
 
