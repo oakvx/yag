@@ -22,6 +22,8 @@ static unsigned parse_scope(const char *s) {
     if(!strcmp(s,"inference"))return 1;
     if(!strcmp(s,"models"))return 2;
     if(!strcmp(s,"inference+models"))return 3;
+    if(!strcmp(s,"inference+dedicated"))return 17;
+    if(!strcmp(s,"inference+models+dedicated"))return 19;
     if(!strcmp(s,"monitor"))return 4;
     return 0;
 }
@@ -31,6 +33,8 @@ static const char *scope_name(unsigned value) {
         case 2:return "models";
         case 3:return "inference+models";
         case 4:return "monitor";
+        case 17:return "inference+dedicated";
+        case 19:return "inference+models+dedicated";
         case 15:return "all";
         default:return "invalid";
     }
