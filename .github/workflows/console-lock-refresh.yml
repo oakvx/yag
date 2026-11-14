@@ -1,0 +1,31 @@
+name: Temporary Console lockfile migration
+on:
+  push:
+    branches: [feat/issue-42-console-rust-migration]
+permissions:
+  contents: read
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve coordinated major dependencies without executing scripts
+        run: npm install --prefix console --package-lock-only --ignore-scripts --no-fund --no-audit
+      - name: Print generated public dependency metadata in bounded chunks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          from pathlib import Path
+          encoded = base64.b64encode(Path('console/package-lock.json').read_bytes()).decode('ascii')
+          print('YAG_LOCKFILE_BEGIN')
+          for i in range(0, len(encoded), 2048):
+              print(encoded[i:i+2048])
+          print('YAG_LOCKFILE_END')
+          PY
