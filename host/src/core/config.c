@@ -314,6 +314,8 @@ int config_load(yag_config *c) {
             else if(!strcmp(start,"models"))scope=2;
             else if(!strcmp(start,"monitor"))scope=4;
             else if(!strcmp(start,"inference+models"))scope=3;
+            else if(!strcmp(start,"inference+dedicated"))scope=17;
+            else if(!strcmp(start,"inference+models+dedicated"))scope=19;
             else {
                 fprintf(stderr,"Invalid YAG_EXTRA_KEY_SCOPES entry\n");return -1;
             }
