@@ -14,7 +14,7 @@ pub(crate) struct DiscoveredHost {
 
 fn allowed_address(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(ip) => ip.is_private() || ip.is_loopback() || ip.is_link_local(),
+        IpAddr::V4(ip) => ip.is_private() || ip.is_link_local(),
         // The deployed LAN manager currently configures IPv4 Caddy listeners.
         IpAddr::V6(_) => false,
     }
@@ -62,6 +62,7 @@ mod tests {
         assert!(allowed_address("192.168.1.50".parse().unwrap()));
         assert!(allowed_address("10.0.0.12".parse().unwrap()));
         assert!(!allowed_address("8.8.8.8".parse().unwrap()));
+        assert!(!allowed_address("127.0.0.1".parse().unwrap()));
         assert!(!allowed_address("2001:4860:4860::8888".parse().unwrap()));
     }
 }
