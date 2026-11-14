@@ -22,6 +22,35 @@ Only `/v1/*`, `/api/*` and `/health` pass through the LAN proxy.
 YAG enforces bearer authentication and per-key request limits for API
 requests; the reverse proxy terminates TLS.
 
+## Production preflight (operator-run)
+
+Before inviting client PCs, run the private LAN preflight. The offline
+mode checks key entropy length/uniqueness, principal scopes, permissions,
+default/paid backend egress configuration and a conservative per-run cloud
+request ceiling without contacting any provider:
+
+```sh
+python3 scripts/lan.py preflight --offline
+```
+
+After starting the stack, exporting and trusting the Caddy **public** CA,
+run the live check:
+
+```sh
+python3 scripts/lan.py preflight
+```
+
+The live check verifies HTTPS certificate trust, unauthenticated model
+discovery, scoped client restrictions and that Caddy hides the local
+`/api/admin/*` paths, including from the administrator key. Use
+`--json` for a machine-readable secret-free checklist.
+
+**Important:** preflight cannot inspect your router/firewall rules,
+verify the contents of a dynamic managed provider store, ensure a provider
+request ceiling is a monetary spending limit, or certify real model/GPU
+behavior. Those gates require an operator review. Never copy private
+`.env.lan`, Caddy CA keys or provider credentials into an issue/PR.
+
 ## Cross-platform installer (Windows, Linux, macOS)
 
 The recommended entry point is now the **same Python 3 command on every
