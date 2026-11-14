@@ -37,6 +37,8 @@ jobs:
         run: python tests/lan_ops_test.py
       - name: Exercise offline production preflight and cloud egress policy
         run: python tests/production_preflight_test.py
+      - name: Verify operator pricing assumptions and bounded cloud allowance
+        run: python tests/provider_budget_test.py
       - name: Test offline encrypted backup verification and safe staging
         run: python tests/lan_recovery_test.py
       - name: Verify tagged release integrity and safe rollback staging
