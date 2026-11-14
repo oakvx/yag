@@ -1,22 +1,77 @@
+# Keep actionable dependency upgrades visible without creating one PR per package.
+# Version updates are grouped per ecosystem; security updates have their own
+# group so vulnerability fixes remain eligible independently of version limits.
+# Every proposed change still requires CI and human review (no auto-merge).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: monday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 1
+    groups:
+      actions-maintenance:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
   - package-ecosystem: npm
     directory: /console
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: tuesday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 1
+    groups:
+      console-maintenance:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      console-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
   - package-ecosystem: npm
     directory: /desktop
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: wednesday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 1
+    groups:
+      desktop-maintenance:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      desktop-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
   - package-ecosystem: cargo
     directory: /desktop/src-tauri
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+      day: thursday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 1
+    groups:
+      rust-maintenance:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      rust-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
