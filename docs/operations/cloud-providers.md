@@ -70,6 +70,35 @@ The preceding model ID is an **illustration only**: verify the exact current
 provider model ID and that your key has access before using it. Provider
 listing, token accounting and pricing can change.
 
+### Per-PC dedicated provider access
+
+By default, a LAN client's `inference+models` key can use ordinary local
+models, but **cannot invoke dedicated model IDs** configured with
+`exclusive_models: true`. Such requests return HTTP 403 on all supported
+`/v1/*` inference endpoints before any upstream call. Primary and legacy
+`all` credentials remain privileged.
+
+To authorize a specific workstation, open the local **LAN client keys**
+section of the Console. Issue it a managed key with
+`inference+models+dedicated` (or `inference+dedicated` when model discovery
+is not required). A managed client's scope can subsequently be changed from
+the same Console without changing its API key. Adding dedicated permission
+requires explicit administrator confirmation. Scope edits are persisted and
+apply to new requests immediately; requests already admitted are not canceled.
+
+Bootstrap static keys can also use those values in `YAG_EXTRA_KEY_SCOPES`,
+but their scope cannot be edited live: update the private environment and
+restart the Host instead. Never issue the shared `all` scope to an ordinary
+workstation.
+
+**Limit:** this policy protects explicitly dedicated managed pool model IDs.
+Static model routes and the default upstream are still operator-controlled.
+Do not configure a paid public cloud provider as an unrestricted/default
+backend if you expect local-only client isolation. Model discovery may still
+list dedicated IDs for local-only clients; seeing an ID never grants permission
+to invoke it. This is an egress authorization control, **not** a prepaid
+spend cap or provider privacy guarantee.
+
 ### Security boundaries
 
 - The **admin Console stays local to the Host**; client API keys cannot
