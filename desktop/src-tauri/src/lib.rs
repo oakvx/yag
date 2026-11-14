@@ -1,3 +1,6 @@
+mod discovery;
+mod relay;
+
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -10,6 +13,7 @@ use url::Url;
 #[derive(Default)]
 struct AppState {
     active: Mutex<HashMap<String, CancellationToken>>,
+    relay: Mutex<Option<relay::RelayHandle>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -317,11 +321,38 @@ async fn cancel_chat(request_id: String, state: State<'_, AppState>) -> Result<(
     Ok(())
 }
 
+
+#[tauri::command]
+async fn start_relay(url: String, api_key: String, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
+    let origin = endpoint(&url)?;
+    key_valid(&api_key)?;
+    // Validate the key against the actual gateway before making it available locally.
+    list_models(url, api_key.clone()).await?;
+    let mut active = state.relay.lock().await;
+    if active.is_some() { return Err("A local relay is already running".into()); }
+    let (info, handle) = relay::start(origin, api_key).await?;
+    *active = Some(handle);
+    Ok(info)
+}
+
+#[tauri::command]
+async fn stop_relay(state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(handle) = state.relay.lock().await.take() {
+        handle.cancel.cancel();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn discover_hosts() -> Result<Vec<discovery::DiscoveredHost>, String> {
+    discovery::scan().await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat])
+        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts])
         .run(tauri::generate_context!())
         .expect("failed to launch YAG Desktop");
 }
