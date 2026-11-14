@@ -275,6 +275,18 @@ class ProviderManager(unittest.TestCase):
                             key=client_key)
         self.assertEqual(code,200,body)
         self.assertEqual(json.loads(body)["source"],"managed-replica")
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":1,"scope":"inference+models+dedicated"})[0],403)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"bogus"})[0],400)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"inference+models"})[0],200)
+        self.assertEqual(request(self.port,"POST","/v1/chat/completions",
+            {"model":"managed-model","messages":[]},key=client_key)[0],403)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"inference+models+dedicated"})[0],200)
+        self.assertEqual(request(self.port,"POST","/v1/chat/completions",
+            {"model":"managed-model","messages":[]},key=client_key)[0],200)
         self.assertEqual(request(self.port,"POST","/api/admin/providers/apply",
                                  {"replicas":[]},key=client_key)[0],403)
         # Managed scope survives restart, unlike in-memory request stats.
