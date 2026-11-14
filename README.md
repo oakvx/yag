@@ -267,6 +267,7 @@ existing-host mode instead.
 
 [Full LAN server deployment and client onboarding](docs/deployment/lan-hub.md).
 [Control Plane APIs, resource limits, managed provider editing, encrypted backups and replica management](docs/operations/control-plane.md).
+[Manual BYOK OpenAI-compatible cloud providers (OpenRouter, Gemini and others)](docs/operations/cloud-providers.md).
 [Private administrative audit log: configuration and limitations](docs/operations/admin-audit.md).
 
 ## Ollama / Colibri quickstart
