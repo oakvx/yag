@@ -248,8 +248,8 @@ async function refreshModels() {
     const models = await invoke('list_models', { url: state.url, apiKey: state.apiKey })
     state.models = models
     if (!models.some((model) => model.id === state.model)) {
-      state.model = models.length ? models[0].id : ''
       clearConversation()
+      state.model = models.length ? models[0].id : ''
     }
     renderModels()
     setStatus(true)
@@ -276,6 +276,10 @@ async function connect(event) {
     const models = await invoke('list_models', { url, apiKey })
     const changed = state.url !== url || state.apiKey !== apiKey
     if (changed && state.relay) await stopRelay()
+    if (changed) {
+      saveActive()
+      state.activeChatId = null
+    }
     state.url = url
     state.apiKey = apiKey
     state.models = models
@@ -305,6 +309,7 @@ async function disconnect() {
   saveActive()
   state.url = ''
   state.apiKey = ''
+  state.activeChatId = null
   state.model = ''
   state.models = []
   el('apiKey').value = ''
@@ -466,8 +471,10 @@ el('systemPrompt').addEventListener('change', () => {
 el('saveHistory').addEventListener('change', () => {
   try {
     Workspace.setEnabled(el('saveHistory').checked)
-    if (Workspace.enabled()) saveActive()
-    else showError('')
+    if (Workspace.enabled()) {
+      saveActive()
+      if (!Workspace.save(state.conversations)) showError('Could not persist local history.')
+    } else showError('')
   } catch {
     el('saveHistory').checked = false
     showError('Could not change local history settings.')
