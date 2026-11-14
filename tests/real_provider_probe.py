@@ -6,7 +6,11 @@ YAG_REAL_UPSTREAM_URL and YAG_REAL_MODEL must be provided. Calls may cost money.
 No model output, prompt, credentials or provider URLs are written to logs.
 """
 import argparse
+import hashlib
+import json
 import os
+import re
+import stat
 import secrets
 import socket
 import subprocess
@@ -16,6 +20,42 @@ from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, build_opener
 
 from live_model import exercise
+
+def write_report(path,model,selected,tools,stream,results,success):
+    """Write metadata-only evidence, never secrets, URLs, prompts or model text.
+
+    A SHA-256 of the model ID supports private comparison without disclosing
+    the operator's model identifier in public Actions artifacts.
+    """
+    sha=os.environ.get('GITHUB_SHA','')
+    report={
+        'schema_version':1,
+        'model_id_sha256':hashlib.sha256(model.encode('utf-8')).hexdigest(),
+        'gateway_commit':sha if re.fullmatch(r'[a-fA-F0-9]{40}',sha) else None,
+        'protocol_selection':selected,
+        'stream_requested':bool(stream),
+        'tool_replay_requested':bool(tools),
+        'results':results,
+        'qualified':bool(success),
+        'scope':'exact_model_runtime_configuration',
+    }
+    flags=os.O_WRONLY|os.O_CREAT|os.O_TRUNC
+    if hasattr(os,'O_NOFOLLOW'):flags|=os.O_NOFOLLOW
+    fd=os.open(path,flags,0o600)
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise ValueError('Report destination must be a regular single-link file')
+        os.fchmod(fd,0o600)
+        with os.fdopen(fd,'w',encoding='utf-8') as output:
+            fd=-1
+            json.dump(report,output,sort_keys=True,separators=(',',':'))
+            output.write('\n')
+            output.flush()
+            os.fsync(output.fileno())
+    finally:
+        if fd>=0:os.close(fd)
+
 
 PROTOCOLS = {
     'chat': 'chat/completions',
@@ -46,7 +86,8 @@ def local_port():
         sock.bind(('127.0.0.1',0))
         return sock.getsockname()[1]
 
-def qualify(host,upstream,model,upstream_key,protocol='all',tools=False,stream=False):
+def qualify(host,upstream,model,upstream_key,protocol='all',tools=False,stream=False,
+            report_path=None):
     validate_upstream_url(upstream)
     if not model or len(model)>256 or any(ch.isspace() for ch in model):
         raise ValueError('A valid upstream model identifier is required')
@@ -85,16 +126,33 @@ def qualify(host,upstream,model,upstream_key,protocol='all',tools=False,stream=F
         direct_http=build_opener(ProxyHandler({})).open
         names=list(PROTOCOLS.values()) if protocol=='all' else [PROTOCOLS[protocol]]
         failed=0
+        results=[]
+        errors=(ValueError,KeyError,TypeError,AssertionError,RuntimeError)
         for name in names:
+            outcome={'protocol':name,'text_and_tool_replay':'not_run',
+                     'stream':'not_requested'}
             try:
                 exercise(base,gateway_key,model,name,tools,False,opener=direct_http)
-                if stream:
-                    exercise(base,gateway_key,model,name,False,True,opener=direct_http)
-            except (ValueError,KeyError,TypeError,AssertionError,RuntimeError) as exc:
-                print('[FAIL]',name,type(exc).__name__,file=sys.stderr,flush=True)
+                outcome['text_and_tool_replay']='passed'
+            except errors as exc:
+                outcome['text_and_tool_replay']='failed_'+type(exc).__name__
+                print('[FAIL]',name,'text/tools',type(exc).__name__,
+                      file=sys.stderr,flush=True)
                 failed+=1
+            if stream:
+                try:
+                    exercise(base,gateway_key,model,name,False,True,opener=direct_http)
+                    outcome['stream']='passed'
+                except errors as exc:
+                    outcome['stream']='failed_'+type(exc).__name__
+                    print('[FAIL]',name,'stream',type(exc).__name__,
+                          file=sys.stderr,flush=True)
+                    failed+=1
+            results.append(outcome)
+        if report_path is not None:
+            write_report(report_path,model,protocol,tools,stream,results,failed==0)
         if failed:
-            print('Real-model qualification failed for',failed,'protocol(s)',file=sys.stderr)
+            print('Real-model qualification failed for',failed,'checks',file=sys.stderr)
         else:
             print('Real-model qualification passed for selected checks')
         return 1 if failed else 0
@@ -116,6 +174,8 @@ def main():
                         help='Require real model function-tool and result-replay cycles')
     parser.add_argument('--stream',action='store_true',
                         help='Also verify terminal SSE events')
+    parser.add_argument('--report-json',default=None,
+                        help='Write sanitized protocol results to a local owner-only JSON file')
     args=parser.parse_args()
     upstream=os.environ.get('YAG_REAL_UPSTREAM_URL','')
     model=os.environ.get('YAG_REAL_MODEL','')
@@ -124,7 +184,10 @@ def main():
     try:
         return qualify(args.host,upstream,model,
             os.environ.get('YAG_REAL_UPSTREAM_KEY',''),args.protocol,
-            args.tools,args.stream)
+            args.tools,args.stream,args.report_json)
+    except OSError:
+        print('[FAIL] Cannot write qualification report',file=sys.stderr)
+        return 1
     except (ValueError,RuntimeError) as exc:
         # All error strings above are static and do not include secrets or URLs.
         print('[FAIL]',type(exc).__name__,str(exc),file=sys.stderr)
