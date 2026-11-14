@@ -7,7 +7,7 @@
     "icons": "node scripts/generate-icons.mjs",
     "dev": "tauri dev",
     "build": "tauri build",
-    "check": "node --check ui/app.js && node --check scripts/generate-icons.mjs"
+    "check": "node --check ui/app.js && node --check ui/workspace.js && node --check ui/markdown.js && node --check scripts/generate-icons.mjs && node --test tests/*.test.cjs"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
