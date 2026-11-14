@@ -19,6 +19,10 @@ struct AppState {
 #[derive(Serialize, Deserialize)]
 struct Model {
     id: String,
+    #[serde(default)]
+    yag_dedicated: bool,
+    #[serde(default)]
+    yag_remote_https: bool,
 }
 
 #[derive(Deserialize)]
