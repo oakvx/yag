@@ -47,7 +47,7 @@ def _runtime_metadata():
                     '--format=csv,noheader,nounits'])
     if line:
         parts = [part.strip() for part in line.split(',')]
-        if len(parts) == 3 and re.fullmatch(r'[0-9]+(?:\\.[0-9]+)*', parts[1]) and parts[2].isdigit():
+        if len(parts) == 3 and re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', parts[1]) and parts[2].isdigit():
             result['gpu'] = {
                 'name': parts[0],
                 'driver_version': parts[1],
