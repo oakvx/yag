@@ -25,6 +25,17 @@ static void fail(int fd,int status,const char *reason) {
     snprintf(body,sizeof body,"{\"error\":{\"message\":\"%s\",\"type\":\"upstream_error\"}}",reason);
     reply(fd,status,"application/json",body);
 }
+/* Caller holds cfg->lock. A dedicated ID has precedence over the default
+ * provider catalog even if that provider advertises the same string. */
+static int reserved_model_locked(const yag_config *cfg,const char *id) {
+    for(size_t p=0;p<cfg->pool_count;p++) {
+        const yag_pool_backend *backend=&cfg->pool[p];
+        if(!backend->exclusive_models)continue;
+        for(size_t m=0;m<backend->model_count;m++)
+            if(!strcmp(backend->models[m],id))return 1;
+    }
+    return 0;
+}
 static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     listing response={0};
     long status=0;
@@ -55,13 +66,20 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     int good=output && items && yyjson_mut_obj_add_str(d,output,"object","list")
         && yyjson_mut_obj_add_val(d,output,"data",items);
     size_t i,count;yyjson_val *item;
-    if(good && default_available)yyjson_arr_foreach(models,i,count,item) {
-        yyjson_val *id=yyjson_obj_get(item,"id");
-        if(!yyjson_is_obj(item) || !yyjson_is_str(id)
-            || !yyjson_get_len(id) || strlen(yyjson_get_str(id))!=yyjson_get_len(id)
-            || !yyjson_mut_arr_add_val(items,yyjson_val_mut_copy(d,item))) {
-            good=0;break;
+    if(good && default_available) {
+        pthread_mutex_lock((pthread_mutex_t *)&cfg->lock);
+        yyjson_arr_foreach(models,i,count,item) {
+            yyjson_val *id=yyjson_obj_get(item,"id");
+            if(!yyjson_is_obj(item) || !yyjson_is_str(id)
+                || !yyjson_get_len(id) || strlen(yyjson_get_str(id))!=yyjson_get_len(id)) {
+                good=0;break;
+            }
+            if(reserved_model_locked(cfg,yyjson_get_str(id)))continue;
+            if(!yyjson_mut_arr_add_val(items,yyjson_val_mut_copy(d,item))) {
+                good=0;break;
+            }
         }
+        pthread_mutex_unlock((pthread_mutex_t *)&cfg->lock);
     }
     if(good)for(size_t r=0;r<cfg->route_count;r++) {
         int exists=0;
