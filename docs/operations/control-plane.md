@@ -72,23 +72,44 @@ material and therefore **must be encrypted**.
 memory use/limit and /proc load averages when available. It **does not**
 claim host-wide memory readings. `GET /api/admin/ollama/loaded` supplies
 Ollama-reported per-loaded-model `size_vram`; its sum is not total VRAM
-capacity or GPU utilization. A dedicated hardware exporter will be
-required for accurate NVIDIA/AMD/Apple GPU and host-wide metrics.
+capacity or GPU utilization. The Host additionally probes Linux DRM/sysfs counters and, when present,
+loads NVIDIA NVML dynamically from the host GPU runtime. On NVIDIA drivers
+with a mounted NVML library the Console can report GPU utilization and
+device VRAM used/total without a separately installed exporter. NVML is
+optional: its absence is explicitly reported as unavailable, never as 0%.
+Apple Silicon and vendor-specific hardware without these interfaces remain
+unsupported by the built-in hardware probe. The Console samples aggregate
+provider token counters and hardware once every 5 seconds; this in-browser
+chart is not a persistent time-series database.
 
-## 4. FIFO inference scheduler
+## 4. Adaptive local inference scheduler (FIFO)
 
 Configure these for a shared LAN:
 
 | Variable | LAN default | Description |
 | --- | --- | --- |
 | `YAG_MAX_INFERENCE` | `6` | Maximum concurrent accepted inference requests |
+| `YAG_ADAPTIVE_SCHEDULER` | `1` | Enable measured GPU-aware admission (set `0` for static mode) |
+| `YAG_GPU_REQUEST_VRAM_MB` | `1024` | Conservative incremental VRAM allowance per newly admitted inference |
+| `YAG_GPU_VRAM_MARGIN_PERCENT` | `10` | Fraction of total VRAM reserved as headroom (0–50%) |
 | `YAG_MAX_INFERENCE_PER_KEY` | `2` | Maximum in-flight requests using one API key |
 | `YAG_INFERENCE_QUEUE_WAIT_MS` | `15000` | FIFO wait deadline; queue hard-capped at 24 |
 | `YAG_MAX_BODY_BYTES` | `4194304` | Per-request JSON body limit; global cap 8 MiB |
 
 The standalone host defaults to scheduling disabled, to preserve existing
-semantics. The LAN overlay enables it. Requests remain queued in bounded
-workers. On capacity timeout or queue overflow, YAG returns HTTP 429
+semantics. The LAN overlay enables GPU-aware admission and still enforces the
+operator's global and per-key ceilings. Each GPU sample is cached for one
+second. With memory counters available, the effective concurrency is capped
+by (free VRAM minus the configured safety margin) divided by the configured
+per-request VRAM allowance, never exceeding `YAG_MAX_INFERENCE` or going
+below one. At measured GPU utilization of at least 95%, the calculated
+multi-request allowance is conservatively halved. The approximation does
+**not** infer CUDA core counts or actual per-model KV-cache allocations,
+and it cannot guarantee that a backend never runs out of GPU memory.
+When no supported VRAM sensor exists, the scheduler falls back to the
+configured static concurrency limit. `GET /api/scheduler` reports the
+configured and effective capacities and whether the sensor is available.
+Requests remain queued in bounded workers. On capacity timeout or queue overflow, YAG returns HTTP 429
 with a one-second Retry-After hint. The scheduler accounts for streaming
 until the request ends, and uses bounded concurrency rather than pretending
 to reserve model-specific GPU VRAM.
