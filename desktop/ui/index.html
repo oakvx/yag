@@ -102,6 +102,11 @@
       <div class="modal-actions"><button id="startRelay" class="secondary-button" type="button">Start local relay</button><button id="stopRelay" class="secondary-button" type="button" disabled>Stop relay</button></div>
       <div id="relayDetails" class="relay-details" hidden><strong>Local endpoint</strong><code id="relayUrl"></code><strong>Temporary API key</strong><code id="relayKey"></code><button id="copyRelayKey" class="secondary-button" type="button">Copy token</button></div>
       <p id="relayError" class="dialog-error" role="alert" hidden></p>
+      <div class="settings-divider"></div>
+      <h3>Application updates</h3>
+      <p class="field-note">Check GitHub Releases manually. This sends no chat text or API keys. Installers are currently unsigned; verify downloaded files before installing.</p>
+      <button id="checkUpdates" class="secondary-button" type="button">Check for new release</button>
+      <p id="updateStatus" class="field-note" role="status"></p>
     </section>
   </div>
 </body>
