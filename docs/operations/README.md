@@ -3,6 +3,9 @@
 Use the gateway key via an environment variable. Never place API keys in
 public command examples, logs, issue reports or CI workflow inputs.
 
+For deployment acceptance, real-model qualification and release gates, follow
+[the Colibri + BYOK go-live checklist](go-live.md).
+
 ## Circuit breaker and safe failover
 
 ```sh

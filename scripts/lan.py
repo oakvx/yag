@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
-from lan_ops import configure_provider, encrypted_backup
+from lan_ops import configure_provider, encrypted_backup, provider_key
 from lan_recovery import inspect_backup
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,12 +211,17 @@ def main(argv=None):
     providers.add_argument("--key-env", help="Name of a configured private upstream key")
     providers.add_argument("--model", action="append", dest="replica_models",
                            help="Model ID supported by this replica (repeatable, add only)")
+    providers.add_argument("--exclusive-models", action="store_true",
+                           help="Reserve declared IDs for this backend; never fall back to Ollama")
     providers.add_argument("--max-inflight", type=int, default=0,
                            help="Replica concurrent inference limit (0=unlimited, max 32)")
     providers.add_argument("--vram-budget-mb", type=int, default=0,
                            help="Operator-estimated VRAM budget in MiB (0=disabled)")
     providers.add_argument("--vram-reservation-mb", type=int, default=0,
                            help="Operator-estimated VRAM per inference in MiB (0=disabled)")
+    provider_keys = actions.add_parser("provider-key", help="Manage private BYOK aliases without typing keys in shell commands")
+    provider_keys.add_argument("operation", choices=("list", "set", "clear"))
+    provider_keys.add_argument("--alias", help="YAG_POOL_KEY_1 through YAG_POOL_KEY_8")
     backup = actions.add_parser("backup", help="Create an encrypted LAN configuration snapshot")
     backup.add_argument("--recipient", required=True, help="Public age recipient (age1...)")
     backup.add_argument("--output-dir", default="backups", help="Private backup directory")
@@ -254,10 +259,14 @@ def main(argv=None):
         if args.action == "ca":
             export_ca(config)
             return 0
+        if args.action == "provider-key":
+            provider_key(ENV_PATH, args.operation, args.alias)
+            return 0
         if args.action == "providers":
             configure_provider(ENV_PATH, args.operation, args.url, args.key_env,
                                args.replica_models, args.max_inflight,
-                               args.vram_budget_mb, args.vram_reservation_mb)
+                               args.vram_budget_mb, args.vram_reservation_mb,
+                               args.exclusive_models)
             return 0
         if args.action == "backup":
             require_docker(config)

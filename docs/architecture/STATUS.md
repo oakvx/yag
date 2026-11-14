@@ -87,6 +87,10 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 
 ## Not implemented
 
+- Managed providers can now reserve model IDs with `exclusive_models: true`.
+  Those IDs are exposed through model discovery while the provider is enabled,
+  and requests cannot fall back to the generic primary or non-dedicated
+  replicas. This is operator-declared routing, not model capability verification.
 - A comprehensive cross-protocol canonical representation, automatic *verified* model-capability discovery, runtime editing of static exact-model routes, unattended health polling, automatic capability discovery and general-purpose failover. Operators can declare capabilities with `YAG_MODEL_CAPABILITIES`; responses explicitly label them unverified. Optional `YAG_ENFORCE_MODEL_CAPABILITIES=1` refuses requested features that a declared model has not listed (HTTP 422), across Chat, Responses and Anthropic; unknown models bypass this fail-fast policy and are judged by the upstream. Default is disabled. A passive circuit breaker, per-provider statistics, static routing and manual reachability probes exist, but are not autonomous model selection.
 - Full Responses/Codex compatibility, stateful response storage and unsupported features described above. Anthropic token counting, multimodal content, native prompt caching, built-in tools, and unverified Claude Code message variants. The Messages adapter implements a bounded text/function-call subset in both streaming and non-streaming modes and rejects unsupported content.
 - A security-audited identity system, external-auth integration, network-level abuse protection, configured CORS, native TLS, encrypted-at-rest **live** secret storage and comprehensive structured request logs. An optional private admin-response JSONL audit trail exists, but it is not tamper-evident or a replacement for external security auditing. The primary key can issue and revoke up to 16 managed client keys at runtime when a private store is enabled; static bootstrap secrets still require rotation in private environment configuration. The per-key fixed-window quota does not protect unauthenticated connection admission.

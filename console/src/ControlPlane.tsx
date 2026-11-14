@@ -17,10 +17,15 @@ type ResourceMetrics = {
 type Scheduler = {max_inference:number;effective_max_inference?:number;admission_mode?:'adaptive'|'static';gpu_sensor_available?:boolean;gpu_request_vram_mb?:number;gpu_margin_percent?:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
 type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
-type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
+type ProviderConfig = {index:number;url:string;key_env:string;models:string[];exclusive_models:boolean;priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
 type ProviderList = {editable:boolean;data:ProviderConfig[]}
 type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
-type ProviderPayload = {url:string;models:string[];enabled:boolean;priority:number;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;key_env?:string}
+type ProviderPayload = {url:string;models:string[];exclusive_models:boolean;enabled:boolean;priority:number;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;key_env?:string}
+const CLOUD_PRESETS = [
+  {name:'OpenAI',url:'https://api.openai.com/v1'},
+  {name:'OpenRouter',url:'https://openrouter.ai/api/v1'},
+  {name:'Gemini (OpenAI API)',url:'https://generativelanguage.googleapis.com/v1beta/openai'},
+] as const
 
 async function controlRequest<T>(key: string, path: string, method = 'GET', payload?: unknown): Promise<T> {
   if (!key) throw new Error('Enter the primary administrator API key in Settings')
@@ -59,6 +64,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [providerChecks,setProviderChecks]=useState<Record<number,ProviderProbe>>({})
   const [providerUrl,setProviderUrl]=useState('')
   const [providerModels,setProviderModels]=useState('')
+  const [providerExclusive,setProviderExclusive]=useState(false)
   const [providerKey,setProviderKey]=useState('')
   const [providerPriority,setProviderPriority]=useState(50)
   const [providerMaxInflight,setProviderMaxInflight]=useState(0)
@@ -141,7 +147,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     return ()=>{alive=false;clearInterval(timer)}
   },[apiKey,providers.map(p=>p.index+':'+p.url).join('|')])
   function resetProviderForm(){
-    setProviderUrl('');setProviderModels('');setProviderKey('')
+    setProviderUrl('');setProviderModels('');setProviderKey('');setProviderExclusive(false)
     setProviderPriority(50);setProviderMaxInflight(0);setProviderBudget(0)
     setProviderReservation(0);setProviderEditing(null)
   }
@@ -157,14 +163,15 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     finally{setBusy('')}
   }
   function payloads():ProviderPayload[]{
-    return providers.map(({url,key_env,models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb})=>({
-      url,models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb,
+    return providers.map(({url,key_env,models,exclusive_models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb})=>({
+      url,models,exclusive_models:!!exclusive_models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb,
       ...(key_env?{key_env}:{})
     }))
   }
   function editProvider(item:ProviderConfig){
     setProviderEditing(item.index);setProviderUrl(item.url)
     setProviderModels(item.models.join(', '));setProviderKey(item.key_env)
+    setProviderExclusive(!!item.exclusive_models)
     setProviderPriority(item.priority)
     setProviderMaxInflight(item.max_inflight||0)
     setProviderBudget(item.vram_budget_mb||0)
@@ -180,9 +187,14 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
         'VRAM budget and reservation must both be zero, or reservation must fit within the budget.'}))
       return
     }
+    const names=Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean)))
+    if(providerExclusive && !names.length) {
+      setErrors(previous=>({...previous,providers:'Dedicated model routing requires at least one explicit model ID.'}))
+      return
+    }
     const entry:ProviderPayload={
       url:providerUrl.trim(),
-      models:Array.from(new Set(providerModels.split(/[\s,]+/).filter(Boolean))),
+      models:names,exclusive_models:providerExclusive,
       ...(providerKey?{key_env:providerKey}:{}),
       priority:providerPriority,max_inflight:providerMaxInflight,
       vram_budget_mb:providerBudget,vram_reservation_mb:providerReservation,
@@ -419,7 +431,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
             <div className="control-provider-info">
               <b>Replica #{p.index} · {p.enabled?'Enabled':'Disabled'} · priority {p.priority}</b>
               <code>{p.url}</code>
-              <small>Credentials: {p.key_env || 'none'} · Declared models: {
+              <small>Routing: {p.exclusive_models?'Dedicated model IDs (no primary fallback)':'Shared replica'} · Credentials: {p.key_env || 'none'} · Declared models: {
                 p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
               <small>Admission: {p.max_inflight? p.max_inflight+' active max':'unbounded'} ·
                 VRAM estimate: {p.vram_budget_mb
@@ -454,6 +466,11 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <div className="control-form-title"><b>{providerEditing===null?'Add replica':'Edit replica #'+providerEditing}</b>
             <small>Apply updates atomically. Busy pools respond with HTTP 409, without interrupting inference.</small></div>
           <div className="control-provider-fields">
+            <div className="control-footnote">Cloud presets: {CLOUD_PRESETS.map(preset=><button type="button" key={preset.name}
+              className="outline-button small" disabled={!providerEditable||!!busy}
+              onClick={()=>{setProviderUrl(preset.url);setProviderExclusive(true)}}>{preset.name}</button>)}
+              Selecting a cloud provider sets dedicated routing. Prompts and tool arguments leave your LAN.
+              Keys must already exist in the private Host environment.</div>
             <label>API base URL
               <input value={providerUrl} onChange={e=>setProviderUrl(e.target.value)}
                 placeholder="http://192.168.1.60:11434/v1" maxLength={512}
@@ -461,6 +478,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
             <label>Model IDs (optional, comma-separated)
               <input value={providerModels} onChange={e=>setProviderModels(e.target.value)}
                 placeholder="llama3.2, qwen2.5" disabled={!providerEditable||!!busy}/></label>
+            <label className="control-exclusive"><input type="checkbox" checked={providerExclusive}
+              onChange={e=>setProviderExclusive(e.target.checked)} disabled={!providerEditable||!!busy}/>
+              Dedicated model IDs: always route to this provider group, never fall back to the primary backend.
+              Requires at least one model ID.</label>
             <label>Credential alias
               <select value={providerKey} onChange={e=>setProviderKey(e.target.value)}
                 disabled={!providerEditable||!!busy}>
@@ -501,6 +522,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           VRAM values are operator-estimated reservations, not live physical GPU measurements.
           Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
           while the Console is open; reported IDs are not proof of model capabilities.
+          Dedicated model IDs are exposed in /v1/models but not verified against the remote provider.
           Secrets remain in server-side environment variables and are never included in API responses.
           Private LAN connections and endpoint validation remain required.
         </div>

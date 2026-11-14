@@ -25,19 +25,38 @@ static void fail(int fd,int status,const char *reason) {
     snprintf(body,sizeof body,"{\"error\":{\"message\":\"%s\",\"type\":\"upstream_error\"}}",reason);
     reply(fd,status,"application/json",body);
 }
+/* Caller holds cfg->lock. A dedicated ID has precedence over the default
+ * provider catalog even if that provider advertises the same string. */
+static int reserved_model_locked(const yag_config *cfg,const char *id) {
+    for(size_t p=0;p<cfg->pool_count;p++) {
+        const yag_pool_backend *backend=&cfg->pool[p];
+        if(!backend->exclusive_models)continue;
+        for(size_t m=0;m<backend->model_count;m++)
+            if(!strcmp(backend->models[m],id))return 1;
+    }
+    return 0;
+}
 static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     listing response={0};
     long status=0;
     int rc=upstream_perform(cfg,"/models",NULL,0,collect,&response,&status,fd);
-    if(rc!=CURLE_OK || status<200 || status>=300) {
+    int default_available=rc==CURLE_OK && status>=200 && status<300;
+    int has_dedicated=0;
+    pthread_mutex_lock((pthread_mutex_t *)&cfg->lock);
+    for(size_t p=0;p<cfg->pool_count;p++)
+        if(cfg->pool[p].enabled && cfg->pool[p].exclusive_models
+            && cfg->pool[p].model_count)has_dedicated=1;
+    pthread_mutex_unlock((pthread_mutex_t *)&cfg->lock);
+    if(!default_available && !has_dedicated) {
         int code=rc==CURLE_OPERATION_TIMEDOUT?504:status==429?429:502;
         fail(fd,code,"Default model provider unavailable or returned an error");
         free(response.bytes);return;
     }
-    yyjson_doc *upstream=yyjson_read(response.bytes,response.size,0);
+    yyjson_doc *upstream=default_available?
+        yyjson_read(response.bytes,response.size,0):NULL;
     yyjson_val *root=upstream?yyjson_doc_get_root(upstream):NULL;
     yyjson_val *models=yyjson_obj_get(root,"data");
-    if(!yyjson_is_obj(root) || !yyjson_is_arr(models)) {
+    if(default_available && (!yyjson_is_obj(root) || !yyjson_is_arr(models))) {
         fail(fd,502,"Default model provider returned an invalid model list");
         yyjson_doc_free(upstream);free(response.bytes);return;
     }
@@ -47,17 +66,24 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     int good=output && items && yyjson_mut_obj_add_str(d,output,"object","list")
         && yyjson_mut_obj_add_val(d,output,"data",items);
     size_t i,count;yyjson_val *item;
-    if(good)yyjson_arr_foreach(models,i,count,item) {
-        yyjson_val *id=yyjson_obj_get(item,"id");
-        if(!yyjson_is_obj(item) || !yyjson_is_str(id)
-            || !yyjson_get_len(id) || strlen(yyjson_get_str(id))!=yyjson_get_len(id)
-            || !yyjson_mut_arr_add_val(items,yyjson_val_mut_copy(d,item))) {
-            good=0;break;
+    if(good && default_available) {
+        pthread_mutex_lock((pthread_mutex_t *)&cfg->lock);
+        yyjson_arr_foreach(models,i,count,item) {
+            yyjson_val *id=yyjson_obj_get(item,"id");
+            if(!yyjson_is_obj(item) || !yyjson_is_str(id)
+                || !yyjson_get_len(id) || strlen(yyjson_get_str(id))!=yyjson_get_len(id)) {
+                good=0;break;
+            }
+            if(reserved_model_locked(cfg,yyjson_get_str(id)))continue;
+            if(!yyjson_mut_arr_add_val(items,yyjson_val_mut_copy(d,item))) {
+                good=0;break;
+            }
         }
+        pthread_mutex_unlock((pthread_mutex_t *)&cfg->lock);
     }
     if(good)for(size_t r=0;r<cfg->route_count;r++) {
         int exists=0;
-        yyjson_arr_foreach(models,i,count,item) {
+        if(default_available)yyjson_arr_foreach(models,i,count,item) {
             yyjson_val *id=yyjson_obj_get(item,"id");
             if(yyjson_is_str(id) && yyjson_equals_str(id,cfg->routes[r].model)) {
                 exists=1;break;
@@ -70,6 +96,31 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
             || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-configured-route")
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
+    /* Publish enabled managed-provider model IDs without probing remote APIs
+     * or trusting provider-advertised capabilities. Deduplicate against the
+     * default inventory and exact routes; disabled providers stay hidden. */
+    pthread_mutex_lock((pthread_mutex_t *)&cfg->lock);
+    if(good)for(size_t p=0;p<cfg->pool_count;p++) {
+        const yag_pool_backend *backend=&cfg->pool[p];
+        if(!backend->enabled || !backend->exclusive_models)continue;
+        for(size_t m=0;good && m<backend->model_count;m++) {
+            const char *name=backend->models[m];
+            int exists=0;
+            yyjson_mut_val *known;
+            yyjson_mut_arr_foreach(items,i,count,known) {
+                if(yyjson_mut_equals_str(yyjson_mut_obj_get(known,"id"),name)) {
+                    exists=1;break;
+                }
+            }
+            if(exists)continue;
+            yyjson_mut_val *entry=yyjson_mut_obj(d);
+            if(!entry || !yyjson_mut_obj_add_str(d,entry,"object","model")
+                || !yyjson_mut_obj_add_strcpy(d,entry,"id",name)
+                || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-managed-provider")
+                || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)&cfg->lock);
     char *json=NULL;
     int missing=0;
     if(good) {

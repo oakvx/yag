@@ -67,6 +67,7 @@ class ProviderManager(unittest.TestCase):
             YAG_POOL_KEY_1=REPLICA_KEY,
             YAG_UPSTREAM_POOL="[]",
             YAG_MAX_INFERENCE="4",
+            YAG_FALLBACK_TO_DEFAULT="1",
             YAG_MAX_INFERENCE_PER_KEY="4",
             NO_PROXY="127.0.0.1,localhost")
         cls.launch()
@@ -157,6 +158,8 @@ class ProviderManager(unittest.TestCase):
             [{"url":"http://example.com/v1"}],
             [{"url":"http://127.0.0.1:1234/v1","key_env":"YAG_API_KEY"}],
             [{"url":self.url,"models":["bad model"]}],
+            [{"url":self.url,"exclusive_models":True}],
+            [{"url":self.url,"models":["managed-model"],"exclusive_models":"true"}],
             [{"url":self.url,"priority":101}],
             [{"url":self.url},{"url":self.url}],
             [{"url":"http://127.0.0.1:1/v1","raw_secret":"forbidden"}],
@@ -193,6 +196,69 @@ class ProviderManager(unittest.TestCase):
             self.assertEqual(code,409,body)
             self.assertEqual(future.result(timeout=5)[0],200)
         self.assertEqual(len(json.loads(self.store.read_text())["replicas"]),1)
+
+    def test_045_exclusive_cloud_models_discovered_and_never_fallback(self):
+        entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
+               "models":["managed-model","glm-test"],"exclusive_models":True,"enabled":True}
+        self.assertEqual(self.apply([entry])[0],200)
+        code,_,body=request(self.port,"GET","/v1/models")
+        self.assertEqual(code,200,body)
+        listing=json.loads(body)["data"]
+        self.assertEqual(sum(model["id"]=="managed-model" for model in listing),1)
+        self.assertIn("managed-model",[m["id"] for m in listing])
+        code,_,body=request(self.port,"GET","/v1/models/managed-model")
+        self.assertEqual(code,200,body)
+        self.assertEqual(json.loads(body)["owned_by"],"yag-managed-provider")
+        # The primary also advertises glm-test; dedicated ownership wins.
+        code,_,body=request(self.port,"GET","/v1/models/glm-test")
+        self.assertEqual(code,200,body)
+        self.assertEqual(json.loads(body)["owned_by"],"yag-managed-provider")
+        code,_,body=request(self.port,"GET","/v1/models")
+        self.assertEqual(code,200,body)
+        self.assertEqual(sum(m["id"]=="glm-test" for m in json.loads(body)["data"]),1)
+        for _ in range(5):
+            code,_,body=request(self.port,"POST","/v1/chat/completions",
+                                {"model":"managed-model","messages":[]})
+            self.assertEqual(code,200,body)
+            self.assertEqual(json.loads(body)["source"],"managed-replica")
+        code,_,body=request(self.port,"GET","/api/admin/providers")
+        self.assertEqual(code,200,body)
+        self.assertTrue(json.loads(body)["data"][0]["exclusive_models"])
+        self.assertTrue(json.loads(self.store.read_text())["replicas"][0]["exclusive_models"])
+        # A disabled dedicated provider must fail closed, even when the
+        # global fallback-to-primary flag is enabled.
+        self.assertEqual(self.apply([{**entry,"enabled":False}])[0],200)
+        code,_,body=request(self.port,"GET","/v1/models")
+        self.assertEqual(code,200,body)
+        self.assertNotIn("managed-model",[m["id"] for m in json.loads(body)["data"]])
+        self.assertNotIn("glm-test",[m["id"] for m in json.loads(body)["data"]])
+        code,_,body=request(self.port,"POST","/v1/chat/completions",
+                            {"model":"managed-model","messages":[]})
+        self.assertEqual(code,502,body)
+        self.assertNotIn(b"managed-replica",body)
+
+    def test_047_cloud_models_survive_primary_discovery_outage(self):
+        entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
+               "models":["managed-model"],"exclusive_models":True,"enabled":True}
+        self.assertEqual(self.apply([entry])[0],200)
+        cls=type(self)
+        old=cls.env["YAG_UPSTREAM_URL"]
+        cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
+        try:
+            cls.env["YAG_UPSTREAM_URL"]="http://127.0.0.1:1/v1"
+            cls.launch()
+            code,_,body=request(self.port,"GET","/v1/models")
+            self.assertEqual(code,200,body)
+            self.assertIn("managed-model",[m["id"] for m in json.loads(body)["data"]])
+            code,_,body=request(self.port,"POST","/v1/chat/completions",
+                                {"model":"managed-model","messages":[]})
+            self.assertEqual(code,200,body)
+            self.assertEqual(json.loads(body)["source"],"managed-replica")
+        finally:
+            if cls.proc.poll() is None:
+                cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
+            cls.env["YAG_UPSTREAM_URL"]=old
+            cls.launch()
 
     def test_05_restart_restores_managed_pool(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",

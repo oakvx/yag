@@ -40,6 +40,7 @@ static int load_pool(yag_config *cfg) {
         yyjson_val *url=yyjson_obj_get(entry,"url");
         yyjson_val *key=yyjson_obj_get(entry,"key_env");
         yyjson_val *models=yyjson_obj_get(entry,"models");
+        yyjson_val *exclusive=yyjson_obj_get(entry,"exclusive_models");
         yyjson_val *max=yyjson_obj_get(entry,"max_inflight");
         yyjson_val *budget=yyjson_obj_get(entry,"vram_budget_mb");
         yyjson_val *reserve=yyjson_obj_get(entry,"vram_reservation_mb");
@@ -53,12 +54,15 @@ static int load_pool(yag_config *cfg) {
                 || strlen(yyjson_get_str(key))!=yyjson_get_len(key)))
             || (models && (!yyjson_is_arr(models) || !yyjson_arr_size(models)
                 || yyjson_arr_size(models)>32))
+            || (exclusive && (!yyjson_is_bool(exclusive) ||
+                (yyjson_get_bool(exclusive) && (!models || !yyjson_arr_size(models)))))
             || (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32))
             || (budget && (!yyjson_is_uint(budget) || yyjson_get_uint(budget)>262144))
             || (reserve && (!yyjson_is_uint(reserve) || yyjson_get_uint(reserve)>262144))
             || (!!mb!=!!mr) || (mr && mr>mb)
             || yyjson_obj_size(entry)!=(size_t)(1+(key?1:0)+(models?1:0)
-                                           +(max?1:0)+(budget?1:0)+(reserve?1:0))
+                                           +(max?1:0)+(budget?1:0)+(reserve?1:0)
+                                           +(exclusive?1:0))
             || !strcmp(yyjson_get_str(url),cfg->upstream)) {
             ok=0;break;
         }
@@ -98,6 +102,7 @@ static int load_pool(yag_config *cfg) {
         backend->key=secret;
         backend->enabled=1;
         backend->priority=50;
+        backend->exclusive_models=exclusive?yyjson_get_bool(exclusive):0;
         backend->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
         backend->vram_budget_mb=mb;
         backend->vram_reservation_mb=mr;
@@ -108,6 +113,10 @@ static int load_pool(yag_config *cfg) {
             backend->models[j]=strdup(yyjson_get_str(yyjson_arr_get(models,j)));
             if(!backend->models[j]){ok=0;break;}
             backend->model_count++;
+            if(backend->exclusive_models)
+                for(size_t r=0;r<cfg->route_count;r++)
+                    if(!strcmp(backend->models[j],cfg->routes[r].model))ok=0;
+            if(!ok)break;
         }
         if(!ok)break;
     }

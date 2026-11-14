@@ -47,6 +47,7 @@ typedef struct {
     /* Optional operator-declared per-replica model allowlist (not auto-discovery). */
     char *models[32];
     size_t model_count;
+    int exclusive_models; /* Never route these IDs to the primary backend. */
     yag_provider_stats stats;
     unsigned active, consecutive_failures;
     time_t unavailable_until;

@@ -5,6 +5,7 @@ Platform-independent Python standard library. Uses the external age CLI for
 backup encryption; never emits an unencrypted backup artifact to the caller.
 """
 import datetime
+import getpass
 import io
 import ipaddress
 import json
@@ -142,10 +143,14 @@ def read_pool(path):
         if not isinstance(entry, dict) or not isinstance(entry.get("url"), str):
             raise ValueError("Invalid pool entry")
         validate_backend(entry["url"])
-        if set(entry) - {"url", "key_env", "models", "max_inflight",
+        if set(entry) - {"url", "key_env", "models", "exclusive_models", "max_inflight",
                          "vram_budget_mb", "vram_reservation_mb"}:
             raise ValueError("Unknown replica configuration field")
         validate_models(entry.get("models"))
+        if type(entry.get("exclusive_models", False)) is not bool:
+            raise ValueError("exclusive_models must be a boolean")
+        if entry.get("exclusive_models") and not entry.get("models"):
+            raise ValueError("Dedicated providers require model IDs")
         validate_resource_policy(entry.get("max_inflight", 0),
                                  entry.get("vram_budget_mb", 0),
                                  entry.get("vram_reservation_mb", 0))
@@ -153,12 +158,14 @@ def read_pool(path):
 
 
 def configure_provider(path, action, url=None, key_env=None, models=None,
-                       max_inflight=0, vram_budget_mb=0, vram_reservation_mb=0):
+                       max_inflight=0, vram_budget_mb=0, vram_reservation_mb=0,
+                       exclusive_models=False):
     pool = read_pool(path)
     if action == "list":
         for index, entry in enumerate(pool, 1):
             print(f"replica-{index}: {entry['url']}" +
                   (" (external key)" if entry.get("key_env") else "") +
+                  (" (dedicated model routing)" if entry.get("exclusive_models") else "") +
                   (" (models: " + ", ".join(entry["models"]) + ")"
                    if entry.get("models") else " (unrestricted models)") +
                   " (max-inflight: " + str(entry.get("max_inflight", 0)) +
@@ -172,6 +179,8 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
         raise ValueError("Model allowlist is supported only when adding a replica")
     models = validate_models(models)
     validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb)
+    if exclusive_models and (action != "add" or not models):
+        raise ValueError("Dedicated routing requires adding explicit model IDs")
     if action != "add" and (max_inflight or vram_budget_mb or vram_reservation_mb):
         raise ValueError("Resource policy changes require adding a replica")
     _, env = read_entries(path)
@@ -186,6 +195,8 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
             entry["vram_reservation_mb"] = vram_reservation_mb
         if models is not None:
             entry["models"] = models
+        if exclusive_models:
+            entry["exclusive_models"] = True
         if key_env:
             if not re.fullmatch(r"YAG_POOL_KEY_[1-8]", key_env):
                 raise ValueError("Use one of YAG_POOL_KEY_1..8 for private replica credentials")
@@ -203,6 +214,37 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
     save_environment(path, "YAG_UPSTREAM_POOL",
                      json.dumps(pool, separators=(",", ":"), ensure_ascii=True))
     print("Replica configuration updated. Run 'python scripts/lan.py up' to apply.")
+
+
+def provider_key(path, operation, alias=None):
+    """Configure a private BYOK secret without exposing it in argv or stdout.
+
+    Secrets remain in the restricted .env.lan and are loaded at gateway start;
+    this is intentionally not an encrypted credential vault.
+    """
+    if operation == "list":
+        _, entries = read_entries(path)
+        for index in range(1, 9):
+            name = f"YAG_POOL_KEY_{index}"
+            print(f"{name}: {'configured' if entries.get(name) else 'empty'}")
+        return
+    if not isinstance(alias, str) or not re.fullmatch(r"YAG_POOL_KEY_[1-8]", alias):
+        raise ValueError("Choose an alias YAG_POOL_KEY_1..8")
+    if operation == "set":
+        value = getpass.getpass(f"Provider key for {alias} (input hidden): ")
+        # Unquoted Compose .env keys: reject interpolation and comment metacharacters.
+        if not re.fullmatch(r"[A-Za-z0-9_.:+/=-]{8,4096}", value):
+            raise ValueError("Key requires 8..4096 safe non-whitespace characters; use an external secret manager for other formats")
+        save_environment(path, alias, value)
+        print(f"{alias} configured in private .env.lan. Restart the gateway to apply.")
+        return
+    if operation == "clear":
+        if any(entry.get("key_env") == alias for entry in read_pool(path)):
+            raise ValueError("Remove providers using this alias before clearing the credential")
+        save_environment(path, alias, "")
+        print(f"{alias} cleared in private .env.lan. Restart the gateway to apply.")
+        return
+    raise ValueError("Unsupported provider-key operation")
 
 
 def private_archive(entries, target):
