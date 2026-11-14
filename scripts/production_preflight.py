@@ -83,6 +83,24 @@ def evaluate(config_path, ca_path=None):
     if env.get('YAG_RATE_LIMIT_PER_MINUTE','120') in ('0',''):
         add('rate_limit','warn','Rate limiting is disabled')
 
+    # Static routes bypass the dedicated-provider per-PC scope check.
+    # This is a dangerous production footgun if routed directly to paid HTTPS.
+    raw_routes = env.get('YAG_MODEL_ROUTES', '')
+    if raw_routes:
+        try:
+            routes = json.loads(raw_routes)
+            if not isinstance(routes, list) or len(routes) > 16:
+                raise ValueError('Invalid static route list')
+            for route in routes:
+                if not isinstance(route, dict) or not isinstance(route.get('url'), str):
+                    raise ValueError('Invalid static route entry')
+                validate_backend(route['url'])
+                if urlsplit(route['url']).scheme == 'https':
+                    add('static_cloud_route','block',
+                        'HTTPS static routes bypass dedicated per-PC cloud scopes; migrate to a dedicated provider')
+        except (ValueError, json.JSONDecodeError, AttributeError):
+            add('static_routes','block','Static model routing configuration is invalid')
+
     # Validate bootstrap pool separately from the runtime-managed provider store.
     try:
         pool = read_pool(path)
