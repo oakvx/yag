@@ -70,6 +70,57 @@ The preceding model ID is an **illustration only**: verify the exact current
 provider model ID and that your key has access before using it. Provider
 listing, token accounting and pricing can change.
 
+### Operator-reviewed pricing and estimated request allowance
+
+The optional `provider-budget` CLI validates a private JSON pricing
+assumption with exact model ID, **USD-only** input/output rates, an HTTPS
+source URL, UTC review time (expires after **7 days**), assumed maximum
+input/output token counts, a conservative safety multiplier of at least
+1.5, and an operator planning budget. No prices are scraped or invented.
+
+Example policy (illustrative numbers only; replace them with **current,
+provider-verified quotes**):
+
+```json
+{
+  "schema_version": 1,
+  "model_id": "provider/my-model",
+  "currency": "USD",
+  "source_url": "https://example.com/pricing",
+  "checked_at_utc": "2026-11-14T20:00:00+00:00",
+  "input_usd_per_million": "2.00",
+  "output_usd_per_million": "6.00",
+  "assumed_max_input_tokens": 5000,
+  "assumed_max_output_tokens": 1000,
+  "safety_multiplier": "2.0",
+  "planning_budget_usd": "1.00"
+}
+```
+
+Save this in a private, untracked file, then run:
+
+```sh
+python3 scripts/lan.py provider-budget --policy /private/model-pricing.json
+python3 scripts/lan.py providers add \
+  --url https://openrouter.ai/api/v1 \
+  --key-env YAG_POOL_KEY_1 --model provider/my-model \
+  --exclusive-models --pricing-policy /private/model-pricing.json
+```
+
+The second command configures YAG's existing **per-process request count
+ceiling** using the lower of any explicitly supplied
+`--max-requests-per-run` and the calculated allowance. It refuses
+multiple models, mismatched IDs, expired quotes, ambiguous currencies,
+malformed prices or unscoped HTTP endpoints. Never commit live provider
+keys or business-specific budget files.
+
+**Not a spend guarantee:** the gateway does not measure/bound actual
+input token counts, provider-side tools, caching, price changes or provider
+billing. Request ceilings reset when the Host restarts or its pool registry
+is edited. The operator must enforce real monetary limits in the **provider
+billing dashboard** and reconcile actual invoices. This feature provides
+price provenance and a conservative planning aid, not prepaid billing.
+
 ### Optional per-process request ceiling
 
 When adding or editing a provider, set `max_requests_per_run` to a positive

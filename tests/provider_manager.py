@@ -216,6 +216,8 @@ class ProviderManager(unittest.TestCase):
         code,_,body=request(self.port,"GET","/v1/models/managed-model")
         self.assertEqual(code,200,body)
         self.assertEqual(json.loads(body)["owned_by"],"yag-managed-provider")
+        self.assertTrue(json.loads(body)["yag_dedicated"])
+        self.assertFalse(json.loads(body)["yag_remote_https"])
         # The primary also advertises glm-test; dedicated ownership wins.
         code,_,body=request(self.port,"GET","/v1/models/glm-test")
         self.assertEqual(code,200,body)
@@ -243,6 +245,17 @@ class ProviderManager(unittest.TestCase):
                             {"model":"managed-model","messages":[]})
         self.assertEqual(code,502,body)
         self.assertNotIn(b"managed-replica",body)
+
+    def test_045b_external_https_models_advertise_egress(self):
+        entry={"url":"https://api.example.com/v1","key_env":"YAG_POOL_KEY_1",
+               "models":["external-model"],"exclusive_models":True,"enabled":True}
+        self.assertEqual(self.apply([entry])[0],200)
+        code,_,body=request(self.port,"GET","/v1/models/external-model")
+        self.assertEqual(code,200,body)
+        info=json.loads(body)
+        self.assertTrue(info["yag_dedicated"])
+        self.assertTrue(info["yag_remote_https"])
+        self.assertEqual(info["owned_by"],"yag-managed-provider")
 
     def test_046_dedicated_models_require_explicit_per_pc_scope(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",

@@ -19,6 +19,10 @@ struct AppState {
 #[derive(Serialize, Deserialize)]
 struct Model {
     id: String,
+    #[serde(default)]
+    yag_dedicated: bool,
+    #[serde(default)]
+    yag_remote_https: bool,
 }
 
 #[derive(Deserialize)]
@@ -403,6 +407,21 @@ mod tests {
         assert!(endpoint("https://user:password@example.com").is_err());
         assert!(endpoint("file:///etc/passwd").is_err());
         assert!(endpoint("https://example.com/?x=1").is_err());
+    }
+
+    #[test]
+    fn model_inventory_defaults_to_local_without_unverified_egress_hints() {
+        let legacy: ModelList = serde_json::from_str(
+            r#"{"data":[{"id":"local-model"}]}"#
+        ).unwrap();
+        assert!(!legacy.data[0].yag_remote_https);
+        assert!(!legacy.data[0].yag_dedicated);
+
+        let dedicated: ModelList = serde_json::from_str(
+            r#"{"data":[{"id":"cloud-model","yag_dedicated":true,"yag_remote_https":true}]}"#
+        ).unwrap();
+        assert!(dedicated.data[0].yag_remote_https);
+        assert!(dedicated.data[0].yag_dedicated);
     }
 
     #[test]

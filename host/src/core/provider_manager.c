@@ -448,6 +448,7 @@ static void probe_provider(int fd,yag_config *cfg,const char *body,size_t len) {
             curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);
             curl_easy_setopt(curl,CURLOPT_PROTOCOLS,CURLPROTO_HTTP|CURLPROTO_HTTPS);
             curl_easy_setopt(curl,CURLOPT_PROXY,"");
+            curl_easy_setopt(curl,CURLOPT_NOPROXY,"*");
             curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
             curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT_MS,1200L);
             curl_easy_setopt(curl,CURLOPT_TIMEOUT_MS,3000L);
