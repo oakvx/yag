@@ -22,6 +22,7 @@ from lan_bootstrap import main as bootstrap_main, private_lan_ipv4
 from lan_ops import configure_provider, encrypted_backup, provider_key
 from lan_recovery import inspect_backup
 from production_preflight import evaluate as security_preflight, require_live_tls
+from provider_budget import estimate as estimate_provider_budget
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / ".env.lan"
@@ -223,12 +224,15 @@ def main(argv=None):
                            help="Reserve declared IDs for this backend; never fall back to Ollama")
     providers.add_argument("--max-requests-per-run", type=int, default=0,
                            help="Maximum admitted requests for this backend per gateway run (0=off)")
+    providers.add_argument("--pricing-policy", help="Fresh operator-reviewed USD price assumptions for one dedicated HTTPS model")
     providers.add_argument("--max-inflight", type=int, default=0,
                            help="Replica concurrent inference limit (0=unlimited, max 32)")
     providers.add_argument("--vram-budget-mb", type=int, default=0,
                            help="Operator-estimated VRAM budget in MiB (0=disabled)")
     providers.add_argument("--vram-reservation-mb", type=int, default=0,
                            help="Operator-estimated VRAM per inference in MiB (0=disabled)")
+    budgeting = actions.add_parser("provider-budget", help="Preview conservative per-run request count (NOT spend enforcement)")
+    budgeting.add_argument("--policy", required=True, help="Operator-reviewed JSON model pricing assumptions")
     provider_keys = actions.add_parser("provider-key", help="Manage private BYOK aliases without typing keys in shell commands")
     provider_keys.add_argument("operation", choices=("list", "set", "clear"))
     provider_keys.add_argument("--alias", help="YAG_POOL_KEY_1 through YAG_POOL_KEY_8")
@@ -254,6 +258,9 @@ def main(argv=None):
             if args.managed_ollama:
                 options.append("--managed-ollama")
             return bootstrap_main(options)
+        if args.action == "provider-budget":
+            print(json.dumps(estimate_provider_budget(args.policy), sort_keys=True))
+            return 0
         # Recovery must work on a new machine before .env.lan exists.
         if args.action in ("backup-check", "backup-stage"):
             inspect_backup(args.archive, args.identity,
@@ -289,10 +296,23 @@ def main(argv=None):
             provider_key(ENV_PATH, args.operation, args.alias)
             return 0
         if args.action == "providers":
+            ceiling = args.max_requests_per_run
+            if args.pricing_policy:
+                if (args.operation != "add" or not args.url or not args.url.startswith("https://")
+                        or not args.exclusive_models or not args.replica_models
+                        or len(args.replica_models) != 1 or not args.key_env):
+                    raise SetupError("Pricing policy applies only to one dedicated HTTPS model with a key alias")
+                allowance = estimate_provider_budget(args.pricing_policy)
+                if allowance["model_id"] != args.replica_models[0]:
+                    raise SetupError("Price policy model ID must match the exact dedicated route")
+                recommended = allowance["suggested_max_requests_per_run"]
+                ceiling = min(ceiling,recommended) if ceiling else recommended
+                print("Applying conservative per-process request ceiling:", ceiling)
+                print("WARNING: This is not a financial spending limit; validate provider bills and per-request token use.")
             configure_provider(ENV_PATH, args.operation, args.url, args.key_env,
                                args.replica_models, args.max_inflight,
                                args.vram_budget_mb, args.vram_reservation_mb,
-                               args.exclusive_models, args.max_requests_per_run)
+                               args.exclusive_models, ceiling)
             return 0
         if args.action == "backup":
             require_docker(config)
