@@ -50,7 +50,11 @@ static int safe_url(const char *url) {
     int tls=!strncmp(url,"https://",8);
     if(!tls && strncmp(url,"http://",7))return 0;
     const char *host=url+(tls?8:7),*slash=strchr(host,'/');
-    if(!slash || strcmp(slash,"/v1"))return 0;
+    /* Explicit, documented OpenAI-compatible HTTPS API base paths.
+     * No arbitrary paths, userinfo, query or fragments are allowed. */
+    if(!slash || (strcmp(slash,"/v1") &&
+        (!tls || (strcmp(slash,"/api/v1") &&
+                  strcmp(slash,"/v1beta/openai")))))return 0;
     size_t n=(size_t)(slash-host);
     if(n==0 || n>253 || memchr(host,'@',n) || memchr(host,'[',n)
        || memchr(host,']',n))return 0;
