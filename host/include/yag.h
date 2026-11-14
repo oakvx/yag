@@ -6,6 +6,14 @@
 #include <time.h>
 #include <pthread.h>
 typedef struct {
+    unsigned long long vram_total_bytes,vram_used_bytes;
+    unsigned utilization_percent;
+    int has_vram,has_utilization;
+    const char *source;
+} yag_gpu_snapshot;
+int gpu_probe_primary(yag_gpu_snapshot *out);
+
+typedef struct {
     unsigned long attempts,successes,failures,bypassed,fallthroughs;
     unsigned long latency_ms;
     unsigned long long prompt_tokens, completion_tokens;
@@ -84,6 +92,11 @@ typedef struct {
     unsigned long key_rate_limited_requests[17];
     /* Bounded, fair per-credential inference admission control. */
     unsigned max_inference, max_per_key, queue_wait_ms;
+    /* Adaptive GPU admission: upper bound remains max_inference. */
+    unsigned adaptive_scheduler,adaptive_request_vram_mb,adaptive_margin_percent;
+    unsigned adaptive_effective_max,adaptive_sensor_available,adaptive_gpu_utilization;
+    unsigned long long adaptive_vram_total_bytes,adaptive_vram_used_bytes;
+    time_t adaptive_last_sample;
     unsigned inference_active, inference_waiting;
     unsigned inference_inflight[17];
     struct yag_waiter *inference_head, *inference_tail;
