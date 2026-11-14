@@ -89,6 +89,7 @@ and a gatekeeper. Boring on purpose: C17, libcurl, pthreads, vendored yyjson.
 
 - **One key in front of many backends** — a default upstream plus up to 16 exact-model routes, each with its own secret read from the environment. Pool replicas can optionally declare exact model allowlists.
 - **Credentials never leave the host.** The browser sees your gateway key; the upstream key stays server-side. Always.
+- **Dedicated provider permission is per PC.** Managed LAN keys need an explicit `inference+models+dedicated` scope for models reserved to cloud/backends; ordinary inference keys are denied (HTTP 403). This does not enforce a monetary budget or constrain unrestricted static/default routes.
 
 ## Architecture
 
