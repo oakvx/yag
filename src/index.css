@@ -59,11 +59,14 @@
   --category-y: 25.1vh;
   --selected-y: 46.1vh;
   --category-gap: 10.65vw;
-  --category-size: clamp(44px, 4.8vw, 132px);
-  --item-size: clamp(44px, 4.7vw, 126px);
+  /* The console's own proportions: a selected category mark at ~5.3% of the
+     width, a destination mark at ~5.7%, and its label at ~2.1%. Both axes
+     count, so a short window keeps the same relationships. */
+  --category-size: clamp(46px, min(5.3vw, 9vh), 132px);
+  --item-size: clamp(50px, min(5.7vw, 9.6vh), 132px);
   --item-step: 14.1vh;
-  --label-gap: 3.65vw;
-  --menu-font: clamp(16px, 1.36vw, 36px);
+  --label-gap: clamp(24px, 3.2vw, 80px);
+  --menu-font: clamp(18px, min(2.25vw, 3.9vh), 42px);
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -101,7 +104,7 @@
 .console-category-art { position: absolute; left: 50%; top: 0; display: block; width: var(--category-size); height: var(--category-size); transform: translate(-50%, -50%) scale(0.75); opacity: 0.58; filter: drop-shadow(0 2px 2px #0005); transition: transform 330ms ease, opacity 300ms ease, filter 300ms ease; }
 .console-category-art svg { width: 100%; height: 100%; }
 .console-category.is-selected .console-category-art { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 3px 2px #0005) drop-shadow(0 0 6px #d6f0ff26); }
-.console-category-label { position: absolute; top: calc(var(--category-size) * 0.65); left: 50%; transform: translateX(-50%); font: 400 clamp(12px, 1.02vw, 28px)/1.25 var(--font-sans); white-space: nowrap; opacity: 0; text-shadow: 0 1px 3px #0008; transition: opacity 240ms; }
+.console-category-label { position: absolute; top: calc(var(--category-size) * 0.65); left: 50%; transform: translateX(-50%); font: 400 clamp(14px, min(1.72vw, 2.9vh), 32px)/1.25 var(--font-sans); white-space: nowrap; opacity: 0; text-shadow: 0 1px 3px #0008; transition: opacity 240ms; }
 .console-category.is-selected .console-category-label { opacity: 0.96; }
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
@@ -110,10 +113,11 @@
 .console-destination-position.is-selected { opacity: 1; z-index: 3; }
 .console-destination-position.is-above:not(.is-selected) { opacity: 0.42; }
 .console-destination { position: relative; display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
-.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(0.73); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
+.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(0.66); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
 .console-item-art svg { display: block; width: 100%; height: 100%; }
 .console-destination-position.is-selected .console-item-art { transform: scale(1); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
 .console-item-label { font-size: var(--menu-font); font-weight: 400; line-height: 1.3; white-space: nowrap; text-shadow: 0 2px 3px #00112c88; transition: opacity 200ms ease; }
+.console-destination-position:not(.is-selected) .console-item-label { font-size: 0.78em; }
 .console-destination-position.is-selected .console-item-label { text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
 .console-external { display: inline-block; margin-left: 12px; font-size: 0.65em; opacity: 0.7; }
 .console-selection-light { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap) - 50px); top: calc(var(--item-size) * -0.45 + var(--selection-offset, 0) * var(--item-step)); width: min(710px, 55vw); height: calc(var(--item-size) * 0.9); pointer-events: none; background: linear-gradient(90deg, transparent, #ebf9ff0c 12%, #effaff09 55%, transparent); transition: top 350ms ease, opacity 200ms ease; }
@@ -122,7 +126,7 @@
 .console-selection-light::after { bottom: 0; }
 /* The selected row carries its own description, beside the label: the block can
    never land on the next destination, however long the text grows. */
-.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: min(34vw, 470px); pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(12.5px, 0.95vw, 25px); line-height: 1.5; text-shadow: 0 1px 3px #0008; }
+.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: min(34vw, 470px); pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(13px, min(1.18vw, 2vh), 26px); line-height: 1.5; text-shadow: 0 1px 3px #0008; }
 .console-description-lead { color: #d7e1ebc9; }
 .console-description-detail { color: #b4cbdcab; font-size: 0.9em; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
@@ -132,17 +136,17 @@
 @keyframes consoleItemsLeft { from { opacity: 0; margin-left: -18px; } to { opacity: 1; margin-left: 0; } }
 
 /* Original-style date strip, without a conventional site header. */
-.console-clock { position: absolute; z-index: 60; right: 5.7vw; top: 6.3vh; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: clamp(205px, 22.8vw, 600px); height: clamp(26px, 3.05vh, 48px); padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(13px, 1.08vw, 29px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
+.console-clock { position: absolute; z-index: 60; right: 5.7vw; top: 6.3vh; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: clamp(205px, 22.8vw, 600px); height: clamp(30px, min(5.2vh, 3.4vw), 56px); padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 32px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
 .console-clock svg { width: 0.95em; height: 0.95em; }
 .console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
-.console-wordmark { font-family: var(--font-xmb), sans-serif; font-size: clamp(19px, 1.72vw, 44px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
-.console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(10px, 0.7vw, 19px); color: #b3cadc9c; }
+.console-wordmark { font-family: var(--font-xmb), sans-serif; font-size: clamp(20px, min(2vw, 3.2vh), 46px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(11px, min(0.85vw, 1.4vh), 20px); color: #b3cadc9c; }
 .console-identity-caption > span { font-size: 0.92em; color: #b3cadc7d; }
 .console-sound { display: flex; align-items: center; gap: 6px; margin-left: 1.4vw; padding: 5px; border: 0; background: transparent; color: #b3cadc99; font-size: clamp(11px, 0.72vw, 19px); }
 .console-sound:hover { color: #edf6ff; }
 .console-sound svg { width: 1.4em; height: 1.4em; }
-.console-help { position: absolute; z-index: 20; right: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6c2; font-size: clamp(12px, 0.87vw, 23px); text-shadow: 0 1px 2px #0005; }
+.console-help { position: absolute; z-index: 20; right: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6c2; font-size: clamp(13px, min(1.15vw, 1.9vh), 26px); text-shadow: 0 1px 2px #0005; }
 .console-help button { display: inline-flex; align-items: center; gap: 0.35em; padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
 .console-help button:hover { color: white; }
 .console-help kbd, .console-app-back-hint kbd { font: inherit; }
@@ -329,8 +333,8 @@
   .console-environment { --category-size: 132px; --item-size: 126px; }
 }
 @media (max-width: 760px) {
-  .console-environment { --anchor-x: 23vw; --category-y: 25vh; --selected-y: 45vh; --category-gap: 23vw; --category-size: 46px; --item-size: 44px; --item-step: 13.7vh; --label-gap: 22px; --menu-font: 17px; }
-  .console-category-label { font-size: 11px; top: 32px; }
+  .console-environment { --anchor-x: 23vw; --category-y: 25vh; --selected-y: 45vh; --category-gap: 23vw; --category-size: 54px; --item-size: 52px; --item-step: 13.7vh; --label-gap: 22px; --menu-font: 19px; }
+  .console-category-label { font-size: 13px; top: 36px; }
   .console-clock { top: 4vh; right: 5vw; width: 47vw; height: 24px; font-size: 12px; }
   .console-destination-position { width: calc(100vw - var(--anchor-x) - 4vw + var(--item-size) / 2); }
   .console-item-label { white-space: normal; max-width: calc(100vw - var(--anchor-x) - 62px); }
@@ -364,8 +368,8 @@
   .console-help { display: none; }
 }
 @media (max-height: 480px) and (orientation: landscape) {
-  .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step: 18vh; --category-size: 38px; --item-size: 34px; --menu-font: 14px; }
-  .console-description { font-size: 11px; }
+  .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step: 18vh; --category-size: 42px; --item-size: 38px; --menu-font: 16px; }
+  .console-description { font-size: 12px; }
   .console-description-detail { display: none; }
   .console-help { bottom: 5vh; }
   .console-identity { bottom: 5vh; }
