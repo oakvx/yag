@@ -45,6 +45,12 @@ discovery, scoped client restrictions and that Caddy hides the local
 `/api/admin/*` paths, including from the administrator key. Use
 `--json` for a machine-readable secret-free checklist.
 
+**Paid provider isolation:** never configure a public HTTPS provider in
+`YAG_MODEL_ROUTES`. Static model routes bypass the managed provider
+`inference+models+dedicated` client scope and do not have the same
+per-backend request-count ceiling. Preflight now blocks these routes; use
+a managed dedicated backend instead.
+
 **Important:** preflight cannot inspect your router/firewall rules,
 verify the contents of a dynamic managed provider store, ensure a provider
 request ceiling is a monetary spending limit, or certify real model/GPU
