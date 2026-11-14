@@ -62,6 +62,7 @@ or encrypted-at-rest live secret vault.
 | --- | --- |
 | Multiple PCs | Two or more separate API keys work; revoked key is denied immediately |
 | Dedicated model scopes | Ordinary client key receives 403; explicitly privileged PC can invoke cloud; a live scope downgrade blocks new cloud requests |
+| Provider request ceilings | A dedicated provider with a per-run ceiling refuses further admissions without waiting; quota reset behavior on restart is understood |
 | Scheduler | Concurrent requests respect configured per-key, global and replica limits |
 | GPU | Utilization/VRAM are either measured and source-labeled or explicitly unavailable |
 | Network | Requests and streams survive normal load; cancellation frees inference slots |
