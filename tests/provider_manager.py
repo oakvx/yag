@@ -199,7 +199,7 @@ class ProviderManager(unittest.TestCase):
 
     def test_045_exclusive_cloud_models_discovered_and_never_fallback(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
-               "models":["managed-model"],"exclusive_models":True,"enabled":True}
+               "models":["managed-model","glm-test"],"exclusive_models":True,"enabled":True}
         self.assertEqual(self.apply([entry])[0],200)
         code,_,body=request(self.port,"GET","/v1/models")
         self.assertEqual(code,200,body)
@@ -209,6 +209,13 @@ class ProviderManager(unittest.TestCase):
         code,_,body=request(self.port,"GET","/v1/models/managed-model")
         self.assertEqual(code,200,body)
         self.assertEqual(json.loads(body)["owned_by"],"yag-managed-provider")
+        # The primary also advertises glm-test; dedicated ownership wins.
+        code,_,body=request(self.port,"GET","/v1/models/glm-test")
+        self.assertEqual(code,200,body)
+        self.assertEqual(json.loads(body)["owned_by"],"yag-managed-provider")
+        code,_,body=request(self.port,"GET","/v1/models")
+        self.assertEqual(code,200,body)
+        self.assertEqual(sum(m["id"]=="glm-test" for m in json.loads(body)["data"]),1)
         for _ in range(5):
             code,_,body=request(self.port,"POST","/v1/chat/completions",
                                 {"model":"managed-model","messages":[]})
@@ -224,6 +231,7 @@ class ProviderManager(unittest.TestCase):
         code,_,body=request(self.port,"GET","/v1/models")
         self.assertEqual(code,200,body)
         self.assertNotIn("managed-model",[m["id"] for m in json.loads(body)["data"]])
+        self.assertNotIn("glm-test",[m["id"] for m in json.loads(body)["data"]])
         code,_,body=request(self.port,"POST","/v1/chat/completions",
                             {"model":"managed-model","messages":[]})
         self.assertEqual(code,502,body)
