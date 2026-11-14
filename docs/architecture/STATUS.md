@@ -87,6 +87,11 @@ standalone, 4 MiB in the LAN profile, maximum 8 MiB).
 
 ## Not implemented
 
+- Operators can now configure `max_requests_per_run` (0 disables,
+  maximum 1,000,000) per managed backend. The admission counter is
+  process-local and reserves each request before upstream dispatch; it resets
+  after restart or live provider replacement. Exhaustion fails with HTTP 503
+  without waiting. It does **not** measure money or provide billing guarantees.
 - Managed providers can now reserve model IDs with `exclusive_models: true`.
   Those IDs are exposed through model discovery while the provider is enabled,
   and requests cannot fall back to the generic primary or non-dedicated

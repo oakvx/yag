@@ -151,6 +151,28 @@ class ResourcePool(unittest.TestCase):
             self.assertEqual(a.result(timeout=5)[0],200)
             self.assertEqual(b.result(timeout=5)[0],200)
 
+    def test_dedicated_request_ceiling_fails_immediately_and_resets_on_restart(self):
+        replica={"url":self.replica_url,"models":["slow"],
+                 "exclusive_models":True,"max_requests_per_run":2}
+        self.launch(replica,YAG_POOL_WAIT_MS="2500",
+                    YAG_FALLBACK_TO_DEFAULT="1")
+        self.assertEqual(self.post()[0],200)
+        self.assertEqual(self.post()[0],200)
+        pool=self.status()["data"][1]
+        self.assertEqual(pool["requests_reserved"],2)
+        self.assertEqual(pool["max_requests_per_run"],2)
+        start=time.monotonic()
+        code,_,body=self.post()
+        elapsed=time.monotonic()-start
+        self.assertEqual(code,503,body)
+        self.assertIn(b"resource_capacity",body)
+        # Quota exhaustion is not a transient slot/VRAM saturation.
+        self.assertLess(elapsed,1.5)
+        self.launch(replica,YAG_POOL_WAIT_MS="2500",
+                    YAG_FALLBACK_TO_DEFAULT="1")
+        self.assertEqual(self.status()["data"][1]["requests_reserved"],0)
+        self.assertEqual(self.post()[0],200)
+
     def test_bounded_wait_wakes_after_release(self):
         self.launch({"url":self.replica_url,"models":["not-slow"]},
                     YAG_POOL_WAIT_MS="1600")
@@ -194,6 +216,9 @@ class ResourcePool(unittest.TestCase):
             {"vram_reservation_mb":128},
             {"vram_budget_mb":100,"vram_reservation_mb":200},
             {"vram_budget_mb":262145,"vram_reservation_mb":1},
+            {"max_requests_per_run":-1},
+            {"max_requests_per_run":1000001},
+            {"max_requests_per_run":True},
         ]
         for policy in invalid:
             with self.subTest(policy=policy):

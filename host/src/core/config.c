@@ -42,6 +42,7 @@ static int load_pool(yag_config *cfg) {
         yyjson_val *models=yyjson_obj_get(entry,"models");
         yyjson_val *exclusive=yyjson_obj_get(entry,"exclusive_models");
         yyjson_val *max=yyjson_obj_get(entry,"max_inflight");
+        yyjson_val *ceiling=yyjson_obj_get(entry,"max_requests_per_run");
         yyjson_val *budget=yyjson_obj_get(entry,"vram_budget_mb");
         yyjson_val *reserve=yyjson_obj_get(entry,"vram_reservation_mb");
         unsigned mb=budget?(unsigned)yyjson_get_uint(budget):0;
@@ -57,12 +58,13 @@ static int load_pool(yag_config *cfg) {
             || (exclusive && (!yyjson_is_bool(exclusive) ||
                 (yyjson_get_bool(exclusive) && (!models || !yyjson_arr_size(models)))))
             || (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32))
+            || (ceiling && (!yyjson_is_uint(ceiling) || yyjson_get_uint(ceiling)>1000000))
             || (budget && (!yyjson_is_uint(budget) || yyjson_get_uint(budget)>262144))
             || (reserve && (!yyjson_is_uint(reserve) || yyjson_get_uint(reserve)>262144))
             || (!!mb!=!!mr) || (mr && mr>mb)
             || yyjson_obj_size(entry)!=(size_t)(1+(key?1:0)+(models?1:0)
                                            +(max?1:0)+(budget?1:0)+(reserve?1:0)
-                                           +(exclusive?1:0))
+                                           +(exclusive?1:0)+(ceiling?1:0))
             || !strcmp(yyjson_get_str(url),cfg->upstream)) {
             ok=0;break;
         }
@@ -104,6 +106,7 @@ static int load_pool(yag_config *cfg) {
         backend->priority=50;
         backend->exclusive_models=exclusive?yyjson_get_bool(exclusive):0;
         backend->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
+        backend->max_requests_per_run=ceiling?(unsigned)yyjson_get_uint(ceiling):0;
         backend->vram_budget_mb=mb;
         backend->vram_reservation_mb=mr;
         if(key)backend->key_env=strdup(yyjson_get_str(key));

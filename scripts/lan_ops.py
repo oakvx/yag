@@ -116,9 +116,11 @@ def validate_models(models):
     return models
 
 
-def validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb):
+def validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb,
+                             max_requests_per_run=0):
     for label, value, limit in (
         ("max_inflight", max_inflight, 32),
+        ("max_requests_per_run", max_requests_per_run, 1000000),
         ("vram_budget_mb", vram_budget_mb, 262144),
         ("vram_reservation_mb", vram_reservation_mb, 262144),
     ):
@@ -144,6 +146,7 @@ def read_pool(path):
             raise ValueError("Invalid pool entry")
         validate_backend(entry["url"])
         if set(entry) - {"url", "key_env", "models", "exclusive_models", "max_inflight",
+                         "max_requests_per_run",
                          "vram_budget_mb", "vram_reservation_mb"}:
             raise ValueError("Unknown replica configuration field")
         validate_models(entry.get("models"))
@@ -153,13 +156,14 @@ def read_pool(path):
             raise ValueError("Dedicated providers require model IDs")
         validate_resource_policy(entry.get("max_inflight", 0),
                                  entry.get("vram_budget_mb", 0),
-                                 entry.get("vram_reservation_mb", 0))
+                                 entry.get("vram_reservation_mb", 0),
+                                 entry.get("max_requests_per_run", 0))
     return pool
 
 
 def configure_provider(path, action, url=None, key_env=None, models=None,
                        max_inflight=0, vram_budget_mb=0, vram_reservation_mb=0,
-                       exclusive_models=False):
+                       exclusive_models=False, max_requests_per_run=0):
     pool = read_pool(path)
     if action == "list":
         for index, entry in enumerate(pool, 1):
@@ -169,6 +173,7 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
                   (" (models: " + ", ".join(entry["models"]) + ")"
                    if entry.get("models") else " (unrestricted models)") +
                   " (max-inflight: " + str(entry.get("max_inflight", 0)) +
+                  ", request ceiling/run: " + str(entry.get("max_requests_per_run", 0)) +
                   ", VRAM: " + str(entry.get("vram_reservation_mb", 0)) +
                   "/" + str(entry.get("vram_budget_mb", 0)) + " MiB)")
         if not pool:
@@ -178,10 +183,12 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
     if action != "add" and models is not None:
         raise ValueError("Model allowlist is supported only when adding a replica")
     models = validate_models(models)
-    validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb)
+    validate_resource_policy(max_inflight, vram_budget_mb, vram_reservation_mb,
+                             max_requests_per_run)
     if exclusive_models and (action != "add" or not models):
         raise ValueError("Dedicated routing requires adding explicit model IDs")
-    if action != "add" and (max_inflight or vram_budget_mb or vram_reservation_mb):
+    if action != "add" and (max_inflight or vram_budget_mb or vram_reservation_mb
+                                or max_requests_per_run):
         raise ValueError("Resource policy changes require adding a replica")
     _, env = read_entries(path)
     if action == "add":
@@ -190,6 +197,8 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
         entry = {"url": url}
         if max_inflight:
             entry["max_inflight"] = max_inflight
+        if max_requests_per_run:
+            entry["max_requests_per_run"] = max_requests_per_run
         if vram_budget_mb:
             entry["vram_budget_mb"] = vram_budget_mb
             entry["vram_reservation_mb"] = vram_reservation_mb
