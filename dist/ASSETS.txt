@@ -11,6 +11,15 @@ XMB TYPEFACE
   public/fonts/SCE-PS3-Rodin-LATIN.woff2
   public/fonts/SCE-PS3-Rodin-LATIN.ttf
 
+XMB ICONS (optional; the built-in vector set is used when a slot is empty)
+  public/icons/xmb/home.svg          category and item glyphs, named after the
+  public/icons/xmb/gateway.svg        icon key (home, explore, protocols,
+                                     engineering, operations, project, gateway,
+                                     information, connections, topology, trace,
+                                     protocol, routing, source, shield, status,
+                                     download, configuration, monitor,
+                                     quickstart, user, link, contribute, profile)
+
 AUDIO (all optional; missing files are skipped without console errors)
   public/audio/start.mp3         boot chime / startup tone
   public/audio/cursor.mp3        cursor navigation tick
@@ -20,4 +29,6 @@ AUDIO (all optional; missing files are skipped without console errors)
 
 Use only media you have the rights to deploy. The referenced PlayStation 3
 system sounds and PS4 logo typeface are copyrighted third-party assets; this
-repository intentionally ships neither.
+repository intentionally ships neither. The XMB icon artwork shipped in
+src/xmb/xmbIcons.ts comes from an MIT-licensed community pack and is credited
+in third_party/xmb-icons.

@@ -195,6 +195,10 @@ yyjson 0.12.0 is vendored under `third_party/yyjson` with its license.
 The Console build is optional — API-only users can skip it. Generated assets are not
 committed; `YAG_ASSETS` defaults to `console/dist` relative to the Host's working directory.
 
+The Console's XMB category and item artwork comes from an MIT-licensed community
+pack of XMB icons, converted to vector outlines for this repository. Provenance and
+the conversion steps are recorded in `third_party/xmb-icons`.
+
 ## Run
 
 Start an OpenAI-compatible server first. Say it lives at `http://127.0.0.1:8000/v1`:
