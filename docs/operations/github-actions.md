@@ -30,6 +30,8 @@ The automated weekly packaging run **does not create tags or publish stable
 releases**. Build artifacts expire after 14 days. The Desktop packages are
 currently **unsigned**, so macOS/Windows can display trust warnings.
 
+For first-release candidate qualification choose `release_candidate=true` together with `protocol=all`, `stream=true` and `tools=true`. The workflow validates a metadata-only report against the exact commit and measured GPU inventory. The gate does not authenticate the runner or independently certify the selected model. See [first-release acceptance](first-release.md).
+
 ## Set up Colibri for real-model qualification
 
 Only do this if Colibri runs Linux and you control the hardware. Set up a

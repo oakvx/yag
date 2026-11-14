@@ -150,9 +150,25 @@ async function main() {
 main().catch(error => {
   console.error('Console browser regression FAILED:', error.message)
   process.exitCode = 1
-}).finally(() => {
+}).finally(async () => {
   socket?.close()
   chrome?.kill()
   server?.kill()
-  rmSync(userData, {recursive:true, force:true})
+  // Wait for Chromium to stop writing its temporary profile. Without this
+  // synchronization a passing smoke test can randomly fail with ENOTEMPTY.
+  if (chrome && chrome.exitCode === null && chrome.signalCode === null) {
+    await Promise.race([
+      new Promise(resolve => chrome.once('exit', resolve)),
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ])
+  }
+  try {
+    rmSync(userData, {recursive:true, force:true, maxRetries:10, retryDelay:200})
+  } catch (error) {
+    // A reparented Chrome helper can briefly recreate a profile entry even
+    // after the browser process exits. Do not fail a successful UI assertion
+    // due to an OS temporary-directory race on the ephemeral CI runner.
+    if (!['ENOTEMPTY', 'EBUSY', 'EPERM'].includes(error.code)) throw error
+    console.warn('Chromium profile cleanup deferred to temporary-directory GC')
+  }
 })

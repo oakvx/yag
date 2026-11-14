@@ -15,6 +15,21 @@ be started manually from GitHub Actions. These runs upload downloadable
 **workflow artifacts**, retained for 14 days. They do **not** create tags or
 publish releases automatically.
 
+## Release candidates versus stable publication
+
+For the first public release, use a reviewed prerelease tag such as
+`v0.1.0-rc.1`. The GitHub workflow marks it **prerelease** and does not make
+it the latest stable version. The CMake Host uses the numeric core of the
+version, while Desktop packaging keeps the full prerelease suffix.
+
+A plain stable tag requires explicit repository approval via
+`YAG_STABLE_RELEASE_APPROVED=true`, and should be protected by required
+reviewers on the `production-release` GitHub Environment. Approval is
+the operator's responsibility and must follow real Colibri qualification,
+security review and recovery rehearsal; it is **not** automatically proven by
+a GitHub-hosted CI run. See
+[first-release acceptance](../operations/first-release.md).
+
 ## Publish a versioned GitHub Release
 
 Tag a reviewed and tested commit with `vMAJOR.MINOR.PATCH`:

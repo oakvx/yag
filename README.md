@@ -51,6 +51,8 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 
 ---
 
+For a first public candidate, follow the [first-release acceptance procedure](docs/operations/first-release.md). A packaged installer is not proof of real Colibri model compatibility or production security.
+
 ## GitHub Actions automation
 
 GitHub Actions now tests Host, Console and Desktop; performs scheduled

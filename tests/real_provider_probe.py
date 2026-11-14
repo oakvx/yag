@@ -6,7 +6,9 @@ YAG_REAL_UPSTREAM_URL and YAG_REAL_MODEL must be provided. Calls may cost money.
 No model output, prompt, credentials or provider URLs are written to logs.
 """
 import argparse
+import datetime
 import hashlib
+import platform
 import json
 import os
 import re
@@ -21,6 +23,39 @@ from urllib.request import ProxyHandler, build_opener
 
 from live_model import exercise
 
+def _runtime_metadata():
+    """Public, non-unique runtime characteristics: never hostnames or serials."""
+    result = {
+        'os': platform.system().lower(),
+        'architecture': platform.machine().lower(),
+        'gpu': None,
+        'ollama_cli_version': None,
+    }
+    def capture(argv, limit=140):
+        try:
+            completed = subprocess.run(argv, capture_output=True, text=True,
+                                       timeout=3, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        value = completed.stdout.strip().splitlines()
+        if completed.returncode or not value:
+            return None
+        first = value[0][:limit]
+        return first if re.fullmatch(r'[A-Za-z0-9 .,:;_+()/-]+', first) else None
+    result['ollama_cli_version'] = capture(['ollama', '--version'])
+    line = capture(['nvidia-smi','--query-gpu=name,driver_version,memory.total',
+                    '--format=csv,noheader,nounits'])
+    if line:
+        parts = [part.strip() for part in line.split(',')]
+        if len(parts) == 3 and re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', parts[1]) and parts[2].isdigit():
+            result['gpu'] = {
+                'name': parts[0],
+                'driver_version': parts[1],
+                'memory_total_mib': int(parts[2]),
+                'source': 'nvidia-smi'
+            }
+    return result
+
 def write_report(path,model,selected,tools,stream,results,success):
     """Write metadata-only evidence, never secrets, URLs, prompts or model text.
 
@@ -29,7 +64,10 @@ def write_report(path,model,selected,tools,stream,results,success):
     """
     sha=os.environ.get('GITHUB_SHA','')
     report={
-        'schema_version':1,
+        'schema_version':2,
+        'source':'real_upstream_gateway_probe',
+        'measured_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        'runtime':_runtime_metadata(),
         'model_id_sha256':hashlib.sha256(model.encode('utf-8')).hexdigest(),
         'gateway_commit':sha if re.fullmatch(r'[a-fA-F0-9]{40}',sha) else None,
         'protocol_selection':selected,

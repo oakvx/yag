@@ -24,6 +24,10 @@ on:
         description: "Require real function-tool selection and result replay (model must support tools)"
         type: boolean
         default: false
+      release_candidate:
+        description: "Also require all protocols, tools, streams and NVIDIA GPU evidence for release candidacy"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -76,6 +80,12 @@ jobs:
           if [[ "$YAG_QUALIFICATION_STREAM" == true ]]; then args+=(--stream); fi
           if [[ "$YAG_QUALIFICATION_TOOLS" == true ]]; then args+=(--tools); fi
           python3 tests/real_provider_probe.py "${args[@]}"
+      - name: Reject incomplete release-candidate qualification
+        if: inputs.release_candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release_gate.py --evidence qualification.json --commit "$GITHUB_SHA"
       - name: Upload redacted real-model qualification evidence
         if: always()
         uses: actions/upload-artifact@v7
