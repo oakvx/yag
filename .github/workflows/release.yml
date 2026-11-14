@@ -200,10 +200,30 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  attest:
+    name: Attest reviewed tag package provenance
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [verify-assets]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: yag-release-packages
+          path: release-assets
+      - name: Generate signed Sigstore build provenance attestations
+        uses: actions/attest@v4
+        with:
+          subject-path: 'release-assets/*'
+
   release:
     name: Publish reviewed tag
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [verify-assets]
+    needs: [verify-assets, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -216,7 +236,7 @@ jobs:
         with:
           name: yag-release-packages
           path: release-assets
-      - name: Publish reviewed tag assets (installers currently unsigned)
+      - name: Publish reviewed tag assets (installers unsigned, build provenance attested)
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

@@ -20,6 +20,12 @@ The GitHub Dependency Review API is not enabled on this repository; the
 security workflow instead performs package-manager audits directly on its
 runners. To add GitHub's native PR dependency review later, enable
 Dependency Graph in repository security settings.
+Tagged releases now require a separate signed provenance attestation
+job for every verified Host/Desktop artifact. If Sigstore or GitHub
+attestation storage is unavailable, the release-publishing job remains
+blocked. No long-lived publisher certificate is used for provenance;
+Windows/macOS installers remain **unsigned by their operating systems**.
+
 The automated weekly packaging run **does not create tags or publish stable
 releases**. Build artifacts expire after 14 days. The Desktop packages are
 currently **unsigned**, so macOS/Windows can display trust warnings.
