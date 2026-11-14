@@ -131,6 +131,26 @@ static int add_gpu_sysfs(yyjson_mut_doc *d,yyjson_mut_val *gpu,int *count) {
         if(!ok || !yyjson_mut_arr_add_val(devices,device))return 0;
         (*count)++;
     }
+    if(!*count) {
+        /* NVIDIA generally does not publish DRM counters. NVML is loaded
+         * optionally at runtime, without shipping vendor headers or libs. */
+        yag_gpu_snapshot sample={0};
+        if(gpu_probe_primary(&sample)) {
+            yyjson_mut_val *device=yyjson_mut_obj(d);
+            int ok=device && yyjson_mut_obj_add_str(d,device,"id","gpu0");
+            if(ok && sample.has_utilization)
+                ok=yyjson_mut_obj_add_uint(d,device,"utilization_percent",
+                    sample.utilization_percent);
+            if(ok && sample.has_vram)
+                ok=yyjson_mut_obj_add_uint(d,device,"vram_total_bytes",
+                    sample.vram_total_bytes)
+                && yyjson_mut_obj_add_uint(d,device,"vram_used_bytes",
+                    sample.vram_used_bytes);
+            if(!ok || !yyjson_mut_arr_add_val(devices,device))return 0;
+            *count=1;
+            return yyjson_mut_obj_add_str(d,gpu,"scope",sample.source);
+        }
+    }
     return yyjson_mut_obj_add_str(d,gpu,"scope","visible_linux_drm_sysfs");
 }
 
