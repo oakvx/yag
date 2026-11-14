@@ -229,6 +229,29 @@ class ProviderManager(unittest.TestCase):
         self.assertEqual(code,502,body)
         self.assertNotIn(b"managed-replica",body)
 
+    def test_047_cloud_models_survive_primary_discovery_outage(self):
+        entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
+               "models":["managed-model"],"exclusive_models":True,"enabled":True}
+        self.assertEqual(self.apply([entry])[0],200)
+        cls=type(self)
+        old=cls.env["YAG_UPSTREAM_URL"]
+        cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
+        try:
+            cls.env["YAG_UPSTREAM_URL"]="http://127.0.0.1:1/v1"
+            cls.launch()
+            code,_,body=request(self.port,"GET","/v1/models")
+            self.assertEqual(code,200,body)
+            self.assertIn("managed-model",[m["id"] for m in json.loads(body)["data"]])
+            code,_,body=request(self.port,"POST","/v1/chat/completions",
+                                {"model":"managed-model","messages":[]})
+            self.assertEqual(code,200,body)
+            self.assertEqual(json.loads(body)["source"],"managed-replica")
+        finally:
+            if cls.proc.poll() is None:
+                cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
+            cls.env["YAG_UPSTREAM_URL"]=old
+            cls.launch()
+
     def test_05_restart_restores_managed_pool(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
                "models":["managed-model"],"enabled":True,"priority":33}
