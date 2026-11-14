@@ -113,6 +113,10 @@ static int load_pool(yag_config *cfg) {
             backend->models[j]=strdup(yyjson_get_str(yyjson_arr_get(models,j)));
             if(!backend->models[j]){ok=0;break;}
             backend->model_count++;
+            if(backend->exclusive_models)
+                for(size_t r=0;r<cfg->route_count;r++)
+                    if(!strcmp(backend->models[j],cfg->routes[r].model))ok=0;
+            if(!ok)break;
         }
         if(!ok)break;
     }
