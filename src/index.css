@@ -138,6 +138,39 @@
 /* Original-style date strip, without a conventional site header. */
 .console-clock { position: absolute; z-index: 60; right: 5.7vw; top: 6.3vh; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: clamp(205px, 22.8vw, 600px); height: clamp(30px, min(5.2vh, 3.4vw), 56px); padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 32px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
 .console-clock svg { width: 0.95em; height: 0.95em; }
+/* The notification column: the hardware keeps a circular information button
+   in the top right corner, and pressing it slides the pending items in from
+   the edge. Here the pending items are the repository's own commits. */
+.console-notice-toggle { position: absolute; z-index: 63; right: 5.7vw; top: 1.1vh; width: 3.9vh; height: 3.9vh; min-width: 26px; min-height: 26px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #dcecf8c4; opacity: 0.82; cursor: pointer; transition: color 200ms ease, opacity 200ms ease, transform 240ms ease; }
+.console-notice-toggle svg { width: 100%; height: 100%; }
+.console-notice-toggle:hover { color: #fff; opacity: 1; }
+.console-notice-toggle[data-open="true"] { color: #fff; opacity: 1; }
+.console-notice-dot { position: absolute; top: 2%; right: 2%; width: 20%; height: 20%; border-radius: 50%; background: #c6e9ff; box-shadow: 0 0 7px #9fd8ff9e; transition: opacity 200ms ease; }
+.console-notice-toggle[data-open="true"] .console-notice-dot { opacity: 0; }
+.console-notice-panel { position: absolute; z-index: 62; top: 0; right: 0; bottom: 0; width: min(430px, 33vw); display: flex; flex-direction: column; padding-bottom: 2vh; background: linear-gradient(180deg, #061a30f2, #04101ff0 62%, #030c18f7); border-left: 1px solid #cfe9ff2b; box-shadow: -34px 0 80px #0000005c, inset 1px 0 0 #dff2ff12; backdrop-filter: blur(7px); opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(102%); transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, visibility 0s 420ms; }
+.console-notice-panel[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease; }
+.console-notice-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 4.6vh 22px 13px; border-bottom: 1px solid #cfe9ff1f; }
+.console-notice-title { font-size: clamp(12px, min(1.12vw, 1.9vh), 24px); letter-spacing: 0.16em; text-transform: uppercase; color: #eaf4ff; }
+.console-notice-count { font-size: clamp(9.5px, min(0.76vw, 1.28vh), 16px); letter-spacing: 0.1em; color: #9fbdd4b3; }
+.console-notice-list { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 0; list-style: none; }
+.console-notice-item { border-bottom: 1px solid #cfe9ff14; }
+.console-notice-item[data-fresh="true"] { background: linear-gradient(90deg, #bfe6ff12, transparent 72%); }
+.console-notice-link { display: flex; align-items: flex-start; gap: 12px; padding: 11px 22px; color: #dbe9f6; text-decoration: none; transition: background 180ms ease, color 180ms ease; }
+.console-notice-link:hover { background: #bfe6ff14; color: #fff; }
+.console-notice-link:focus-visible { outline-offset: -2px; }
+.console-notice-mark { flex: none; width: 22px; height: 22px; color: #9fd0ea; opacity: 0.85; }
+.console-notice-mark svg { width: 100%; height: 100%; }
+.console-notice-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.console-notice-subject { font-size: clamp(11.5px, min(1vw, 1.65vh), 21px); line-height: 1.35; }
+.console-notice-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: clamp(9.5px, min(0.72vw, 1.2vh), 15px); letter-spacing: 0.04em; color: #8fb0c6b3; }
+.console-notice-sha { font-family: var(--font-mono); color: #a8cbe2b8; }
+.console-notice-foot { padding: 11px 22px 0; border-top: 1px solid #cfe9ff1f; }
+.console-notice-foot a { font-size: clamp(10px, min(0.8vw, 1.35vh), 16px); letter-spacing: 0.08em; color: #a9c8de; text-decoration: none; }
+.console-notice-foot a:hover { color: #fff; }
+/* The column takes the screen: the menu behind it steps back, the way the
+   hardware pulls the crossbar aside when a panel slides over it. */
+.console-environment[data-notices="open"] .console-menu { opacity: 0.26; }
+
 .console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
 .console-wordmark { font-family: var(--font-xmb), sans-serif; font-size: clamp(20px, min(2vw, 3.2vh), 46px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
@@ -175,7 +208,7 @@
 @keyframes consoleContentIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 
 /* The XMB uses one regular font weight. Application content keeps its own fonts. */
-:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-toggle, .console-notice-panel) {
   font-family: "SCE-PS3 Rodin LATIN", "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   font-synthesis: none;
   font-style: normal;
@@ -183,7 +216,7 @@
   -webkit-font-smoothing: antialiased;
   text-shadow: 0 1px 3px #0008;
 }
-:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel) :is(button, a, span, p, time, input) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel, .console-notice-panel, .console-notice-toggle) :is(button, a, span, p, time, input) {
   font-family: inherit;
   font-synthesis: none;
   font-style: normal;
@@ -220,10 +253,10 @@
 }
 @keyframes bootMenuIn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: scale(1); } }
 @keyframes bootChromeIn { from { opacity: 0; } to { opacity: 1; } }
-.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application) { opacity: 0 !important; visibility: hidden !important; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application, .console-notice-toggle, .console-notice-panel) { opacity: 0 !important; visibility: hidden !important; }
 .console-environment[data-boot="handoff"] .console-menu[data-hidden="false"] { animation: bootMenuIn 1.4s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
-.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application) { animation: bootChromeIn 1.4s ease both; }
-.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application) { animation-duration: 0.35s; }
+.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application, .console-notice-toggle) { animation: bootChromeIn 1.4s ease both; }
+.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application, .console-notice-toggle) { animation-duration: 0.35s; }
 
 /* Separate music/effects controls; the trigger also supports a long press to replay. */
 .console-audio { position: relative; }
@@ -348,6 +381,10 @@
   .console-sound > span { display: none; }
   .console-help { right: 6vw; bottom: 11vh; font-size: 11px; gap: 1.1em; }
   .console-help-arrows { font-size: 14px; }
+  .console-notice-panel { width: min(100%, 430px); }
+  .console-notice-toggle { right: 5vw; top: 1.4vh; width: 32px; height: 32px; }
+  .console-notice-head { padding: 3.4vh 52px 11px 18px; }
+  .console-notice-link { padding: 10px 18px; }
   .console-application { padding: 3vh 4vw 0; }
   .console-application-header { height: 95px; padding-right: 0; padding-top: 30px; gap: 12px; }
   .console-application-header h2 { font-size: 15px; }

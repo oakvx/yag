@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/console-commits.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/console-commits.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },
