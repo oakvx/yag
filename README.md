@@ -51,6 +51,18 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 
 ---
 
+## YAG Desktop (optional)
+
+Need a client rather than an SDK? [YAG Desktop](desktop/README.md) provides a native
+Windows/macOS/Linux chat workspace for remote models served by your YAG Host.
+Each user connects to the HTTPS LAN gateway with a scoped client API key.
+The client does **not** run the models or require Ollama locally; streaming,
+model selection and cancellation are supported. IDEs and scripts can keep
+using the HTTP API directly.
+
+Cloud provider BYOK (Gemini, OpenAI and others) is a future **host-side**
+feature, not part of the initial Desktop client.
+
 ## The idea
 
 You run OpenAI-compatible servers. Clients speak OpenAI, Responses, or Anthropic.
