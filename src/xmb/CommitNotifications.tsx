@@ -1,34 +1,24 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { COMMIT_NOTICES } from "@/data/commits.generated";
 import { REPO_LINKS } from "@/data/repository";
-import type { GlyphName, ItemIcon } from "./categories";
 import { ConsoleIcon } from "./ConsoleIcons";
 import { blip } from "./audio";
 
 /**
- * The console's notification column.
+ * The console's notification list.
  *
- * On the hardware the XMB keeps a circular information button in the top right
- * corner; pressing it slides a column of pending notifications in from the
- * right edge. Here the pending items are the repository's own commits: the
- * history that produced this build, read once at build time so the page stays
- * a static document with no runtime calls.
+ * Laid out like the hardware's Settings submenu: no panel, just a list
+ * floating over the waves. Every entry is a hollow circle and its subject;
+ * the selected entry — the one under the cursor — stands larger and brighter,
+ * carries its value (how long ago) to the right of the subject and its
+ * description (author, short hash, kind) underneath it, the way a setting
+ * shows "Off" and its explanation. Entries away from the selection fade
+ * with the distance, as they do on the hardware.
+ *
+ * The pending items are the repository's own commits: the history that
+ * produced this build, read once at build time so the page stays a static
+ * document with no runtime calls.
  */
-
-/** The mark that describes a commit in the column. */
-const MARKS: Record<string, GlyphName | ItemIcon> = {
-  feat: "protocols",
-  fix: "shield",
-  docs: "contribute",
-  ci: "operations",
-  test: "status",
-  perf: "trace",
-  build: "download",
-  merge: "source",
-  chore: "monitor",
-  revert: "configuration",
-  other: "gateway",
-};
 
 /** Console time, the way the hardware abbreviates it. */
 function elapsed(iso: string, now: number): string {
@@ -51,7 +41,7 @@ export function CommitNotifications({
   open,
   onOpenChange,
 }: {
-  /** The menu is on screen; a section that opens takes the column with it. */
+  /** The menu is on screen; a section that opens takes the list with it. */
   active: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,13 +49,26 @@ export function CommitNotifications({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const wasActive = useRef(active);
+  // The keyboard cursor: the entry the list is anchored on. Hovering does
+  // not move it — the highlight travels to the hovered entry instead, so
+  // the rows stay put under the pointer, as in the main menu.
+  const [cursor, setCursor] = useState(0);
+  const [hover, setHover] = useState<{ anchor: number; index: number } | null>(null);
   const now = Date.now();
 
-  // Opening a section takes the column with it; it can be summoned again.
+  // Opening a section takes the list with it; it can be summoned again.
   useEffect(() => {
     if (wasActive.current && !active) onOpenChange(false);
     wasActive.current = active;
   }, [active, onOpenChange]);
+
+  // Every summoning starts on the newest commit, as the hardware does.
+  useEffect(() => {
+    if (open) {
+      setCursor(0);
+      setHover(null);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,19 +82,28 @@ export function CommitNotifications({
       if (!e.key.startsWith("Arrow") && e.key !== "Home" && e.key !== "End") return;
       const rows = Array.from(listRef.current?.querySelectorAll<HTMLAnchorElement>(".console-notice-link") ?? []);
       if (rows.length === 0) return;
-      // The column takes the arrows while it is open; the menu keeps its cursor.
+      // The list takes the arrows while it is open; the menu keeps its cursor.
       e.preventDefault();
       const at = rows.indexOf(document.activeElement as HTMLAnchorElement);
       const next = e.key === "ArrowDown" ? at + 1 : e.key === "ArrowUp" ? at - 1 : e.key === "Home" ? 0 : rows.length - 1;
-      rows[Math.max(0, Math.min(rows.length - 1, next))]?.focus({ preventScroll: true });
+      const clamped = Math.max(0, Math.min(rows.length - 1, next));
+      setHover(null);
+      setCursor(clamped);
+      rows[clamped]?.focus({ preventScroll: true });
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
+  }, [open, onOpenChange]);
 
   const toggle = () => {
     blip(open ? "back" : "select");
     onOpenChange(!open);
+  };
+
+  const close = () => {
+    blip("back");
+    onOpenChange(false);
+    toggleRef.current?.focus({ preventScroll: true });
   };
 
   const count = COMMIT_NOTICES.length;
@@ -126,37 +138,74 @@ export function CommitNotifications({
         aria-hidden={!open}
         inert={!open}
       >
-        <header className="console-notice-head">
-          <span className="console-notice-title">Notifications</span>
-          <span className="console-notice-count">{count} commits</span>
-        </header>
-        <ul className="console-notice-list" ref={listRef}>
-          {COMMIT_NOTICES.map((commit, index) => (
-            <li key={commit.sha} className="console-notice-item" data-fresh={index === 0 ? "true" : undefined}>
-              <a
-                className="console-notice-link"
-                href={`${REPO_LINKS.repo}/commit/${commit.sha}`}
-                target="_blank"
-                rel="noreferrer noopener"
+        {/* The section mark: the large icon sits level with the selected
+            entry, with the back chevron beside it, as on the hardware. */}
+        <div className="console-notice-rail">
+          <button
+            type="button"
+            className="console-notice-back"
+            aria-label="Close notifications"
+            tabIndex={open ? 0 : -1}
+            onClick={close}
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <span className="console-notice-rail-icon">
+            <ConsoleIcon name="information" />
+          </span>
+        </div>
+
+        <ul className="console-notice-list" ref={listRef} onMouseLeave={() => setHover(null)}>
+          {COMMIT_NOTICES.map((commit, index) => {
+            // While hovering, the rows keep the anchor they had when the
+            // pointer arrived; only the highlight moves. Otherwise the
+            // cursor entry sits on the anchor line, as on the hardware.
+            const anchor = hover?.anchor ?? cursor;
+            const highlighted = hover?.index ?? cursor;
+            const offset = index - anchor;
+            const on = index === highlighted;
+            const distance = Math.abs(index - highlighted);
+            // Entries fade with their distance from the selection, the way
+            // the hardware's list dissolves toward the edges of the screen.
+            const opacity = on ? 1 : Math.max(0.16, 0.78 - distance * 0.17);
+            return (
+              <li
+                key={commit.sha}
+                className={on ? "console-notice-item is-selected" : "console-notice-item"}
+                data-fresh={index === 0 ? "true" : undefined}
+                style={{ "--notice-offset": offset, opacity } as CSSProperties}
               >
-                <span className="console-notice-mark" aria-hidden="true">
-                  <ConsoleIcon name={MARKS[commit.kind] ?? "gateway"} tone="current" />
-                </span>
-                <span className="console-notice-body">
-                  <span className="console-notice-subject">{commit.subject}</span>
-                  <span className="console-notice-meta">
-                    <span className="console-notice-sha">{commit.short}</span>
-                    <span>{commit.author}</span>
-                    <span>{elapsed(commit.date, now)}</span>
+                <a
+                  className="console-notice-link"
+                  href={`${REPO_LINKS.repo}/commit/${commit.sha}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  aria-label={`${commit.subject}. ${commit.author}, ${commit.short}, ${elapsed(commit.date, now)} ago.`}
+                  aria-current={on ? "true" : undefined}
+                  onMouseEnter={() => setHover((h) => ({ anchor: h?.anchor ?? cursor, index }))}
+                  onFocus={() => { setHover(null); setCursor(index); }}
+                >
+                  <span className="console-notice-bullet" aria-hidden="true" />
+                  <span className="console-notice-body">
+                    <span className="console-notice-top">
+                      <span className="console-notice-subject">{commit.subject}</span>
+                      <span className="console-notice-value">{elapsed(commit.date, now)}</span>
+                    </span>
+                    {on && (
+                      <span className="console-notice-detail">
+                        {commit.author} · <span className="console-notice-sha">{commit.short}</span> · {commit.kind}
+                      </span>
+                    )}
                   </span>
-                </span>
-              </a>
-            </li>
-          ))}
+                </a>
+              </li>
+            );
+          })}
         </ul>
+
         <footer className="console-notice-foot">
           <a href={`${REPO_LINKS.repo}/commits`} target="_blank" rel="noreferrer noopener">
-            Full history on GitHub
+            Full history on GitHub ↗
           </a>
         </footer>
       </aside>
