@@ -451,6 +451,18 @@ async function discoverHosts() {
   } finally { button.disabled = false }
 }
 
+el('checkUpdates').addEventListener('click', async () => {
+  const button = el('checkUpdates')
+  button.disabled = true
+  el('updateStatus').textContent = 'Checking published GitHub Releases…'
+  try {
+    const release = await invoke('check_updates')
+    el('updateStatus').textContent = 'Installed: ' + release.current +
+      ' · Latest release: ' + release.latest + ' · ' + release.url
+  } catch (error) {
+    el('updateStatus').textContent = String(error)
+  } finally { button.disabled = false }
+})
 el('settingsButton').addEventListener('click', openSettings)
 el('closeSettingsButton').addEventListener('click', closeSettings)
 el('settingsDialog').addEventListener('click', event => {
