@@ -14,7 +14,7 @@ type ResourceMetrics = {
   memory: {available: boolean;scope: string;used_bytes?: number;limit_bytes?: number;visible_host_total_bytes?: number;visible_host_available_bytes?: number;visible_host_scope?: string}
   gpu: {available: boolean;scope?: string;devices?: {id:string;utilization_percent?:number;vram_used_bytes?:number;vram_total_bytes?:number;temperature_c?:number}[]}
 }
-type Scheduler = {max_inference:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
+type Scheduler = {max_inference:number;effective_max_inference?:number;admission_mode?:'adaptive'|'static';gpu_sensor_available?:boolean;gpu_request_vram_mb?:number;gpu_margin_percent?:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
 type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
 type ProviderConfig = {index:number;url:string;key_env:string;models:string[];priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
@@ -384,7 +384,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <p>Bounded FIFO queue with per-client and global concurrency limits.</p></div></div>
         <div className="setting-row"><div><b>Running requests</b></div><b>{scheduler?.active ?? '—'}</b></div>
         <div className="setting-row"><div><b>Waiting in queue</b></div><b>{scheduler?.waiting ?? '—'}</b></div>
-        <div className="setting-row"><div><b>Global capacity</b></div><b>{scheduler?.max_inference || 'Unlimited'}</b></div>
+        <div className="setting-row"><div><b>Configured concurrency ceiling</b></div><b>{scheduler?.max_inference || 'Unlimited'}</b></div>
+        <div className="setting-row"><div><b>Effective concurrency</b><small>Live admission ceiling, calculated from GPU headroom where available</small></div><b>{scheduler?.effective_max_inference ?? '—'}</b></div>
+        <div className="setting-row"><div><b>Admission strategy</b><small>{scheduler?.admission_mode==='adaptive'?(scheduler.gpu_sensor_available?'GPU telemetry active':'Sensor unavailable: static fallback'):'Static policy'}</small></div><b>{scheduler?.admission_mode || '—'}</b></div>
+        {scheduler?.admission_mode==='adaptive' && <div className="setting-row"><div><b>VRAM reservation per new request</b><small>{scheduler.gpu_margin_percent}% GPU-wide margin retained</small></div><b>{scheduler.gpu_request_vram_mb} MiB</b></div>}
         <div className="setting-row"><div><b>Per-key concurrency</b></div><b>{scheduler?.max_per_key || 'Unlimited'}</b></div>
         <div className="setting-row"><div><b>Maximum queue wait</b></div>
           <b>{scheduler?.queue_wait_ms === undefined?'—':scheduler.queue_wait_ms+' ms'}</b></div>

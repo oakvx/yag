@@ -379,6 +379,20 @@ int config_load(yag_config *c) {
         || env_limit("YAG_PRIMARY_MAX_INFLIGHT","0",32,&c->primary_max_inflight)
         || env_limit("YAG_POOL_WAIT_MS","0",30000,&c->pool_wait_ms))
         return -1;
+    const char *adaptive=env("YAG_ADAPTIVE_SCHEDULER","0");
+    if((strcmp(adaptive,"0") && strcmp(adaptive,"1"))
+       || env_limit("YAG_GPU_REQUEST_VRAM_MB","1024",32768,&c->adaptive_request_vram_mb)
+       || env_limit("YAG_GPU_VRAM_MARGIN_PERCENT","10",50,&c->adaptive_margin_percent)
+       || c->adaptive_request_vram_mb<128) {
+        fprintf(stderr,"Invalid adaptive GPU admission settings\n");
+        return -1;
+    }
+    c->adaptive_scheduler=!strcmp(adaptive,"1");
+    if(c->adaptive_scheduler && !c->max_inference) {
+        fprintf(stderr,"YAG_ADAPTIVE_SCHEDULER requires YAG_MAX_INFERENCE > 0\n");
+        return -1;
+    }
+    c->adaptive_effective_max=c->max_inference;
     c->client_store=env("YAG_CLIENT_STORE","");
     c->provider_store=env("YAG_PROVIDER_STORE","");
     c->ollama_admin_url=env("YAG_OLLAMA_ADMIN_URL","");
