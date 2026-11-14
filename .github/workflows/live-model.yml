@@ -72,20 +72,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=(--host ./build-live/yag --protocol "$YAG_QUALIFICATION_PROTOCOL")
+          args=(--host ./build-live/yag --protocol "$YAG_QUALIFICATION_PROTOCOL" --report-json qualification.json)
           if [[ "$YAG_QUALIFICATION_STREAM" == true ]]; then args+=(--stream); fi
           if [[ "$YAG_QUALIFICATION_TOOLS" == true ]]; then args+=(--tools); fi
           python3 tests/real_provider_probe.py "${args[@]}"
+      - name: Upload redacted real-model qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: yag-real-model-qualification
+          path: qualification.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Record qualification scope without model content
         if: success()
         shell: bash
         run: |
           {
             echo "### Real-model qualification"
-            echo "Selected model: \`$YAG_REAL_MODEL\`"
+            echo "Selected model ID fingerprint (SHA-256): $(printf '%s' "$YAG_REAL_MODEL" | sha256sum)"
             echo "Protocols: \`$YAG_QUALIFICATION_PROTOCOL\`"
             echo "Streaming: \`$YAG_QUALIFICATION_STREAM\`"
             echo "Tool replay required: \`$YAG_QUALIFICATION_TOOLS\`"
             echo "Runner: self-hosted Colibri (Linux)"
+            echo "Machine-readable redacted qualification evidence was uploaded as an artifact."
             echo "This proves only this runtime + model combination, not general compatibility."
           } >> "$GITHUB_STEP_SUMMARY"
