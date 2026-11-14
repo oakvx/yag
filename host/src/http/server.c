@@ -119,9 +119,43 @@ static const char *scope_label(unsigned scope) {
         case 2: return "models";
         case 3: return "inference+models";
         case 4: return "monitor";
+        case 17: return "inference+dedicated";
+        case 19: return "inference+models+dedicated";
         case 15: return "all";
         default: return "unknown";
     }
+}
+/* Explicit provider enrollment: an ordinary PC inference key is local-only
+ * with respect to managed dedicated IDs. Legacy "all" (15), the primary key,
+ * and the dedicated opt-in bit (16) retain access. This check intentionally
+ * follows scheduler admission so live pool replacement cannot race it. */
+static int dedicated_scope_denied(yag_config *cfg,int key_index,
+                                  const char *body,size_t length) {
+    if(key_index==0)return 0;
+    yyjson_doc *doc=yyjson_read(body,length,0);
+    yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;
+    yyjson_val *model=yyjson_obj_get(root,"model");
+    int denied=0;
+    if(yyjson_is_obj(root) && yyjson_is_str(model) &&
+       yyjson_get_len(model) && yyjson_get_len(model)==
+       strlen(yyjson_get_str(model))) {
+        const char *name=yyjson_get_str(model);
+        pthread_mutex_lock(&cfg->lock);
+        unsigned scope=cfg->extra_key_scopes[key_index-1];
+        if(scope!=15 && !(scope&16u)) {
+            for(size_t i=0;i<cfg->pool_count && !denied;i++) {
+                const yag_pool_backend *backend=&cfg->pool[i];
+                if(!backend->exclusive_models)continue;
+                for(size_t j=0;j<backend->model_count;j++)
+                    if(!strcmp(name,backend->models[j])) {
+                        denied=1;break;
+                    }
+            }
+        }
+        pthread_mutex_unlock(&cfg->lock);
+    }
+    yyjson_doc_free(doc);
+    return denied;
 }
 static void clients_status(int fd,yag_config *cfg) {
     yyjson_mut_doc *d=yyjson_mut_doc_new(NULL);
@@ -464,6 +498,10 @@ static void handle(int fd,yag_config *c) {
             goto done;
         }
         scheduler_held=1;
+        if(dedicated_scope_denied(c,key_index,body,length)) {
+            error(fd,403,"Dedicated model requires opt-in API key scope");
+            goto done;
+        }
     }
     if(!strcmp(uri,"/api/status") && !strcmp(method,"GET")) { char out[256]; pthread_mutex_lock(&c->lock); unsigned active=c->active; unsigned long total=c->total; pthread_mutex_unlock(&c->lock); snprintf(out,sizeof out,"{\"status\":\"ok\",\"uptime_seconds\":%ld,\"active_connections\":%u,\"total_connections\":%lu}",(long)(time(NULL)-c->started),active,total);reply(fd,200,"application/json",out); }
     else if(!strcmp(uri,"/api/metrics") && !strcmp(method,"GET")) metrics(fd,c);
