@@ -15,7 +15,7 @@ type ResourceMetrics = {
   gpu: {available: boolean;scope?: string;devices?: {id:string;utilization_percent?:number;vram_used_bytes?:number;vram_total_bytes?:number;temperature_c?:number}[]}
 }
 type Scheduler = {max_inference:number;effective_max_inference?:number;admission_mode?:'adaptive'|'static';gpu_sensor_available?:boolean;gpu_request_vram_mb?:number;gpu_margin_percent?:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
-type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
+type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;max_requests_per_run:number;requests_reserved:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
 const CLIENT_SCOPES = [
   {value:'inference+models',label:'Local/default inference + models'},
@@ -25,10 +25,10 @@ const CLIENT_SCOPES = [
   {value:'models',label:'Model discovery only'},
   {value:'monitor',label:'Monitoring only'},
 ]
-type ProviderConfig = {index:number;url:string;key_env:string;models:string[];exclusive_models:boolean;priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
+type ProviderConfig = {index:number;url:string;key_env:string;models:string[];exclusive_models:boolean;priority:number;enabled:boolean;max_inflight:number;max_requests_per_run:number;vram_budget_mb:number;vram_reservation_mb:number}
 type ProviderList = {editable:boolean;data:ProviderConfig[]}
 type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
-type ProviderPayload = {url:string;models:string[];exclusive_models:boolean;enabled:boolean;priority:number;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;key_env?:string}
+type ProviderPayload = {url:string;models:string[];exclusive_models:boolean;enabled:boolean;priority:number;max_inflight:number;max_requests_per_run:number;vram_budget_mb:number;vram_reservation_mb:number;key_env?:string}
 const CLOUD_PRESETS = [
   {name:'OpenAI',url:'https://api.openai.com/v1'},
   {name:'OpenRouter',url:'https://openrouter.ai/api/v1'},
@@ -76,6 +76,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   const [providerKey,setProviderKey]=useState('')
   const [providerPriority,setProviderPriority]=useState(50)
   const [providerMaxInflight,setProviderMaxInflight]=useState(0)
+  const [providerMaxRequests,setProviderMaxRequests]=useState(0)
   const [providerBudget,setProviderBudget]=useState(0)
   const [providerReservation,setProviderReservation]=useState(0)
   const [providerEditing,setProviderEditing]=useState<number|null>(null)
@@ -156,7 +157,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
   },[apiKey,providers.map(p=>p.index+':'+p.url).join('|')])
   function resetProviderForm(){
     setProviderUrl('');setProviderModels('');setProviderKey('');setProviderExclusive(false)
-    setProviderPriority(50);setProviderMaxInflight(0);setProviderBudget(0)
+    setProviderPriority(50);setProviderMaxInflight(0);setProviderMaxRequests(0);setProviderBudget(0)
     setProviderReservation(0);setProviderEditing(null)
   }
   async function persistProviders(next:ProviderPayload[]){
@@ -171,8 +172,8 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     finally{setBusy('')}
   }
   function payloads():ProviderPayload[]{
-    return providers.map(({url,key_env,models,exclusive_models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb})=>({
-      url,models,exclusive_models:!!exclusive_models,enabled,priority,max_inflight,vram_budget_mb,vram_reservation_mb,
+    return providers.map(({url,key_env,models,exclusive_models,enabled,priority,max_inflight,max_requests_per_run,vram_budget_mb,vram_reservation_mb})=>({
+      url,models,exclusive_models:!!exclusive_models,enabled,priority,max_inflight,max_requests_per_run,vram_budget_mb,vram_reservation_mb,
       ...(key_env?{key_env}:{})
     }))
   }
@@ -182,6 +183,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     setProviderExclusive(!!item.exclusive_models)
     setProviderPriority(item.priority)
     setProviderMaxInflight(item.max_inflight||0)
+    setProviderMaxRequests(item.max_requests_per_run||0)
     setProviderBudget(item.vram_budget_mb||0)
     setProviderReservation(item.vram_reservation_mb||0)
   }
@@ -205,6 +207,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
       models:names,exclusive_models:providerExclusive,
       ...(providerKey?{key_env:providerKey}:{}),
       priority:providerPriority,max_inflight:providerMaxInflight,
+      max_requests_per_run:providerMaxRequests,
       vram_budget_mb:providerBudget,vram_reservation_mb:providerReservation,
       enabled:selected?.enabled??true
     }
@@ -463,6 +466,7 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <small>Routing: {p.exclusive_models?'Dedicated model IDs (no primary fallback)':'Shared replica'} · Credentials: {p.key_env || 'none'} · Declared models: {
                 p.models.length?p.models.join(', '):'unrestricted (operator assumes equivalent models)'}</small>
               <small>Admission: {p.max_inflight? p.max_inflight+' active max':'unbounded'} ·
+                Per-run request ceiling: {p.max_requests_per_run||'unlimited'} ·
                 VRAM estimate: {p.vram_budget_mb
                 ? p.vram_reservation_mb+' / '+p.vram_budget_mb+' MiB per request / budget'
                 : 'not configured'}</small>
@@ -526,6 +530,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               <input type="number" min="0" max="32" value={providerMaxInflight}
                 onChange={e=>setProviderMaxInflight(Number(e.target.value))}
                 disabled={!providerEditable||!!busy}/></label>
+            <label>Maximum requests per server run (0 = unlimited, max 1,000,000)
+              <input type="number" min="0" max="1000000" value={providerMaxRequests}
+                onChange={e=>setProviderMaxRequests(Number(e.target.value))}
+                disabled={!providerEditable||!!busy}/></label>
             <label>VRAM budget in MiB (operator estimate, 0 = off)
               <input type="number" min="0" max="262144" value={providerBudget}
                 onChange={e=>setProviderBudget(Number(e.target.value))}
@@ -549,6 +557,8 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           Inference admission respects each backend's concurrency limit and reserved VRAM
           budget before selecting by least concurrent requests, then numeric priority.
           VRAM values are operator-estimated reservations, not live physical GPU measurements.
+          A per-run request ceiling rejects additional admissions once exhausted, but resets
+          on gateway restart or live provider reconfiguration. It is NOT a currency or token budget.
           Probes query each configured backend's <code>/models</code> endpoint on a 60-second cycle
           while the Console is open; reported IDs are not proof of model capabilities.
           Dedicated model IDs are exposed in /v1/models but not verified against the remote provider.
@@ -560,10 +570,11 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           {' '}{poolCapacity.rejected} · Maximum admission wait: {poolCapacity.waitMs} ms
         </div>
         <div className="provider-table-wrap"><table className="provider-table">
-          <thead><tr><th>BACKEND</th><th>ACTIVE / LIMIT</th><th>VRAM RESERVED / BUDGET</th>
+          <thead><tr><th>BACKEND</th><th>ACTIVE / LIMIT</th><th>REQUESTS / RUN CEILING</th><th>VRAM RESERVED / BUDGET</th>
             <th>CAPACITY SKIPS</th><th>SUCCESS</th><th>FAILURES</th><th>COOLDOWN</th></tr></thead>
           <tbody>{pool.map(p=><tr key={p.index}><td><b>{p.role} #{p.index}</b></td>
             <td>{p.active_requests} / {p.max_inflight||'∞'}</td>
+            <td>{p.requests_reserved||0} / {p.max_requests_per_run||'∞'}</td>
             <td>{p.vram_budget_mb ? p.vram_reserved_mb+' / '+p.vram_budget_mb+' MiB':'Not configured'}</td>
             <td>{p.capacity_skips||0}</td><td>{p.successes}</td><td>{p.failures}</td>
             <td>{p.cooldown_seconds ? p.cooldown_seconds+' s':'Ready'}</td></tr>)}</tbody>
