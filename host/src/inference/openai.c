@@ -244,6 +244,8 @@ static int pool_choose_locked(yag_config *cfg,const char *model,int *saturated) 
     time_t now=time(NULL);
     size_t total=cfg->pool_count+1;
     int exclusive=is_exclusive_model(cfg,model);
+    /* Bit 1: admission unavailable; bit 2: resources could free by waiting.
+     * A per-process quota does not replenish until provider reset/restart. */
     *saturated=0;
     for(size_t offset=0;offset<total;offset++) {
         size_t index=(cfg->pool_cursor+offset)%total;
@@ -262,16 +264,22 @@ static int pool_choose_locked(yag_config *cfg,const char *model,int *saturated) 
                 }
             if(!supported)continue;
         }
+        if(backend && backend->max_requests_per_run &&
+           backend->requests_reserved>=backend->max_requests_per_run) {
+            *saturated|=1;
+            backend->admission_capacity_skips++;
+            continue;
+        }
         unsigned limit=backend?backend->max_inflight:cfg->primary_max_inflight;
         if(limit && active>=limit) {
-            *saturated=1;
+            *saturated|=3;
             if(backend)backend->admission_capacity_skips++;
             continue;
         }
         if(backend && backend->vram_budget_mb &&
            backend->vram_reserved_mb >
                backend->vram_budget_mb-backend->vram_reservation_mb) {
-            *saturated=1;
+            *saturated|=3;
             backend->admission_capacity_skips++;
             continue;
         }
@@ -285,6 +293,7 @@ static int pool_choose_locked(yag_config *cfg,const char *model,int *saturated) 
         else {
             yag_pool_backend *backend=&cfg->pool[chosen-1];
             backend->active++;
+            backend->requests_reserved++;
             backend->vram_reserved_mb+=backend->vram_reservation_mb;
         }
         cfg->pool_cursor=((unsigned)chosen+1u)%(unsigned)total;
@@ -295,7 +304,7 @@ static int pool_choose(yag_config *cfg,const char *model) {
     pthread_mutex_lock(&cfg->lock);
     int saturated=0;
     int index=pool_choose_locked(cfg,model,&saturated);
-    if(index<0 && saturated && cfg->pool_wait_ms &&
+    if(index<0 && (saturated&2) && cfg->pool_wait_ms &&
        cfg->pool_waiting<MAX_POOL_WAITERS) {
         struct timespec until={0};
         if(!clock_gettime(CLOCK_REALTIME,&until)) {
@@ -308,7 +317,7 @@ static int pool_choose(yag_config *cfg,const char *model) {
             for(;;) {
                 int rc=pthread_cond_timedwait(&cfg->pool_available,&cfg->lock,&until);
                 index=pool_choose_locked(cfg,model,&saturated);
-                if(index>=0 || !saturated || rc==ETIMEDOUT || rc!=0)break;
+                if(index>=0 || !(saturated&2) || rc==ETIMEDOUT || rc!=0)break;
             }
             cfg->pool_waiting--;
         }
@@ -394,6 +403,10 @@ void provider_pool_status_handle(int fd,yag_config *cfg) {
             }
         if(ok)ok=yyjson_mut_obj_add_uint(d,item,"max_inflight",
                   i==0?cfg->primary_max_inflight:cfg->pool[i-1].max_inflight)
+              && yyjson_mut_obj_add_uint(d,item,"max_requests_per_run",
+                  i==0?0u:cfg->pool[i-1].max_requests_per_run)
+              && yyjson_mut_obj_add_uint(d,item,"requests_reserved",
+                  i==0?0u:cfg->pool[i-1].requests_reserved)
               && yyjson_mut_obj_add_uint(d,item,"vram_budget_mb",
                   i==0?0u:cfg->pool[i-1].vram_budget_mb)
               && yyjson_mut_obj_add_uint(d,item,"vram_reservation_mb",
