@@ -126,6 +126,7 @@ static int parse_replicas(const char *json,size_t length,
         yyjson_val *enabled=yyjson_obj_get(item,"enabled");
         yyjson_val *priority=yyjson_obj_get(item,"priority");
         yyjson_val *max=yyjson_obj_get(item,"max_inflight");
+        yyjson_val *ceiling=yyjson_obj_get(item,"max_requests_per_run");
         yyjson_val *budget=yyjson_obj_get(item,"vram_budget_mb");
         yyjson_val *reserve=yyjson_obj_get(item,"vram_reservation_mb");
         unsigned mb=budget?(unsigned)yyjson_get_uint(budget):0;
@@ -137,7 +138,7 @@ static int parse_replicas(const char *json,size_t length,
             yyjson_obj_size(item)!=(size_t)(1+(models?1:0)+(key?1:0)
                                           +(enabled?1:0)+(priority?1:0)
                                           +(max?1:0)+(budget?1:0)+(reserve?1:0)
-                                          +(exclusive?1:0)) ||
+                                          +(exclusive?1:0)+(ceiling?1:0)) ||
             (models && (!yyjson_is_arr(models) ||
                 yyjson_arr_size(models)>32)) ||
             (key && (!yyjson_is_str(key) ||
@@ -149,6 +150,7 @@ static int parse_replicas(const char *json,size_t length,
             (priority && (!yyjson_is_uint(priority) ||
                 yyjson_get_uint(priority)>100)) ||
             (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32)) ||
+            (ceiling && (!yyjson_is_uint(ceiling) || yyjson_get_uint(ceiling)>1000000)) ||
             (budget && (!yyjson_is_uint(budget) || yyjson_get_uint(budget)>262144)) ||
             (reserve && (!yyjson_is_uint(reserve) || yyjson_get_uint(reserve)>262144)) ||
             (!!mb!=!!mr) || (mr && mr>mb)) {
@@ -165,6 +167,7 @@ static int parse_replicas(const char *json,size_t length,
         p->exclusive_models=exclusive?yyjson_get_bool(exclusive):0;
         p->priority=priority?(unsigned)yyjson_get_uint(priority):50;
         p->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
+        p->max_requests_per_run=ceiling?(unsigned)yyjson_get_uint(ceiling):0;
         p->vram_budget_mb=mb;
         p->vram_reservation_mb=mr;
         if(key) {
@@ -254,6 +257,8 @@ static char *serialize_pool(const yag_pool_backend pool[8],size_t count) {
             && yyjson_mut_obj_add_bool(doc,o,"exclusive_models",p->exclusive_models!=0)
             && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
             && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
+            && yyjson_mut_obj_add_uint(doc,o,"max_requests_per_run",p->max_requests_per_run)
+            && yyjson_mut_obj_add_uint(doc,o,"max_requests_per_run",p->max_requests_per_run)
             && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
             && yyjson_mut_obj_add_uint(doc,o,"vram_reservation_mb",
                                        p->vram_reservation_mb);
