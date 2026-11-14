@@ -165,6 +165,9 @@ class ProviderManager(unittest.TestCase):
             [{"url":self.url,"exclusive_models":True}],
             [{"url":self.url,"models":["managed-model"],"exclusive_models":"true"}],
             [{"url":self.url,"priority":101}],
+            [{"url":self.url,"max_requests_per_run":1000001}],
+            [{"url":self.url,"max_requests_per_run":-1}],
+            [{"url":self.url,"max_requests_per_run":True}],
             [{"url":self.url},{"url":self.url}],
             [{"url":"http://127.0.0.1:1/v1","raw_secret":"forbidden"}],
         ):
@@ -330,7 +333,8 @@ class ProviderManager(unittest.TestCase):
 
     def test_05_restart_restores_managed_pool(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
-               "models":["managed-model"],"enabled":True,"priority":33}
+               "models":["managed-model"],"enabled":True,"priority":33,
+               "max_requests_per_run":11}
         self.assertEqual(self.apply([entry])[0],200)
         cls=type(self)
         cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
@@ -338,6 +342,7 @@ class ProviderManager(unittest.TestCase):
         code,_,body=request(self.port,"GET","/api/admin/providers")
         self.assertEqual(code,200,body)
         self.assertEqual(json.loads(body)["data"][0]["priority"],33)
+        self.assertEqual(json.loads(body)["data"][0]["max_requests_per_run"],11)
         self.assertEqual(json.loads(body)["data"][0]["key_env"],"YAG_POOL_KEY_1")
         self.assertEqual(self.apply([])[0],200)
 
