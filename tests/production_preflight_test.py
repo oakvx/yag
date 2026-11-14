@@ -76,6 +76,21 @@ class PreflightTests(unittest.TestCase):
                    'YAG_UPSTREAM_POOL='+json.dumps(pool,separators=(',',':'))+'\n')
         self.assertTrue(evaluate(self.path)['blocked'])
 
+    def test_static_cloud_routes_fail_closed_before_client_rollout(self):
+        routes=[{'model':'cloud-model','url':'https://api.example.com/v1',
+                 'key_env':'YAG_CLOUD_SECRET'}]
+        self.write('YAG_MODEL_ROUTES='+json.dumps(routes,separators=(',',':'))+'\\n')
+        result=evaluate(self.path)
+        self.assertTrue(result['blocked'])
+        self.assertIn('static_cloud_route',{x['id'] for x in result['checks']})
+        self.assertNotIn('https://api.example.com',json.dumps(result))
+        # Local/private static replicas remain valid.
+        routes[0]['url']='http://ollama:11434/v1'
+        self.write('YAG_MODEL_ROUTES='+json.dumps(routes,separators=(',',':'))+'\\n')
+        self.assertFalse(evaluate(self.path)['blocked'])
+        self.write('YAG_MODEL_ROUTES=not-json\\n')
+        self.assertTrue(evaluate(self.path)['blocked'])
+
     def test_private_file_permissions_and_symlink(self):
         if os.name!='nt':
             self.path.chmod(0o644)
