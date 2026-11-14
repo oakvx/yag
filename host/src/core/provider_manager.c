@@ -366,7 +366,11 @@ static void apply_providers(int fd,yag_config *cfg,const char *body,size_t len) 
         fail(fd,413,"Provider configuration exceeds persistent store limit");return;
     }
     pthread_mutex_lock(&cfg->lock);
-    int busy=cfg->default_pool_active!=0 || cfg->pool_waiting!=0;
+    /* Scheduler acquisition starts before per-client dedicated permission
+     * checks. Defer provider replacement until every admitted request has
+     * finished, closing an authorization TOCTOU window. */
+    int busy=cfg->inference_active!=0 || cfg->inference_waiting!=0 ||
+        cfg->default_pool_active!=0 || cfg->pool_waiting!=0;
     for(size_t i=0;i<cfg->pool_count;i++)if(cfg->pool[i].active)busy=1;
     int persisted=0;
     if(!busy)persisted=write_store(cfg->provider_store,json);
