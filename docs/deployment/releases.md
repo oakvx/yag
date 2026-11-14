@@ -57,6 +57,48 @@ downloaded .deb, .exe or .dmg. Provenance binds a file digest to the
 repository and workflow identity. It does not prove that a binary is free
 of bugs, malicious source changes or model incompatibility.
 
+### Verify and stage a versioned Host rollback (offline)
+
+**Before any rollback**, download all four assets and `SHA256SUMS.txt` from the
+specific reviewed tag into a single private directory. Fetch the checksums
+and Sigstore attestations through a trusted GitHub connection. Never treat an
+untrusted checksum file as an authenticity guarantee.
+
+```sh
+# Change both paths and the tag to the actual reviewed release.
+python3 scripts/release_verify.py --release-dir "$HOME/yag-releases/v0.2.0" --tag v0.2.0
+gh attestation verify "$HOME/yag-releases/v0.2.0/yag-linux-x86_64.tar.gz" --repo oakvx/yag
+
+# A NEW, private, operator-owned parent directory is required.
+mkdir -m 700 -p "$HOME/yag-rollbacks"
+python3 scripts/release_verify.py \
+  --release-dir "$HOME/yag-releases/v0.2.0" --tag v0.2.0 \
+  --stage-host "$HOME/yag-rollbacks/v0.2.0"
+```
+
+The verification tool requires the *complete* four-package manifest,
+rejects tampered files and symlinks, and inspects every Host archive member
+before staging. Extraction rejects links, devices, traversal, duplicates and
+oversized contents. Staged scripts are private; only the `yag` executable
+receives execute permission. An existing staging directory is never
+overwritten. The tool does **not** connect to a provider, restart a service
+or replace live configuration.
+
+For a planned rollback, stop new inference traffic, take and verify a fresh
+encrypted configuration backup (see `scripts/lan_recovery.py`), stop the
+existing Host, and deploy the staged, reviewed version through your normal
+service manager. Restore the matching configuration only when schema and
+credential compatibility have been reviewed. Start with a single-PC smoke
+test and verify health, client permissions, model discovery, streaming and
+GPU telemetry before reopening traffic. Keep the previous installation
+intact until a successful rehearsal; do **not** copy staged files directly
+over a running binary.
+
+**Not covered:** rollback of containers, database/schema migrations, Ollama
+weights, Windows/macOS installers or live Colibri acceptance. Those require
+their own deployment-specific backup and recovery rehearsal. A successful
+unit test is not proof that a production rollback was performed.
+
 ### Security and operational limits
 
 Desktop installers are currently **unsigned at the operating-system
