@@ -11,11 +11,15 @@ inference model supports an agent protocol. Those checks run only on a
 | --- | --- | --- |
 | `ci.yml` | PR + main/feature pushes | C17 host tests, address/undefined behavior sanitizers, Console build, Docker/LAN checks, mock CLI protocol probes |
 | `desktop.yml` | Desktop PRs + main changes | Native Linux .deb, Windows NSIS .exe, macOS .dmg build artifacts |
-| `security.yml` | PR + main + Wednesday + manual | actionlint, CodeQL C/C++ and JS/TS scans, dependency review on PRs, production npm vulnerability audit |
+| `security.yml` | PR + main + Wednesday + manual | actionlint, CodeQL C/C++ and JS/TS scans, Console and Desktop npm vulnerability audits |
 | `release.yml` | Monday + manual + `v*` tags | Host Linux package and all three Desktop installers. Attaches each to workflow artifacts. A reviewed tag also publishes a GitHub Release with SHA-256 checksums |
 | `live-model.yml` | Explicit manual dispatch on `main` only | Qualifies a **real** model with an isolated gateway on a self-hosted Linux runner |
 
 Workflow checks do not issue credentials or add secrets to repository files.
+The GitHub Dependency Review API is not enabled on this repository; the
+security workflow instead performs package-manager audits directly on its
+runners. To add GitHub's native PR dependency review later, enable
+Dependency Graph in repository security settings.
 The automated weekly packaging run **does not create tags or publish stable
 releases**. Build artifacts expire after 14 days. The Desktop packages are
 currently **unsigned**, so macOS/Windows can display trust warnings.
