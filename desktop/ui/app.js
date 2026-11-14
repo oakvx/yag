@@ -147,6 +147,7 @@ function closeDialog() {
   el('connectionDialog').hidden = true
 }
 function setStatus(online) {
+  state.online = online
   el('connectionIndicator').classList.toggle('online', online)
   el('statusPill').classList.toggle('online', online)
   el('statusPill').textContent = online ? 'CONNECTED' : 'OFFLINE'
@@ -194,10 +195,8 @@ function renderModels() {
     meta.append(name, label)
     button.append(icon, meta)
     button.addEventListener('click', () => {
-      if (state.model !== model.id && state.messages.length &&
-          !window.confirm('Switch model? This will start a new conversation.')) return
+      if (state.model !== model.id) clearConversation()
       state.model = model.id
-      clearConversation()
       renderModels()
       setStatus(true)
       el('prompt').focus()
@@ -221,7 +220,7 @@ function renderMessages() {
     header.textContent = message.role === 'assistant' ? state.model : 'You'
     const text = document.createElement('div')
     text.className = 'message-content'
-    text.textContent = message.content
+    Markdown.render(text, message.content)
     if (state.running && message === state.messages[state.messages.length - 1] && message.role === 'assistant') {
       text.classList.add('typing-caret')
     }
@@ -232,11 +231,14 @@ function renderMessages() {
   el('chat').scrollTop = el('chat').scrollHeight
 }
 function clearConversation() {
+  saveActive()
+  state.activeChatId = null
   state.messages = []
   state.usage = null
   el('usageText').textContent = 'No requests yet'
   showError('')
   renderMessages()
+  renderConversations()
 }
 async function refreshModels() {
   if (!state.url || !state.apiKey || state.running) return
@@ -277,6 +279,7 @@ async function connect(event) {
     state.models = models
     state.model = models.some((model) => model.id === state.model) ? state.model : (models[0]?.id || '')
     if (changed) clearConversation()
+    renderConversations()
     // Only the non-secret server address is remembered.
     localStorage.setItem('yag.desktop.url', url)
     renderModels()
@@ -296,6 +299,7 @@ async function connect(event) {
 }
 function disconnect() {
   if (state.running) return
+  saveActive()
   state.url = ''
   state.apiKey = ''
   state.model = ''
@@ -316,6 +320,7 @@ async function sendMessage(event) {
     return
   }
   showError('')
+  ensureChat()
   state.messages.push({ role: 'user', content })
   const requestMessages = state.messages.map((message) => ({ role: message.role, content: message.content }))
   const assistant = { role: 'assistant', content: '' }
@@ -333,7 +338,7 @@ async function sendMessage(event) {
     if (event.kind === 'delta' && typeof event.text === 'string') {
       assistant.content += event.text
       const node = el('messages').lastElementChild?.querySelector('.message-content')
-      if (node) node.textContent = assistant.content
+      if (node) Markdown.render(node, assistant.content)
       el('chat').scrollTop = el('chat').scrollHeight
     } else if (event.kind === 'usage') {
       state.usage = event
@@ -343,7 +348,8 @@ async function sendMessage(event) {
   try {
     await invoke('stream_chat', {
       url: state.url, apiKey: state.apiKey, model: state.model,
-      messages: requestMessages, requestId, onEvent: channel
+      messages: requestMessages, requestId, onEvent: channel,
+      temperature: state.temperature, maxTokens: state.maxTokens
     })
   } catch (error) {
     const message = String(error)
@@ -353,6 +359,7 @@ async function sendMessage(event) {
     if (state.requestId === requestId) {
       state.requestId = null
       state.running = false
+      saveActive()
       setStatus(true)
       renderModels()
       renderMessages()
@@ -368,6 +375,8 @@ async function stopGeneration() {
     finally { el('stopButton').disabled = false }
   }
 }
+el('chatSearch').addEventListener('input', renderConversations)
+el('newSidebarChat').addEventListener('click', clearConversation)
 el('serverButton').addEventListener('click', openDialog)
 el('emptyConnectButton').addEventListener('click', openDialog)
 el('closeDialogButton').addEventListener('click', closeDialog)
@@ -392,4 +401,5 @@ el('connectionDialog').addEventListener('click', (event) => {
 renderModels()
 renderMessages()
 setStatus(false)
+renderConversations()
 openDialog()
