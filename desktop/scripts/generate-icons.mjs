@@ -3,6 +3,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 
 const dir = fileURLToPath(new URL('../src-tauri/icons/', import.meta.url))
