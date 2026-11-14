@@ -65,7 +65,7 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Package native desktop
         run: npm run build -- --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: yag-desktop-${{ matrix.artifact }}
           path: desktop/src-tauri/target/release/bundle/**
