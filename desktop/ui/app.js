@@ -164,6 +164,7 @@ function setStatus(online) {
   el('stopButton').hidden = !state.running
   el('refreshButton').disabled = !online || state.running
   el('newChatButton').disabled = state.running
+  el('copyChatButton').disabled = state.messages.length === 0 || state.running
   el('disconnectButton').disabled = state.running
   updateRelayDisplay()
 }
@@ -452,6 +453,20 @@ async function discoverHosts() {
   } finally { button.disabled = false }
 }
 
+el('copyChatButton').addEventListener('click', async () => {
+  if (!state.messages.length || state.running) return
+  const transcript = state.messages.map(message =>
+    '## ' + (message.role === 'assistant' ? state.model : 'User') +
+    '\n\n' + message.content
+  ).join('\n\n---\n\n')
+  try {
+    await navigator.clipboard.writeText(transcript)
+    el('copyChatButton').textContent = 'Copied'
+    setTimeout(() => { el('copyChatButton').textContent = 'Copy chat' }, 1500)
+  } catch {
+    showError('Clipboard access denied. Check operating-system permissions.')
+  }
+})
 el('checkUpdates').addEventListener('click', async () => {
   const button = el('checkUpdates')
   button.disabled = true
