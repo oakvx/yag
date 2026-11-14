@@ -104,6 +104,19 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   useEasterEgg(openEaster);
   const fileOrigin = useRef(menuCursor);
   const fileWasApp = useRef(isApp);
+  // The board is reached one step past the last category, as on the console;
+  // closing it hands the keyboard back to that category.
+  const noticesBackRef = useRef(false);
+  const handleNoticesBack = useCallback(() => {
+    noticesBackRef.current = true;
+    setNoticesOpen(false);
+  }, []);
+  useEffect(() => {
+    if (!noticesOpen && noticesBackRef.current) {
+      noticesBackRef.current = false;
+      categoryRefs.current[CATEGORIES.length - 1]?.focus({ preventScroll: true });
+    }
+  }, [noticesOpen]);
 
   useEffect(() => { emitWave(menuCursor.cat, 0.22); }, [menuCursor.cat]);
   useEffect(() => { xmbAudio.setInApp(isApp); }, [isApp]);
@@ -208,12 +221,20 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       if (e.key.startsWith("Arrow")) resetHover();
       switch (e.key) {
         case "ArrowRight":
-        case "ArrowLeft":
+        case "ArrowLeft": {
           e.preventDefault();
           setHoverAnchor(null);
+          const step = e.key === "ArrowRight" ? 1 : -1;
+          if (step > 0 && c.cat === CATEGORIES.length - 1 && !noticesOpen) {
+            // One step past the last category is the information board, as on the console.
+            setNoticesOpen(true);
+            blip("category");
+            break;
+          }
           focusAfterMove.current = el?.hasAttribute("data-console-item") ?? false;
-          selectCategory(c.cat + (e.key === "ArrowRight" ? 1 : -1));
+          selectCategory(c.cat + step);
           break;
+        }
         case "ArrowDown":
         case "ArrowUp":
           e.preventDefault();
@@ -234,7 +255,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [activate, back, bootReady, isApp, paletteOpen, phase, resetHover, selectCategory, selectItem]);
+  }, [activate, back, bootReady, isApp, noticesOpen, paletteOpen, phase, resetHover, selectCategory, selectItem]);
 
   const onItemClick = (e: MouseEvent<HTMLAnchorElement>, item: XmbItem) => {
     if (performance.now() - touch.current.swipeAt < 350) { e.preventDefault(); return; }
@@ -257,7 +278,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
       <ConsoleClock />
-      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} onOpenChange={setNoticesOpen} />
+      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
       {/* The menu itself is the home screen. No application is mounted underneath. */}

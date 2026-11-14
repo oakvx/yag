@@ -187,6 +187,7 @@ export function CommitNotifications({
   open,
   booted,
   onOpenChange,
+  onBack,
 }: {
   /** The menu is on screen; a section that opens takes the board with it. */
   active: boolean;
@@ -194,6 +195,8 @@ export function CommitNotifications({
   /** The boot sequence has finished; toasts wait for it. */
   booted: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Close the board and hand the keyboard back to the last category. */
+  onBack: () => void;
 }) {
   const toggleRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -216,12 +219,14 @@ export function CommitNotifications({
     wasActive.current = active;
   }, [active, onOpenChange]);
 
-  // Every summoning starts on the newest commit, as the hardware does.
+  // Every summoning starts on the newest commit, as the hardware does; the
+  // keyboard moves into the list with it, wherever it was opened from.
   useEffect(() => {
-    if (open) {
-      setCursor(0);
-      setHover(null);
-    }
+    if (!open) return;
+    setCursor(0);
+    setHover(null);
+    const first = listRef.current?.querySelector<HTMLAnchorElement>(".console-notice-link");
+    first?.focus({ preventScroll: true });
   }, [open]);
 
   // Announcements wait for the boot to finish, then queue up and play one
@@ -255,20 +260,24 @@ export function CommitNotifications({
   }, [toast]);
 
   // The console's keys, while the board is open: the arrows travel the
-  // list, Home and End jump, and Back — Esc, Backspace or the chevron —
-  // plays the same slide backwards.
+  // list, Home and End jump, and Back — Esc, Backspace, the left arrow or
+  // the chevron — plays the same slide backwards and hands the keyboard to
+  // the last category, exactly as on the console.
   useEffect(() => {
     if (!open) return;
+    const back = (e: KeyboardEvent) => {
+      e.preventDefault();
+      blip("back");
+      onBack();
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Backspace") {
-        e.preventDefault();
-        onOpenChange(false);
-        toggleRef.current?.focus({ preventScroll: true });
+      if (e.key === "Escape" || e.key === "Backspace" || e.key === "ArrowLeft") {
+        back(e);
         return;
       }
       if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
         e.preventDefault();
-        if (e.key === "ArrowLeft" || e.key === "ArrowRight") return;
+        if (e.key === "ArrowRight") return;
         const rows = Array.from(listRef.current?.querySelectorAll<HTMLAnchorElement>(".console-notice-link") ?? []);
         if (rows.length === 0) return;
         const at = rows.indexOf(document.activeElement as HTMLAnchorElement);
@@ -283,7 +292,7 @@ export function CommitNotifications({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onOpenChange]);
+  }, [open, onBack]);
 
   const toggle = () => {
     blip(open ? "back" : "select");
@@ -292,8 +301,7 @@ export function CommitNotifications({
 
   const close = () => {
     blip("back");
-    onOpenChange(false);
-    toggleRef.current?.focus({ preventScroll: true });
+    onBack();
   };
 
   const markRead = (view: NoticeView) => {
