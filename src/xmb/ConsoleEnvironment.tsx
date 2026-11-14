@@ -253,7 +253,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
 
   return (
     <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping}>
-      <RibbonWallpaper clock={boot.clock} />
+      <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
       <ConsoleClock />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 

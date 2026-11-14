@@ -71,8 +71,13 @@
   overflow: hidden;
   background: #000;
 }
-.console-wallpaper { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
-.wallpaper-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.console-wallpaper { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; transition: filter 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+.wallpaper-canvas { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+/* Opening an application takes the waves out of focus, the way the console
+   softens its own backdrop behind a document. The canvases grow a little so
+   the blur never pulls the empty edge of the surface into the picture. */
+.console-environment[data-surface="app"] .console-wallpaper { filter: blur(clamp(16px, 1.9vw, 34px)) saturate(1.04) brightness(1.25); }
+.console-environment[data-surface="app"] .wallpaper-canvas { transform: scale(1.09); }
 .console-menu { position: absolute; inset: 0; z-index: 10; outline: none; transform-origin: 38% 43%; transition: opacity 360ms ease, transform 480ms ease, visibility 0s; }
 .console-menu[data-hidden="true"] { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.13) translateX(-3vw); transition: opacity 280ms, transform 500ms, visibility 0s 400ms; }
 /* Opening: the menu clears away while the selected icon grows and fades; Back plays it in reverse. */
@@ -144,8 +149,9 @@
 .console-help kbd { margin-right: 0.4em; font-size: 1.2em; }
 .console-help-arrows { margin-right: -0.6em; letter-spacing: 0.12em; }
 
-/* Applications take over the entire screen, rather than opening beside a sidebar. */
-.console-application { position: absolute; z-index: 30; inset: 0; display: flex; flex-direction: column; padding: 3.7vh 5.7vw 0; background: linear-gradient(180deg, #03132ced, #061a37d9 45%, #03132ce0); animation: consoleAppIn 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* Applications take over the entire screen, rather than opening beside a sidebar.
+   The backdrop is a veil, not a lid: the blurred waves still read through it. */
+.console-application { position: absolute; z-index: 30; inset: 0; display: flex; flex-direction: column; padding: 3.7vh 5.7vw 0; background: linear-gradient(180deg, rgba(3, 19, 44, 0.36), rgba(4, 20, 44, 0.14) 38%, rgba(3, 19, 44, 0.26)); animation: consoleAppIn 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .console-application.is-leaving { animation: consoleAppOut 240ms ease both; pointer-events: none; }
 .console-application-header { display: flex; flex-shrink: 0; align-items: center; gap: 18px; height: clamp(74px, 10.5vh, 160px); padding-right: 28vw; margin-bottom: 1vh; color: #edf4fa; }
 .console-back { display: flex; align-items: center; gap: 9px; border: 0; margin-right: 20px; padding: 8px 0; background: transparent; color: #c7d9e6; font-size: 14px; }
