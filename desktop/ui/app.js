@@ -164,6 +164,7 @@ function setStatus(online) {
   el('refreshButton').disabled = !online || state.running
   el('newChatButton').disabled = state.running
   el('disconnectButton').disabled = state.running
+  updateRelayDisplay()
 }
 function renderModels() {
   const root = el('models')
@@ -274,6 +275,7 @@ async function connect(event) {
   try {
     const models = await invoke('list_models', { url, apiKey })
     const changed = state.url !== url || state.apiKey !== apiKey
+    if (changed && state.relay) await stopRelay()
     state.url = url
     state.apiKey = apiKey
     state.models = models
@@ -297,8 +299,9 @@ async function connect(event) {
     button.append(arrow)
   }
 }
-function disconnect() {
+async function disconnect() {
   if (state.running) return
+  if (state.relay) await stopRelay()
   saveActive()
   state.url = ''
   state.apiKey = ''
@@ -323,6 +326,7 @@ async function sendMessage(event) {
   ensureChat()
   state.messages.push({ role: 'user', content })
   const requestMessages = state.messages.map((message) => ({ role: message.role, content: message.content }))
+  if (state.systemPrompt.trim()) requestMessages.unshift({role: 'system', content: state.systemPrompt.trim()})
   const assistant = { role: 'assistant', content: '' }
   state.messages.push(assistant)
   el('prompt').value = ''
@@ -375,6 +379,119 @@ async function stopGeneration() {
     finally { el('stopButton').disabled = false }
   }
 }
+
+function openSettings() {
+  el('saveHistory').checked = Workspace.enabled()
+  el('temperature').value = state.temperature
+  el('temperatureValue').value = state.temperature.toFixed(1)
+  el('maxTokens').value = state.maxTokens
+  el('systemPrompt').value = state.systemPrompt
+  el('settingsDialog').hidden = false
+}
+function closeSettings() { el('settingsDialog').hidden = true }
+function updateRelayDisplay() {
+  el('relayDetails').hidden = !state.relay
+  el('startRelay').disabled = !state.online || !state.apiKey || !!state.relay
+  el('stopRelay').disabled = !state.relay
+  if (state.relay) {
+    el('relayUrl').textContent = state.relay.url + '/v1'
+    el('relayKey').textContent = state.relay.token
+  } else {
+    el('relayUrl').textContent = ''
+    el('relayKey').textContent = ''
+  }
+}
+async function stopRelay() {
+  try { await invoke('stop_relay') }
+  catch (error) { el('relayError').hidden = false; el('relayError').textContent = String(error) }
+  finally { state.relay = null; updateRelayDisplay() }
+}
+async function startRelay() {
+  if (!state.online || !state.apiKey || state.relay) return
+  el('relayError').hidden = true
+  el('startRelay').disabled = true
+  try {
+    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey})
+  } catch (error) {
+    el('relayError').textContent = String(error)
+    el('relayError').hidden = false
+  }
+  updateRelayDisplay()
+}
+async function discoverHosts() {
+  const button = el('discoverButton')
+  button.disabled = true
+  el('discoveryStatus').textContent = 'Searching for advertised servers…'
+  el('discoveryResults').replaceChildren()
+  try {
+    const hosts = await invoke('discover_hosts')
+    el('discoveryStatus').textContent = hosts.length ? 'Select a host:' : 'No YAG mDNS advertisements found.'
+    for (const host of hosts) {
+      const button = document.createElement('button')
+      button.className = 'discovery-result'
+      button.type = 'button'
+      const name = document.createElement('strong')
+      name.textContent = host.name
+      const address = document.createElement('small')
+      address.textContent = host.url
+      button.append(name, address)
+      button.addEventListener('click', () => {
+        el('serverUrl').value = host.url
+        el('discoveryStatus').textContent = 'Selected. Verify the TLS certificate and provide your client API key.'
+      })
+      el('discoveryResults').append(button)
+    }
+  } catch (error) {
+    el('discoveryStatus').textContent = String(error)
+  } finally { button.disabled = false }
+}
+
+el('settingsButton').addEventListener('click', openSettings)
+el('closeSettingsButton').addEventListener('click', closeSettings)
+el('settingsDialog').addEventListener('click', event => {
+  if (event.target === el('settingsDialog')) closeSettings()
+})
+el('temperature').addEventListener('input', () => {
+  state.temperature = Number(el('temperature').value)
+  el('temperatureValue').value = state.temperature.toFixed(1)
+})
+el('maxTokens').addEventListener('change', () => {
+  const number = Number(el('maxTokens').value)
+  state.maxTokens = Number.isInteger(number) && number >= 64 && number <= 8192 ? number : 1024
+  el('maxTokens').value = state.maxTokens
+})
+el('systemPrompt').addEventListener('change', () => {
+  state.systemPrompt = el('systemPrompt').value.slice(0, 4000)
+})
+el('saveHistory').addEventListener('change', () => {
+  try {
+    Workspace.setEnabled(el('saveHistory').checked)
+    if (Workspace.enabled()) saveActive()
+    else showError('')
+  } catch {
+    el('saveHistory').checked = false
+    showError('Could not change local history settings.')
+  }
+})
+el('clearHistory').addEventListener('click', () => {
+  if (!window.confirm('Delete every locally saved conversation on this device?')) return
+  state.conversations = []
+  state.activeChatId = null
+  state.messages = []
+  try { Workspace.setEnabled(false); el('saveHistory').checked = false } catch {}
+  renderMessages()
+  renderConversations()
+})
+el('startRelay').addEventListener('click', startRelay)
+el('stopRelay').addEventListener('click', stopRelay)
+el('discoverButton').addEventListener('click', discoverHosts)
+el('copyRelayKey').addEventListener('click', () => {
+  if (state.relay) navigator.clipboard.writeText(state.relay.token).catch(() => {
+    el('relayError').textContent = 'Clipboard access denied'
+    el('relayError').hidden = false
+  })
+})
+
 el('chatSearch').addEventListener('input', renderConversations)
 el('newSidebarChat').addEventListener('click', clearConversation)
 el('serverButton').addEventListener('click', openDialog)
@@ -394,6 +511,7 @@ el('prompt').addEventListener('keydown', (event) => {
 })
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !el('connectionDialog').hidden) closeDialog()
+  if (event.key === 'Escape' && !el('settingsDialog').hidden) closeSettings()
 })
 el('connectionDialog').addEventListener('click', (event) => {
   if (event.target === el('connectionDialog')) closeDialog()
