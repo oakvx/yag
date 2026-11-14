@@ -61,6 +61,7 @@ or encrypted-at-rest live secret vault.
 | Gate | Pass condition |
 | --- | --- |
 | Multiple PCs | Two or more separate API keys work; revoked key is denied immediately |
+| Dedicated model scopes | Ordinary client key receives 403; explicitly privileged PC can invoke cloud; a live scope downgrade blocks new cloud requests |
 | Scheduler | Concurrent requests respect configured per-key, global and replica limits |
 | GPU | Utilization/VRAM are either measured and source-labeled or explicitly unavailable |
 | Network | Requests and streams survive normal load; cancellation frees inference slots |
