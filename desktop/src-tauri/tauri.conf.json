@@ -4,10 +4,9 @@
   "version": "0.1.0",
   "identifier": "dev.yag.desktop",
   "build": {
-    "beforeDevCommand": "npm --prefix ../console run dev:desktop",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --prefix ../console run build:desktop",
-    "frontendDist": "../../console/desktop/dist"
+    "beforeDevCommand": "npm run icons",
+    "beforeBuildCommand": "npm run check && npm run icons",
+    "frontendDist": "../ui"
   },
   "app": {
     "withGlobalTauri": true,
@@ -19,11 +18,11 @@
         "height": 800,
         "minWidth": 800,
         "minHeight": 560,
-        "backgroundColor": "#f3f3ef"
+        "backgroundColor": "#0d1014"
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset: http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {
