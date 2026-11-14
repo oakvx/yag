@@ -97,11 +97,30 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   }
 }
 
-/** Persistent WebGL surface: boot and XMB are two states of the same shader. */
-export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock: RefObject<BootClock> }) {
+/**
+ * Persistent WebGL surface: boot and XMB are two states of the same shader.
+ *
+ * `dimmed` marks the blurred state the console enters when an application
+ * opens. The waves then hold still behind the document, exactly as the
+ * console's own backdrop does, and the shader stops burning frames.
+ */
+export const RibbonWallpaper = memo(function RibbonWallpaper({
+  clock,
+  dimmed = false,
+}: {
+  clock: RefObject<BootClock>;
+  dimmed?: boolean;
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const gpuRef = useRef<HTMLCanvasElement>(null);
   const fallbackRef = useRef<HTMLCanvasElement>(null);
+  const dimmedRef = useRef(dimmed);
+  dimmedRef.current = dimmed;
+  // The render loop sleeps while the wallpaper is held; nudge it when the
+  // console comes back from an application.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("yag:focus"));
+  }, [dimmed]);
 
   useEffect(() => {
     const wrapper = wrapperRef.current;
@@ -212,7 +231,10 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
       const interval = last ? (now - last) / 1000 : 0;
       const dt = Math.min(interval, 0.05);
       last = now;
-      if (!reduced) time += dt;
+      // Behind an application the waves are held still: the blurred backdrop
+      // is a still image, and the shader can rest.
+      const held = dimmedRef.current;
+      if (!reduced && !held) time += dt;
       // Lower internal resolution on sustained slow frames; the CSS size stays unchanged.
       if (renderer && !reduced && interval > 0) {
         observedFrames++;
@@ -251,7 +273,8 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
         fallbackLastDraw = now;
       }
       const bootRunning = clock.current.stage === "playing" || clock.current.stage === "handoff";
-      if (!document.hidden && (bootRunning || (!reduced && clock.current.stage === "home") || paletteMoving)) {
+      const idle = held && !paletteMoving && !bootRunning;
+      if (!document.hidden && !idle && (bootRunning || (!reduced && clock.current.stage === "home") || paletteMoving)) {
         raf = requestAnimationFrame(loop);
       }
     };
@@ -263,13 +286,14 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
     const wave = (event: Event) => {
       const detail = (event as CustomEvent<{ pulse?: number }>).detail;
       // Categories move the ribbons, but never change the monthly palette.
-      if (!reduced && clock.current.stage === "home") {
+      if (!reduced && !dimmedRef.current && clock.current.stage === "home") {
         swellStarted = time;
         swellStrength = Math.min(1, Math.max(0, detail?.pulse ?? 0.22));
         wake();
       }
     };
     const bootChanged = () => wake();
+    const focusChanged = () => wake();
     const visibility = () => {
       if (document.hidden) { cancelAnimationFrame(raf); raf = 0; last = 0; }
       else wake();
@@ -303,6 +327,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
     window.addEventListener("resize", resize);
     window.addEventListener("yag:wave", wave);
     window.addEventListener("yag:boot", bootChanged);
+    window.addEventListener("yag:focus", focusChanged);
     document.addEventListener("visibilitychange", visibility);
     motion.addEventListener("change", motionChanged);
     canvas.addEventListener("webglcontextlost", lost);
@@ -314,6 +339,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
       window.removeEventListener("resize", resize);
       window.removeEventListener("yag:wave", wave);
       window.removeEventListener("yag:boot", bootChanged);
+      window.removeEventListener("yag:focus", focusChanged);
       document.removeEventListener("visibilitychange", visibility);
       motion.removeEventListener("change", motionChanged);
       canvas.removeEventListener("webglcontextlost", lost);
