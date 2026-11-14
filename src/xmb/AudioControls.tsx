@@ -36,7 +36,7 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
         className="console-sound"
         aria-expanded={open}
         aria-controls="console-audio-panel"
-        aria-label="Impostazioni audio. Tieni premuto per riavviare il boot."
+        aria-label="Audio settings. Press and hold to replay the boot sequence."
         onPointerDown={() => {
           held.current = false;
           timer.current = window.setTimeout(() => { held.current = true; restart(); }, 850);
@@ -58,19 +58,19 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
         <span>Audio</span>
       </button>
       {open && (
-        <div id="console-audio-panel" className="console-audio-panel" role="dialog" aria-label="Impostazioni audio">
-          <p className="console-audio-title">Impostazioni audio</p>
+        <div id="console-audio-panel" className="console-audio-panel" role="dialog" aria-label="Audio settings">
+          <p className="console-audio-title">Audio settings</p>
           <button type="button" aria-pressed={prefs.music} onClick={() => xmbAudio.setPreferences({ music: !prefs.music })}>
-            Musica <span>{prefs.music ? "Attiva" : "Disattivata"}</span>
+            Music <span>{prefs.music ? "On" : "Off"}</span>
           </button>
           <button type="button" aria-pressed={prefs.effects} onClick={() => { xmbAudio.setPreferences({ effects: !prefs.effects }); blip("select"); }}>
-            Effetti <span>{prefs.effects ? "Attivi" : "Disattivati"}</span>
+            Effects <span>{prefs.effects ? "On" : "Off"}</span>
           </button>
           <label>
             Volume <span>{Math.round(prefs.master * 100)}%</span>
             <input type="range" min="0" max="1" step="0.05" value={prefs.master} onChange={(event) => xmbAudio.setPreferences({ master: Number(event.target.value) })} />
           </label>
-          <button type="button" onClick={restart}>Riavvia la schermata di avvio</button>
+          <button type="button" onClick={restart}>Replay the boot sequence</button>
         </div>
       )}
     </div>

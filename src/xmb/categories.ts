@@ -2,7 +2,7 @@ import { REPO_LINKS } from "@/data/repository";
 import type { RoutePath } from "@/router/routes";
 
 export type GlyphName = "home" | "explore" | "protocols" | "engineering" | "operations" | "project";
-export type ItemIcon = "gateway" | "information" | "connections" | "topology" | "trace" | "protocol" | "routing" | "source" | "shield" | "status" | "download" | "configuration" | "monitor" | "quickstart" | "user" | "globe" | "contribute";
+export type ItemIcon = "gateway" | "information" | "connections" | "topology" | "trace" | "protocol" | "routing" | "source" | "shield" | "status" | "download" | "configuration" | "monitor" | "quickstart" | "user" | "globe" | "contribute" | "profile";
 export interface MenuCursor { cat: number; item: number }
 export interface XmbItem {
   id: string; code: string; label: string; sub: string; detail: string; icon: ItemIcon;
@@ -37,6 +37,7 @@ export const CATEGORIES: XmbCategory[] = [
     { id: "quickstart", code: "QS", label: "Quickstart", icon: "quickstart", sub: "Install, compile, start and verify on loopback.", detail: "Four documented steps. No credentials required by this website.", to: "/deploy", query: "view=quickstart" },
   ]},
   { id: "users", label: "Users", glyph: "project", tagline: "Open source", items: [
+    { id: "profile", code: "PRF", label: "Profile", icon: "profile", sub: "Maintainer, project identity and this session.", detail: "Who builds YAG, and what this browser can prove.", to: "/profile" },
     { id: "about", code: "10", label: "About YAG", icon: "user", sub: "Yet Another Gateway. Deliberately small in scope.", detail: "Experimental software. MIT licensed. By oakvx.", to: "/project" },
     { id: "github", code: "WEB", label: "GitHub", icon: "globe", sub: "github.com/oakvx/yag", detail: "Open the source repository in a new browser tab.", href: REPO_LINKS.repo },
     { id: "contributing", code: "PR", label: "Contributing", icon: "contribute", sub: "Help turn reproducible findings into better software.", detail: "Real-model probes, protocol reports and host hardening.", to: "/project", query: "view=contributing" },

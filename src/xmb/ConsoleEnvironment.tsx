@@ -434,8 +434,8 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       {!isApp && (
         <div className="console-help" data-console-action inert={paletteOpen || !bootReady}>
           <span className="console-help-arrows" aria-hidden="true">↔ ↕</span><span>Navigate</span>
-          <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /> Seleziona</button>
-          <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /> Indietro</button>
+          <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /> Select</button>
+          <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /> Back</button>
         </div>
       )}
 
