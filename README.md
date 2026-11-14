@@ -67,9 +67,13 @@ See [automation and runner setup](docs/operations/github-actions.md) and
 Need a client rather than an SDK? [YAG Desktop](desktop/README.md) provides a native
 Windows/macOS/Linux chat workspace for remote models served by your YAG Host.
 Each user connects to the HTTPS LAN gateway with a scoped client API key.
-The client does **not** run the models or require Ollama locally; streaming,
-model selection and cancellation are supported. IDEs and scripts can keep
-using the HTTP API directly.
+The client does **not** run the models or require Ollama locally. It offers
+multiple chat sessions, a safe Markdown/code renderer, configurable inference
+settings, and optional bounded local history (explicitly enabled by the user).
+LAN hosts can be suggested via optional mDNS announcements without automatic
+trust. YAG Desktop can also expose a temporary, authenticated localhost API
+for IDEs and other OpenAI-compatible programs. Direct YAG Host API access
+continues to work independently of the Desktop app.
 
 Cloud provider BYOK (Gemini, OpenAI and others) is a future **host-side**
 feature, not part of the initial Desktop client.
@@ -263,6 +267,7 @@ existing-host mode instead.
 
 [Full LAN server deployment and client onboarding](docs/deployment/lan-hub.md).
 [Control Plane APIs, resource limits, managed provider editing, encrypted backups and replica management](docs/operations/control-plane.md).
+[Manual BYOK OpenAI-compatible cloud providers (OpenRouter, Gemini and others)](docs/operations/cloud-providers.md).
 [Private administrative audit log: configuration and limitations](docs/operations/admin-audit.md).
 
 ## Ollama / Colibri quickstart

@@ -1,3 +1,6 @@
+mod discovery;
+mod relay;
+
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -10,6 +13,7 @@ use url::Url;
 #[derive(Default)]
 struct AppState {
     active: Mutex<HashMap<String, CancellationToken>>,
+    relay: Mutex<Option<relay::RelayHandle>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -123,6 +127,8 @@ struct ChatPayload<'a> {
     model: &'a str,
     messages: &'a [ChatMessage],
     stream: bool,
+    temperature: f32,
+    max_tokens: u32,
 }
 
 #[derive(Debug, PartialEq)]
@@ -190,6 +196,8 @@ async fn run_chat(
     messages: &[ChatMessage],
     cancel: &CancellationToken,
     on_event: &Channel<ChatEvent>,
+    temperature: f32,
+    max_tokens: u32,
 ) -> Result<(), String> {
     let origin = endpoint(url)?;
     key_valid(api_key)?;
@@ -204,7 +212,11 @@ async fn run_chat(
     {
         return Err("Conversation exceeds the supported message limits".into());
     }
-    let payload = ChatPayload { model, messages, stream: true };
+    if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature)
+        || !(64..=8192).contains(&max_tokens) {
+        return Err("Invalid inference settings".into());
+    }
+    let payload = ChatPayload { model, messages, stream: true, temperature, max_tokens };
     let response = client()?
         .post(format!("{origin}/v1/chat/completions"))
         .bearer_auth(api_key)
@@ -278,6 +290,8 @@ async fn stream_chat(
     messages: Vec<ChatMessage>,
     request_id: String,
     on_event: Channel<ChatEvent>,
+    temperature: f32,
+    max_tokens: u32,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     if request_id.is_empty() || request_id.len() > 80 {
@@ -293,7 +307,7 @@ async fn stream_chat(
     }
     let result = tokio::select! {
         _ = cancel.cancelled() => Err("Generation stopped".into()),
-        result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event) => result,
+        result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event, temperature, max_tokens) => result,
     };
     state.active.lock().await.remove(&request_id);
     result
@@ -307,11 +321,71 @@ async fn cancel_chat(request_id: String, state: State<'_, AppState>) -> Result<(
     Ok(())
 }
 
+
+#[tauri::command]
+async fn start_relay(url: String, api_key: String, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
+    let origin = endpoint(&url)?;
+    key_valid(&api_key)?;
+    // Validate the key against the actual gateway before making it available locally.
+    list_models(url, api_key.clone()).await?;
+    let mut active = state.relay.lock().await;
+    if active.is_some() { return Err("A local relay is already running".into()); }
+    let (info, handle) = relay::start(origin, api_key).await?;
+    *active = Some(handle);
+    Ok(info)
+}
+
+#[tauri::command]
+async fn stop_relay(state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(handle) = state.relay.lock().await.take() {
+        handle.cancel.cancel();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn discover_hosts() -> Result<Vec<discovery::DiscoveredHost>, String> {
+    discovery::scan().await
+}
+
+
+#[derive(Serialize)]
+struct VersionInfo {
+    current: String,
+    latest: String,
+    url: String,
+}
+#[tauri::command]
+async fn check_updates() -> Result<VersionInfo, String> {
+    // This explicit user-triggered check never transmits client API keys,
+    // conversation content or identifiable model names.
+    let response = client()?
+        .get("https://api.github.com/repos/oakvx/yag/releases/latest")
+        .header("User-Agent", "YAG-Desktop-Update-Check")
+        .timeout(Duration::from_secs(8))
+        .send().await.map_err(|_| "Could not reach GitHub Releases".to_string())?;
+    if !response.status().is_success() {
+        return Err("No published GitHub Release could be retrieved".into());
+    }
+    let release: serde_json::Value = response.json().await
+        .map_err(|_| "Invalid release metadata".to_string())?;
+    let latest = release.get("tag_name").and_then(|v| v.as_str()).unwrap_or("");
+    if latest.len() > 40 || !latest.starts_with('v') ||
+        !latest[1..].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.') {
+        return Err("Unexpected version tag from GitHub".into());
+    }
+    Ok(VersionInfo {
+        current: env!("CARGO_PKG_VERSION").into(),
+        latest: latest.into(),
+        url: format!("https://github.com/oakvx/yag/releases/tag/{latest}"),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat])
+        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts, check_updates])
         .run(tauri::generate_context!())
         .expect("failed to launch YAG Desktop");
 }

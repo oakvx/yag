@@ -165,6 +165,22 @@ class ProviderManager(unittest.TestCase):
                 self.assertEqual(self.apply(bad)[0],400)
                 self.assertEqual(self.store.read_bytes(),initial)
 
+    def test_035_https_cloud_api_base_paths_are_bounded(self):
+        for url in ("https://openrouter.ai/api/v1",
+                    "https://generativelanguage.googleapis.com/v1beta/openai"):
+            with self.subTest(url=url):
+                entry={"url":url,"key_env":"YAG_POOL_KEY_1",
+                       "models":["cloud/model"],"enabled":False}
+                code,_,body=self.apply([entry])
+                self.assertEqual(code,200,body)
+                self.assertEqual(json.loads(self.store.read_text())["replicas"][0]["url"],url)
+        for url in ("http://192.168.1.50/api/v1",
+                    "https://example.com/admin",
+                    "https://openrouter.ai/api/v1/",
+                    "https://openrouter.ai/api/v1?token=secret"):
+            with self.subTest(url=url):
+                self.assertEqual(self.apply([{"url":url}])[0],400)
+
     def test_04_busy_reconfig_returns_conflict_and_preserves_config(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
                "models":["slow"],"enabled":True,"priority":0}

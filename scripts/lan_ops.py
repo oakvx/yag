@@ -27,8 +27,9 @@ def validate_backend(url):
     parsed = urlsplit(url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname or (
         parsed.username or parsed.password or parsed.query or parsed.fragment
-        or parsed.path != "/v1" or url.endswith("/")):
-        raise ValueError("Expected HTTP(S) OpenAI-compatible URL ending in /v1")
+        or parsed.path not in ({"/v1", "/api/v1", "/v1beta/openai"}
+            if parsed.scheme == "https" else {"/v1"}) or url.endswith("/")):
+        raise ValueError("Expected a supported OpenAI-compatible API base path (HTTPS required for cloud)")
     try:
         port = parsed.port
     except ValueError as exc:
