@@ -4,6 +4,7 @@ export const TREE_URL = `${REPO_URL}/tree/main`;
 
 export const REPO_LINKS = {
   repo: REPO_URL,
+  author: "https://github.com/oakvx",
   readme: `${REPO_URL}#readme`,
   endpoints: `${REPO_URL}#endpoints`,
   build: `${REPO_URL}#build`,

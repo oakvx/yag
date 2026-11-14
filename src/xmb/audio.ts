@@ -4,6 +4,9 @@ export type SoundEffect = "move" | "select" | "back" | "category" | "trophy";
 export interface AudioPreferences { music: boolean; effects: boolean; master: number }
 
 const STORAGE_KEY = "yag-xmb-audio-v2";
+/** Exposed so the profile page can report where the audio preferences live. */
+export const AUDIO_STORAGE_KEY = STORAGE_KEY;
+
 const DEFAULTS: AudioPreferences = { music: true, effects: true, master: 0.6 };
 const SLOTS: Record<"boot" | "home" | SoundEffect, string[]> = {
   boot: ["audio/start.mp3"],

@@ -162,6 +162,16 @@ export function ConsoleIcon({ name, className }: { name: Icon; className?: strin
         <circle cx="17" cy="12" r="6" fill={silver} /><circle cx="17" cy="51" r="6" fill={silver} /><circle cx="47" cy="13" r="6" fill={silver} />
       </>;
       break;
+    case "profile":
+      artwork = <>
+        <path d="M16 4h32a4 4 0 0 1 4 4v48a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill={silver} />
+        <path d="M19 13h26v39H19z" fill="#294b65" opacity=".74" />
+        <circle cx="32" cy="27" r="7.5" fill={silver} />
+        <path d="M22 52v-5c0-6 4.5-10 10-10s10 4 10 10v5z" fill={silver} />
+        <circle cx="32" cy="8.5" r="2.6" fill="#294b65" opacity=".65" />
+        <path d="M16 4h32a4 4 0 0 1 4 4v48a4 4 0 0 1-4 4H16a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" fill="none" stroke="#fff" strokeOpacity=".38" />
+      </>;
+      break;
   }
 
   return (
