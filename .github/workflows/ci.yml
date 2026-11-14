@@ -98,6 +98,8 @@ jobs:
           cache-dependency-path: console/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Smoke-test built Console in real Chromium
+        run: node scripts/browser-smoke.mjs
 
   container:
     name: Docker image build and localhost smoke
