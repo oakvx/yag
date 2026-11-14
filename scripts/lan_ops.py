@@ -5,6 +5,7 @@ Platform-independent Python standard library. Uses the external age CLI for
 backup encryption; never emits an unencrypted backup artifact to the caller.
 """
 import datetime
+import getpass
 import io
 import ipaddress
 import json
@@ -213,6 +214,37 @@ def configure_provider(path, action, url=None, key_env=None, models=None,
     save_environment(path, "YAG_UPSTREAM_POOL",
                      json.dumps(pool, separators=(",", ":"), ensure_ascii=True))
     print("Replica configuration updated. Run 'python scripts/lan.py up' to apply.")
+
+
+def provider_key(path, operation, alias=None):
+    """Configure a private BYOK secret without exposing it in argv or stdout.
+
+    Secrets remain in the restricted .env.lan and are loaded at gateway start;
+    this is intentionally not an encrypted credential vault.
+    """
+    if operation == "list":
+        _, entries = read_entries(path)
+        for index in range(1, 9):
+            name = f"YAG_POOL_KEY_{index}"
+            print(f"{name}: {'configured' if entries.get(name) else 'empty'}")
+        return
+    if not isinstance(alias, str) or not re.fullmatch(r"YAG_POOL_KEY_[1-8]", alias):
+        raise ValueError("Choose an alias YAG_POOL_KEY_1..8")
+    if operation == "set":
+        value = getpass.getpass(f"Provider key for {alias} (input hidden): ")
+        # Unquoted Compose .env keys: reject interpolation and comment metacharacters.
+        if not re.fullmatch(r"[A-Za-z0-9_.:+/=-]{8,4096}", value):
+            raise ValueError("Key requires 8..4096 safe non-whitespace characters; use an external secret manager for other formats")
+        save_environment(path, alias, value)
+        print(f"{alias} configured in private .env.lan. Restart the gateway to apply.")
+        return
+    if operation == "clear":
+        if any(entry.get("key_env") == alias for entry in read_pool(path)):
+            raise ValueError("Remove providers using this alias before clearing the credential")
+        save_environment(path, alias, "")
+        print(f"{alias} cleared in private .env.lan. Restart the gateway to apply.")
+        return
+    raise ValueError("Unsupported provider-key operation")
 
 
 def private_archive(entries, target):
