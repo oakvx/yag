@@ -70,6 +70,31 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
             || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-configured-route")
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
+    /* Publish enabled managed-provider model IDs without probing remote APIs
+     * or trusting provider-advertised capabilities. Deduplicate against the
+     * default inventory and exact routes; disabled providers stay hidden. */
+    pthread_mutex_lock((pthread_mutex_t *)&cfg->lock);
+    if(good)for(size_t p=0;p<cfg->pool_count;p++) {
+        const yag_pool_backend *backend=&cfg->pool[p];
+        if(!backend->enabled || !backend->exclusive_models)continue;
+        for(size_t m=0;good && m<backend->model_count;m++) {
+            const char *name=backend->models[m];
+            int exists=0;
+            yyjson_mut_val *known;
+            yyjson_mut_arr_foreach(items,i,count,known) {
+                if(yyjson_mut_equals_str(yyjson_mut_obj_get(known,"id"),name)) {
+                    exists=1;break;
+                }
+            }
+            if(exists)continue;
+            yyjson_mut_val *entry=yyjson_mut_obj(d);
+            if(!entry || !yyjson_mut_obj_add_str(d,entry,"object","model")
+                || !yyjson_mut_obj_add_strcpy(d,entry,"id",name)
+                || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-managed-provider")
+                || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)&cfg->lock);
     char *json=NULL;
     int missing=0;
     if(good) {
