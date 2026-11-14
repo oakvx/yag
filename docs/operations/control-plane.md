@@ -182,6 +182,9 @@ takes effect without restarting the gateway and survives restarts.
 The stored registry takes precedence over `YAG_UPSTREAM_POOL` after its
 first write. Edit/remove that private file only while YAG is stopped.
 
+For supported HTTPS API base paths and confidential third-party keys, see
+[manual cloud provider configuration](cloud-providers.md).
+
 The primary upstream remains fixed in `YAG_UPSTREAM_URL`. Disabled replicas
 are ignored by routing. Priority (0 highest, 100 lowest) breaks ties after
 least-inflight; equal-priority replicas retain rotation. The dashboard

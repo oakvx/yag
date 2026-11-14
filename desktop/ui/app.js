@@ -5,6 +5,8 @@
 const tauri = window.__TAURI__
 const invoke = tauri.core.invoke
 const Channel = tauri.core.Channel
+const Workspace = window.YagWorkspace
+const Markdown = window.YagMarkdown
 
 const el = (id) => document.getElementById(id)
 const state = {
@@ -15,7 +17,115 @@ const state = {
   messages: [],
   requestId: null,
   running: false,
-  usage: null
+  usage: null,
+  online: false,
+  conversations: Workspace.load(),
+  activeChatId: null,
+  temperature: 0.7,
+  maxTokens: 1024,
+  systemPrompt: '',
+  relay: null
+}
+
+
+function saveActive() {
+  if (!state.activeChatId) return
+  const record = state.conversations.find(c => c.id === state.activeChatId)
+  if (!record) return
+  record.messages = state.messages.map(m => ({ role: m.role, content: m.content }))
+  record.model = state.model
+  record.updated = Date.now()
+  const first = record.messages.find(m => m.role === 'user')
+  if (record.title === 'New conversation' && first) record.title = first.content.slice(0, 60)
+  state.conversations.sort((a, b) => b.updated - a.updated)
+  if (state.conversations.length > Workspace.limits.chats) state.conversations.length = Workspace.limits.chats
+  if (Workspace.enabled() && !Workspace.save(state.conversations)) {
+    showError('Local conversation storage is full. Free space or disable history in Preferences.')
+  }
+  renderConversations()
+}
+function ensureChat() {
+  if (state.activeChatId) return
+  const record = Workspace.makeChat(state.url, state.model)
+  state.activeChatId = record.id
+  state.conversations.unshift(record)
+  renderConversations()
+}
+function renderConversations() {
+  const root = el('conversationList')
+  root.replaceChildren()
+  const query = el('chatSearch').value.toLocaleLowerCase().trim()
+  const matching = state.conversations.filter(c => c.host === state.url &&
+    (c.title.toLocaleLowerCase().includes(query) || c.model.toLocaleLowerCase().includes(query) ||
+     c.messages.some(m => m.content.toLocaleLowerCase().includes(query))))
+  if (!matching.length) {
+    const p = document.createElement('p')
+    p.className = 'conversation-placeholder'
+    p.textContent = state.url ? 'No conversations on this host.' : 'Connect to a YAG Host first.'
+    root.append(p)
+  }
+  for (const chat of matching) {
+    const row = document.createElement('div')
+    row.className = 'conversation-row' + (chat.id === state.activeChatId ? ' active' : '')
+    const main = document.createElement('button')
+    main.type = 'button'
+    main.className = 'conversation-main'
+    const title = document.createElement('strong')
+    title.textContent = chat.title || 'Conversation'
+    const detail = document.createElement('small')
+    detail.textContent = chat.model
+    main.append(title, detail)
+    main.disabled = state.running
+    main.addEventListener('click', () => {
+      if (state.running || chat.id === state.activeChatId) return
+      if (!state.models.some(m => m.id === chat.model)) {
+        showError('That model is no longer offered by this server.')
+        return
+      }
+      saveActive()
+      state.activeChatId = chat.id
+      state.model = chat.model
+      state.messages = chat.messages.map(m => ({ ...m }))
+      state.usage = null
+      el('usageText').textContent = 'Saved conversation'
+      renderModels()
+      renderConversations()
+      renderMessages()
+      setStatus(state.online)
+    })
+    const rename = document.createElement('button')
+    rename.type = 'button'
+    rename.className = 'conversation-action'
+    rename.title = 'Rename conversation'
+    rename.textContent = '✎'
+    rename.disabled = state.running
+    rename.addEventListener('click', () => {
+      const name = window.prompt('Rename conversation', chat.title)
+      if (name === null || !name.trim()) return
+      chat.title = name.trim().slice(0, 100)
+      Workspace.save(state.conversations)
+      renderConversations()
+    })
+    const del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'conversation-action'
+    del.title = 'Delete conversation'
+    del.textContent = '×'
+    del.disabled = state.running
+    del.addEventListener('click', () => {
+      if (!window.confirm('Permanently delete this conversation from this device?')) return
+      state.conversations = state.conversations.filter(c => c.id !== chat.id)
+      if (state.activeChatId === chat.id) {
+        state.activeChatId = null
+        state.messages = []
+        renderMessages()
+      }
+      Workspace.save(state.conversations)
+      renderConversations()
+    })
+    row.append(main, rename, del)
+    root.append(row)
+  }
 }
 
 function showError(message) {
@@ -38,6 +148,7 @@ function closeDialog() {
   el('connectionDialog').hidden = true
 }
 function setStatus(online) {
+  state.online = online
   el('connectionIndicator').classList.toggle('online', online)
   el('statusPill').classList.toggle('online', online)
   el('statusPill').textContent = online ? 'CONNECTED' : 'OFFLINE'
@@ -53,7 +164,9 @@ function setStatus(online) {
   el('stopButton').hidden = !state.running
   el('refreshButton').disabled = !online || state.running
   el('newChatButton').disabled = state.running
+  el('copyChatButton').disabled = state.messages.length === 0 || state.running
   el('disconnectButton').disabled = state.running
+  updateRelayDisplay()
 }
 function renderModels() {
   const root = el('models')
@@ -85,10 +198,8 @@ function renderModels() {
     meta.append(name, label)
     button.append(icon, meta)
     button.addEventListener('click', () => {
-      if (state.model !== model.id && state.messages.length &&
-          !window.confirm('Switch model? This will start a new conversation.')) return
+      if (state.model !== model.id) clearConversation()
       state.model = model.id
-      clearConversation()
       renderModels()
       setStatus(true)
       el('prompt').focus()
@@ -112,7 +223,7 @@ function renderMessages() {
     header.textContent = message.role === 'assistant' ? state.model : 'You'
     const text = document.createElement('div')
     text.className = 'message-content'
-    text.textContent = message.content
+    Markdown.render(text, message.content)
     if (state.running && message === state.messages[state.messages.length - 1] && message.role === 'assistant') {
       text.classList.add('typing-caret')
     }
@@ -123,11 +234,14 @@ function renderMessages() {
   el('chat').scrollTop = el('chat').scrollHeight
 }
 function clearConversation() {
+  saveActive()
+  state.activeChatId = null
   state.messages = []
   state.usage = null
   el('usageText').textContent = 'No requests yet'
   showError('')
   renderMessages()
+  renderConversations()
 }
 async function refreshModels() {
   if (!state.url || !state.apiKey || state.running) return
@@ -136,8 +250,8 @@ async function refreshModels() {
     const models = await invoke('list_models', { url: state.url, apiKey: state.apiKey })
     state.models = models
     if (!models.some((model) => model.id === state.model)) {
-      state.model = models.length ? models[0].id : ''
       clearConversation()
+      state.model = models.length ? models[0].id : ''
     }
     renderModels()
     setStatus(true)
@@ -163,11 +277,17 @@ async function connect(event) {
   try {
     const models = await invoke('list_models', { url, apiKey })
     const changed = state.url !== url || state.apiKey !== apiKey
+    if (changed && state.relay) await stopRelay()
+    if (changed) {
+      saveActive()
+      state.activeChatId = null
+    }
     state.url = url
     state.apiKey = apiKey
     state.models = models
     state.model = models.some((model) => model.id === state.model) ? state.model : (models[0]?.id || '')
     if (changed) clearConversation()
+    renderConversations()
     // Only the non-secret server address is remembered.
     localStorage.setItem('yag.desktop.url', url)
     renderModels()
@@ -185,10 +305,13 @@ async function connect(event) {
     button.append(arrow)
   }
 }
-function disconnect() {
+async function disconnect() {
   if (state.running) return
+  if (state.relay) await stopRelay()
+  saveActive()
   state.url = ''
   state.apiKey = ''
+  state.activeChatId = null
   state.model = ''
   state.models = []
   el('apiKey').value = ''
@@ -207,8 +330,10 @@ async function sendMessage(event) {
     return
   }
   showError('')
+  ensureChat()
   state.messages.push({ role: 'user', content })
   const requestMessages = state.messages.map((message) => ({ role: message.role, content: message.content }))
+  if (state.systemPrompt.trim()) requestMessages.unshift({role: 'system', content: state.systemPrompt.trim()})
   const assistant = { role: 'assistant', content: '' }
   state.messages.push(assistant)
   el('prompt').value = ''
@@ -224,7 +349,7 @@ async function sendMessage(event) {
     if (event.kind === 'delta' && typeof event.text === 'string') {
       assistant.content += event.text
       const node = el('messages').lastElementChild?.querySelector('.message-content')
-      if (node) node.textContent = assistant.content
+      if (node) Markdown.render(node, assistant.content)
       el('chat').scrollTop = el('chat').scrollHeight
     } else if (event.kind === 'usage') {
       state.usage = event
@@ -234,7 +359,8 @@ async function sendMessage(event) {
   try {
     await invoke('stream_chat', {
       url: state.url, apiKey: state.apiKey, model: state.model,
-      messages: requestMessages, requestId, onEvent: channel
+      messages: requestMessages, requestId, onEvent: channel,
+      temperature: state.temperature, maxTokens: state.maxTokens
     })
   } catch (error) {
     const message = String(error)
@@ -244,6 +370,7 @@ async function sendMessage(event) {
     if (state.requestId === requestId) {
       state.requestId = null
       state.running = false
+      saveActive()
       setStatus(true)
       renderModels()
       renderMessages()
@@ -259,6 +386,149 @@ async function stopGeneration() {
     finally { el('stopButton').disabled = false }
   }
 }
+
+function openSettings() {
+  el('saveHistory').checked = Workspace.enabled()
+  el('temperature').value = state.temperature
+  el('temperatureValue').value = state.temperature.toFixed(1)
+  el('maxTokens').value = state.maxTokens
+  el('systemPrompt').value = state.systemPrompt
+  el('settingsDialog').hidden = false
+}
+function closeSettings() { el('settingsDialog').hidden = true }
+function updateRelayDisplay() {
+  el('relayDetails').hidden = !state.relay
+  el('startRelay').disabled = !state.online || !state.apiKey || !!state.relay
+  el('stopRelay').disabled = !state.relay
+  if (state.relay) {
+    el('relayUrl').textContent = state.relay.url + '/v1'
+    el('relayKey').textContent = state.relay.token
+  } else {
+    el('relayUrl').textContent = ''
+    el('relayKey').textContent = ''
+  }
+}
+async function stopRelay() {
+  try { await invoke('stop_relay') }
+  catch (error) { el('relayError').hidden = false; el('relayError').textContent = String(error) }
+  finally { state.relay = null; updateRelayDisplay() }
+}
+async function startRelay() {
+  if (!state.online || !state.apiKey || state.relay) return
+  el('relayError').hidden = true
+  el('startRelay').disabled = true
+  try {
+    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey})
+  } catch (error) {
+    el('relayError').textContent = String(error)
+    el('relayError').hidden = false
+  }
+  updateRelayDisplay()
+}
+async function discoverHosts() {
+  const button = el('discoverButton')
+  button.disabled = true
+  el('discoveryStatus').textContent = 'Searching for advertised servers…'
+  el('discoveryResults').replaceChildren()
+  try {
+    const hosts = await invoke('discover_hosts')
+    el('discoveryStatus').textContent = hosts.length ? 'Select a host:' : 'No YAG mDNS advertisements found.'
+    for (const host of hosts) {
+      const button = document.createElement('button')
+      button.className = 'discovery-result'
+      button.type = 'button'
+      const name = document.createElement('strong')
+      name.textContent = host.name
+      const address = document.createElement('small')
+      address.textContent = host.url
+      button.append(name, address)
+      button.addEventListener('click', () => {
+        el('serverUrl').value = host.url
+        el('discoveryStatus').textContent = 'Selected. Verify the TLS certificate and provide your client API key.'
+      })
+      el('discoveryResults').append(button)
+    }
+  } catch (error) {
+    el('discoveryStatus').textContent = String(error)
+  } finally { button.disabled = false }
+}
+
+el('copyChatButton').addEventListener('click', async () => {
+  if (!state.messages.length || state.running) return
+  const transcript = state.messages.map(message =>
+    '## ' + (message.role === 'assistant' ? state.model : 'User') +
+    '\n\n' + message.content
+  ).join('\n\n---\n\n')
+  try {
+    await navigator.clipboard.writeText(transcript)
+    el('copyChatButton').textContent = 'Copied'
+    setTimeout(() => { el('copyChatButton').textContent = 'Copy chat' }, 1500)
+  } catch {
+    showError('Clipboard access denied. Check operating-system permissions.')
+  }
+})
+el('checkUpdates').addEventListener('click', async () => {
+  const button = el('checkUpdates')
+  button.disabled = true
+  el('updateStatus').textContent = 'Checking published GitHub Releases…'
+  try {
+    const release = await invoke('check_updates')
+    el('updateStatus').textContent = 'Installed: ' + release.current +
+      ' · Latest release: ' + release.latest + ' · ' + release.url
+  } catch (error) {
+    el('updateStatus').textContent = String(error)
+  } finally { button.disabled = false }
+})
+el('settingsButton').addEventListener('click', openSettings)
+el('closeSettingsButton').addEventListener('click', closeSettings)
+el('settingsDialog').addEventListener('click', event => {
+  if (event.target === el('settingsDialog')) closeSettings()
+})
+el('temperature').addEventListener('input', () => {
+  state.temperature = Number(el('temperature').value)
+  el('temperatureValue').value = state.temperature.toFixed(1)
+})
+el('maxTokens').addEventListener('change', () => {
+  const number = Number(el('maxTokens').value)
+  state.maxTokens = Number.isInteger(number) && number >= 64 && number <= 8192 ? number : 1024
+  el('maxTokens').value = state.maxTokens
+})
+el('systemPrompt').addEventListener('change', () => {
+  state.systemPrompt = el('systemPrompt').value.slice(0, 4000)
+})
+el('saveHistory').addEventListener('change', () => {
+  try {
+    Workspace.setEnabled(el('saveHistory').checked)
+    if (Workspace.enabled()) {
+      saveActive()
+      if (!Workspace.save(state.conversations)) showError('Could not persist local history.')
+    } else showError('')
+  } catch {
+    el('saveHistory').checked = false
+    showError('Could not change local history settings.')
+  }
+})
+el('clearHistory').addEventListener('click', () => {
+  if (!window.confirm('Delete every locally saved conversation on this device?')) return
+  state.conversations = []
+  state.activeChatId = null
+  state.messages = []
+  try { Workspace.setEnabled(false); el('saveHistory').checked = false } catch {}
+  renderMessages()
+  renderConversations()
+})
+el('startRelay').addEventListener('click', startRelay)
+el('stopRelay').addEventListener('click', stopRelay)
+el('discoverButton').addEventListener('click', discoverHosts)
+el('copyRelayKey').addEventListener('click', () => {
+  if (state.relay) navigator.clipboard.writeText(state.relay.token).catch(() => {
+    el('relayError').textContent = 'Clipboard access denied'
+    el('relayError').hidden = false
+  })
+})
+
+el('chatSearch').addEventListener('input', renderConversations)
+el('newSidebarChat').addEventListener('click', clearConversation)
 el('serverButton').addEventListener('click', openDialog)
 el('emptyConnectButton').addEventListener('click', openDialog)
 el('closeDialogButton').addEventListener('click', closeDialog)
@@ -276,6 +546,7 @@ el('prompt').addEventListener('keydown', (event) => {
 })
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !el('connectionDialog').hidden) closeDialog()
+  if (event.key === 'Escape' && !el('settingsDialog').hidden) closeSettings()
 })
 el('connectionDialog').addEventListener('click', (event) => {
   if (event.target === el('connectionDialog')) closeDialog()
@@ -283,4 +554,5 @@ el('connectionDialog').addEventListener('click', (event) => {
 renderModels()
 renderMessages()
 setStatus(false)
+renderConversations()
 openDialog()
