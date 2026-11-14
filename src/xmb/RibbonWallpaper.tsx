@@ -8,14 +8,16 @@ export function emitWave(category: number | null, pulse = 0) {
   window.dispatchEvent(new CustomEvent("yag:wave", { detail: { category, pulse } }));
 }
 
+/** Upper bound on the wallpaper's backing store, in pixels. */
+const MAX_PIXELS = 8_300_000;
+
 interface GpuRenderer {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
   background: WebGLBuffer;
   ribbons: WebGLBuffer;
-  indices: WebGLBuffer;
   dust: WebGLBuffer;
-  indexCount: number;
+  ribbonCount: number;
   dustCount: number;
   position: number;
   uniforms: Record<string, WebGLUniformLocation | null>;
@@ -55,35 +57,25 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
 
   const background = gl.createBuffer();
   const ribbons = gl.createBuffer();
-  const indices = gl.createBuffer();
   const dust = gl.createBuffer();
-  if (!background || !ribbons || !indices || !dust) { gl.deleteProgram(program); return null; }
+  if (!background || !ribbons || !dust) { gl.deleteProgram(program); return null; }
   gl.useProgram(program);
   gl.bindBuffer(gl.ARRAY_BUFFER, background);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   const position = gl.getAttribLocation(program, "aPosition");
   gl.enableVertexAttribArray(position);
 
-  const segments = 120;
-  const bands = 24;
-  const vertices: number[] = [];
-  const triangles: number[] = [];
-  for (let band = 0; band <= bands; band++) {
-    for (let segment = 0; segment <= segments; segment++) {
-      vertices.push(segment / segments, -1 + 2 * band / bands);
-    }
-  }
-  for (let band = 0; band < bands; band++) {
-    for (let segment = 0; segment < segments; segment++) {
-      const a = band * (segments + 1) + segment;
-      const b = a + segments + 1;
-      triangles.push(a, b, a + 1, a + 1, b, b + 1);
-    }
+  // The ribbon pass solves the shape once per column on the vertex stage, so
+  // the surface only needs two rows of samples spanning the screen.
+  const columns = 512;
+  const ribbonVertices = new Float32Array(columns * 4);
+  for (let column = 0; column < columns; column++) {
+    const x = -1 + 2 * column / (columns - 1);
+    ribbonVertices.set([x, -1], column * 4);
+    ribbonVertices.set([x, 1], column * 4 + 2);
   }
   gl.bindBuffer(gl.ARRAY_BUFFER, ribbons);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(triangles), gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, ribbonVertices, gl.STATIC_DRAW);
 
   // Deterministic dust: stable across context restoration and renderer resets.
   let seed = 7173;
@@ -98,7 +90,7 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   for (const name of ["uResolution", "uTime", "uProgress", "uBoot", "uBrightness", "uExposure", "uSwell", "uSwellPosition", "uPalette[0]", "uPass", "uLayer"]) {
     uniforms[name] = gl.getUniformLocation(program, name);
   }
-  return { gl, program, background, ribbons, indices, dust, indexCount: triangles.length, dustCount, position, uniforms };
+  return { gl, program, background, ribbons, dust, ribbonCount: columns * 2, dustCount, position, uniforms };
   } catch {
     // Some browsers throw instead of returning null when WebGL is disabled.
     return null;
@@ -129,7 +121,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
     let swellStrength = 0;
     let width = 1;
     let height = 1;
-    let maxEdge = 1600;
+    let maxEdge = 2560;
     let observedFrames = 0;
     let slowFrames = 0;
     let palette = monthlyPalette();
@@ -153,8 +145,15 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
     const applySize = () => {
       const screenW = Math.max(1, window.innerWidth);
       const screenH = Math.max(1, window.innerHeight);
-      const cap = Math.min(maxEdge, screenW < 760 ? 1100 : 1600);
-      const scale = Math.min(window.devicePixelRatio || 1, cap / Math.max(screenW, screenH));
+      const cap = Math.min(maxEdge, screenW < 760 ? 1400 : 2560);
+      // Render at the display's own pixel density, inside a frame budget that
+      // keeps very large screens affordable. The floor keeps the backing store
+      // at least as large as the CSS box so the wallpaper is never upscaled.
+      const budget = Math.sqrt(MAX_PIXELS / Math.max(1, screenW * screenH));
+      const scale = Math.max(
+        Math.min(window.devicePixelRatio || 1, cap / Math.max(screenW, screenH), budget),
+        Math.min(1, budget),
+      );
       width = Math.max(1, Math.round(screenW * scale));
       height = Math.max(1, Math.round(screenH * scale));
       canvas.width = fallback.width = width;
@@ -195,11 +194,10 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
       gl.uniform1i(uniforms.uPass, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.ribbons);
       gl.vertexAttribPointer(renderer.position, 2, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, renderer.indices);
       const layers = frame.boot > 0.999 ? 1 : 3;
       for (let layer = 0; layer < layers; layer++) {
         gl.uniform1f(uniforms.uLayer, layer);
-        gl.drawElements(gl.TRIANGLES, renderer.indexCount, gl.UNSIGNED_SHORT, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, renderer.ribbonCount);
       }
       gl.uniform1i(uniforms.uPass, 2);
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.dust);
@@ -220,8 +218,12 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
         observedFrames++;
         if (interval > 0.023) slowFrames++;
         if (observedFrames >= 24) {
-          if (slowFrames / observedFrames > 0.4 && Math.max(width, height) > 640) {
-            maxEdge = Math.max(640, Math.round(Math.max(width, height) * 0.8));
+          const cssEdge = Math.max(window.innerWidth, window.innerHeight);
+          if (slowFrames / observedFrames > 0.4 && Math.max(width, height) > cssEdge * 0.75) {
+            // Scale down for struggling devices, but never past three quarters
+            // of the CSS size: heavy upscaling is what makes the wallpaper look
+            // soft and stretched.
+            maxEdge = Math.max(Math.round(cssEdge * 0.75), Math.round(Math.max(width, height) * 0.8));
             applySize();
           }
           observedFrames = slowFrames = 0;
@@ -319,7 +321,6 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({ clock }: { clock:
       if (renderer && !renderer.gl.isContextLost()) {
         renderer.gl.deleteBuffer(renderer.background);
         renderer.gl.deleteBuffer(renderer.ribbons);
-        renderer.gl.deleteBuffer(renderer.indices);
         renderer.gl.deleteBuffer(renderer.dust);
         renderer.gl.deleteProgram(renderer.program);
       }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { xmbAudio } from "./audio";
-import { assetExists, hasOptionalAsset, publicAsset } from "./assets";
+import { assetExists, publicAsset } from "./assets";
+import { useBrandFont } from "./brandFont";
 import {
   BOOT_DURATION, BOOT_HANDOFF, BOOT_SKIP_DURATION, REDUCED_BOOT_DURATION, REDUCED_BOOT_HANDOFF,
   getBootFrame, hasSeenBoot, rememberBoot, type BootClock, type BootStage,
@@ -161,7 +162,7 @@ interface BootScreenProps {
 export function BootScreen({ stage, paused, skipping, clock, onStart, onSkip }: BootScreenProps) {
   const [logo, setLogo] = useState(false);
   const [subtitle, setSubtitle] = useState(false);
-  const [bootFont, setBootFont] = useState<string | null>(null);
+  const brandFont = useBrandFont();
   const startButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -170,31 +171,6 @@ export function BootScreen({ stage, paused, skipping, clock, onStart, onSkip }: 
     void assetExists("brand/boot-subtitle.svg", "image").then((ok) => { if (mounted) setSubtitle(ok); });
     return () => { mounted = false; };
   }, []);
-
-  // Optional user-supplied display face. SVG artwork still takes priority.
-  useEffect(() => {
-    if (typeof FontFace === "undefined") return;
-    const candidates = [
-      "fonts/PS4-Logo.otf",
-      "fonts/YAG-Boot-Display.woff2",
-      "fonts/YAG-Boot-Display.ttf",
-    ].filter(hasOptionalAsset);
-    if (!candidates.length) return;
-    let cancelled = false;
-    (async () => {
-      for (const path of candidates) {
-        try {
-          const face = new FontFace("YAG Boot Display", `url("${publicAsset(path)}")`, { weight: "400", style: "normal" });
-          await face.load();
-          if (cancelled) return;
-          document.fonts.add(face);
-          setBootFont("YAG Boot Display");
-          return;
-        } catch { /* Try the next file, then the vector fallback. */ }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [logo]);
 
   useEffect(() => {
     if (stage === "gate") startButton.current?.focus({ preventScroll: true });
@@ -223,21 +199,21 @@ export function BootScreen({ stage, paused, skipping, clock, onStart, onSkip }: 
       data-skipping={skipping}
       role={stage === "gate" ? "dialog" : undefined}
       aria-modal={stage === "gate" ? true : undefined}
-      aria-label={stage === "gate" ? "Avvia YAG" : undefined}
+      aria-label={stage === "gate" ? "Start YAG" : undefined}
       aria-live="off"
     >
       {stage === "gate" ? (
         <button ref={startButton} type="button" className="boot-gate" onClick={onStart}>
-          Premi un tasto / clicca per avviare
-          <span>L'audio si attiva dopo l'interazione.</span>
+          Press a key or click to start
+          <span>Audio starts after the interaction.</span>
         </button>
       ) : (
         <>
-        <p className="sr-only" role="status">Avvio di YAG in corso. Premi un tasto o clicca per saltare dopo un secondo.</p>
+        <p className="sr-only" role="status">YAG is starting. Press a key or click to skip after one second.</p>
         <div className="boot-brand" aria-hidden="true">
           <div className="boot-wordmark">
-            {bootFont ? (
-              <span className="boot-wordmark-text" style={{ fontFamily: bootFont }}>YAG</span>
+            {brandFont ? (
+              <span className="boot-wordmark-text" style={{ fontFamily: brandFont }}>YAG</span>
             ) : logo ? (
               <img src={publicAsset("brand/boot-logo.svg")} alt="" onError={() => setLogo(false)} />
             ) : (

@@ -104,7 +104,7 @@
 .console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); opacity: 0.62; transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
 .console-destination-position.is-selected { opacity: 1; z-index: 3; }
 .console-destination-position.is-above:not(.is-selected) { opacity: 0.42; }
-.console-destination { display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
+.console-destination { position: relative; display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
 .console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(0.73); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
 .console-item-art svg { display: block; width: 100%; height: 100%; }
 .console-destination-position.is-selected .console-item-art { transform: scale(1); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
@@ -115,9 +115,11 @@
 .console-selection-light::before, .console-selection-light::after { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #ecfaff16 18%, #ecfaff07 60%, transparent); }
 .console-selection-light::before { top: 0; }
 .console-selection-light::after { bottom: 0; }
-.console-description { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap)); top: calc(var(--item-size) * 0.65 + var(--selection-offset, 0) * var(--item-step)); max-width: 45vw; pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(12.5px, 0.95vw, 25px); line-height: 1.65; text-shadow: 0 1px 3px #0008; }
-.console-description p { margin: 0; color: #d7e1ebc9; }
-.console-description p + p { margin-top: 5px; color: #b4cbdcab; font-size: 0.9em; }
+/* The selected row carries its own description, beside the label: the block can
+   never land on the next destination, however long the text grows. */
+.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: min(34vw, 470px); pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(12.5px, 0.95vw, 25px); line-height: 1.5; text-shadow: 0 1px 3px #0008; }
+.console-description-lead { color: #d7e1ebc9; }
+.console-description-detail { color: #b4cbdcab; font-size: 0.9em; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
 .from-left { animation: consoleItemsLeft 300ms ease both; }
 @keyframes consoleDescriptionIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
@@ -129,7 +131,7 @@
 .console-clock svg { width: 0.95em; height: 0.95em; }
 .console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
-.console-wordmark { font-family: "PS4 Logo", var(--font-xmb), sans-serif; font-size: clamp(19px, 1.72vw, 44px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.console-wordmark { font-family: var(--font-xmb), sans-serif; font-size: clamp(19px, 1.72vw, 44px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
 .console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(10px, 0.7vw, 19px); color: #b3cadc9c; }
 .console-identity-caption > span { font-size: 0.92em; color: #b3cadc7d; }
 .console-sound { display: flex; align-items: center; gap: 6px; margin-left: 1.4vw; padding: 5px; border: 0; background: transparent; color: #b3cadc99; font-size: clamp(11px, 0.72vw, 19px); }
@@ -180,7 +182,7 @@
 }
 .console-category-label { font-family: inherit; }
 .console-wordmark { font-weight: 400; letter-spacing: normal; }
-.console-identity .console-wordmark { font-family: "PS4 Logo", var(--font-xmb), sans-serif; }
+.console-identity .console-wordmark { font-family: var(--font-xmb), sans-serif; color: #f0f6fd; text-shadow: 0 1px 2px #0006, 0 0 16px #cfe8ff2e; }
 
 /* The boot overlay contains only typography; the wallpaper underneath never changes canvas. */
 .boot-screen { position: absolute; inset: 0; z-index: 70; pointer-events: none; color: #fff; }
@@ -266,8 +268,8 @@
   .console-clock { top: 4vh; right: 5vw; width: 47vw; height: 24px; font-size: 12px; }
   .console-destination-position { width: calc(100vw - var(--anchor-x) - 4vw + var(--item-size) / 2); }
   .console-item-label { white-space: normal; max-width: calc(100vw - var(--anchor-x) - 62px); }
-  .console-description { top: calc(38px + var(--selection-offset, 0) * var(--item-step)); max-width: calc(100vw - var(--anchor-x) - 55px); font-size: 12px; line-height: 1.5; }
-  .console-description p + p { display: none; }
+  .console-description { position: absolute; top: calc(100% + 6px); left: calc(var(--item-size) + var(--label-gap)); width: min(380px, calc(100vw - var(--anchor-x) - var(--label-gap) - var(--item-size) - 12px)); max-width: none; font-size: 12px; line-height: 1.5; }
+  .console-description-detail { display: none; }
   .console-selection-light { width: 66vw; left: 24px; }
   .console-identity { left: 6vw; bottom: 5vh; gap: 9px; }
   .console-wordmark { font-size: 20px; }
@@ -291,8 +293,8 @@
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step: 18vh; --category-size: 38px; --item-size: 34px; --menu-font: 14px; }
-  .console-description { font-size: 11px; top: 24px; }
-  .console-description p + p { display: none; }
+  .console-description { font-size: 11px; }
+  .console-description-detail { display: none; }
   .console-help { bottom: 5vh; }
   .console-identity { bottom: 5vh; }
 }

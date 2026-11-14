@@ -7,6 +7,7 @@ import { QuickJump } from "./QuickJump";
 import { emitWave, RibbonWallpaper } from "./RibbonWallpaper";
 import { blip, xmbAudio } from "./audio";
 import { AudioControls } from "./AudioControls";
+import { useBrandFont } from "./brandFont";
 import { BootScreen, useBootSequence } from "./BootScreen";
 import { EasterEgg, useEasterEgg } from "./EasterEgg";
 
@@ -67,6 +68,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const boot = useBootSequence();
   const [hoverAnchor, setHoverAnchor] = useState<number | null>(null);
   const [easterOpen, setEasterOpen] = useState(false);
+  const brandFont = useBrandFont();
   const wordmarkTaps = useRef(0);
   const memory = useRef(CATEGORIES.map(() => 0));
   const cursorRef = useRef(menuCursor);
@@ -375,15 +377,18 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                   >
                     <span className="console-item-art"><ConsoleIcon name={item.icon} /></span>
                     <span className="console-item-label">{item.label}{item.href && <span className="console-external">↗</span>}</span>
+                    {/* The description rides the selected row: beside its label, never over the next one. */}
+                    {on && (
+                      <span className="console-description">
+                        <span className="console-description-lead">{item.sub}</span>
+                        <span className="console-description-detail">{item.detail}</span>
+                      </span>
+                    )}
                   </a>
                 </li>
               );
             })}
           </ul>
-          <div key={selected.id} className="console-description" aria-live="polite">
-            <p>{selected.sub}</p>
-            <p>{selected.detail}</p>
-          </div>
         </nav>
       </div>
 
@@ -419,6 +424,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         <button
           type="button"
           className="console-wordmark"
+          style={brandFont ? { fontFamily: brandFont } : undefined}
           aria-label="YAG / Yet Another Gateway"
           onClick={() => {
             wordmarkTaps.current++;
@@ -440,7 +446,9 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       )}
 
       <p className="sr-only" aria-live="polite">
-        {isApp ? `${appTitle} application. Escape returns to the menu.` : `${category.label}: ${selected.label}`}
+        {isApp
+          ? `${appTitle} application. Escape returns to the menu.`
+          : `${category.label}: ${selected.label}. ${selected.sub} ${selected.detail}`}
       </p>
       {paletteOpen && bootReady && <QuickJump />}
       <EasterEgg open={easterOpen} onClose={() => setEasterOpen(false)} />
