@@ -8,7 +8,7 @@ type Resource = {
   memory?: { used_bytes?:number; limit_bytes?:number; visible_host_available_bytes?:number; visible_host_total_bytes?:number }
   gpu?: { available:boolean; scope?:string; devices?: Array<{id:string;utilization_percent?:number;vram_used_bytes?:number;vram_total_bytes?:number;temperature_c?:number}> }
 }
-type Scheduler = { active:number; waiting:number; max_inference:number; max_per_key:number; queue_wait_ms:number }
+type Scheduler = { active:number; waiting:number; max_inference:number; effective_max_inference?:number; admission_mode?:string; gpu_sensor_available?:boolean; max_per_key:number; queue_wait_ms:number }
 type Sample = { at:string; rate:number|null; gpu:number|null }
 type Snapshot = { providers:Provider[]; resources:Resource|null; scheduler:Scheduler|null }
 const compact = (value:number) => new Intl.NumberFormat(undefined,{notation:'compact',maximumFractionDigits:1}).format(value)
@@ -78,6 +78,7 @@ export default function TelemetryOverview({apiKey}:{apiKey:string}) {
   const values=samples.map(s=>mode==='tokens'?s.rate:s.gpu)
   const max=Math.max(1,...values.filter((v):v is number=>v!==null))
   const hasGpu=Boolean(gpu)
+  const currentSample=samples.length?samples[samples.length-1]:undefined
   return <section className="telemetry-section" aria-label="Live observability">
     <div className="telemetry-heading"><div><span className="telemetry-kicker">LIVE OPERATIONS</span><h2>Inference telemetry</h2>
       <p>Aggregated counters since restart. No prompt or response content is collected.</p></div>
@@ -87,16 +88,16 @@ export default function TelemetryOverview({apiKey}:{apiKey:string}) {
       <div className="telemetry-card"><div className="telemetry-card-name"><Layers3 size={16}/> INPUT TOKENS</div><strong>{providerTotals.usage?compact(providerTotals.prompt):'—'}</strong><small>Upstream-reported prompt tokens</small></div>
       <div className="telemetry-card"><div className="telemetry-card-name"><Gauge size={16}/> OUTPUT TOKENS</div><strong>{providerTotals.usage?compact(providerTotals.completion):'—'}</strong><small>Upstream-reported generated tokens</small></div>
       <div className="telemetry-card"><div className="telemetry-card-name"><Activity size={16}/> INFERENCE CALLS</div><strong>{snapshot.providers.length?compact(providerTotals.attempts):'—'}</strong><small>{compact(providerTotals.successes)} successful · {compact(providerTotals.failures)} failed</small></div>
-      <div className="telemetry-card"><div className="telemetry-card-name"><Server size={16}/> SCHEDULER</div><strong>{snapshot.scheduler?snapshot.scheduler.active+' / '+(snapshot.scheduler.max_inference||'∞'):'—'}</strong><small>{snapshot.scheduler?snapshot.scheduler.waiting+' queued · '+(snapshot.scheduler.max_per_key||'∞')+' per key':'No scheduler data'}</small></div>
+      <div className="telemetry-card"><div className="telemetry-card-name"><Server size={16}/> SCHEDULER</div><strong>{snapshot.scheduler?snapshot.scheduler.active+' / '+(snapshot.scheduler.effective_max_inference ?? snapshot.scheduler.max_inference ?? '∞'):'—'}</strong><small>{snapshot.scheduler?snapshot.scheduler.waiting+' queued · '+(snapshot.scheduler.admission_mode||'static')+' mode':'No scheduler data'}</small></div>
     </div>
     <div className="telemetry-grid">
       <div className="telemetry-chart-panel"><div className="telemetry-panel-head"><div><b>Runtime activity</b><span>Rolling 3-minute window, sampled locally</span></div><div className="telemetry-switch" role="group" aria-label="Chart metric"><button className={mode==='tokens'?'active':''} onClick={()=>setMode('tokens')} aria-pressed={mode==='tokens'}>Tokens/s</button><button className={mode==='gpu'?'active':''} onClick={()=>setMode('gpu')} aria-pressed={mode==='gpu'}>GPU %</button></div></div>
-        <div className="telemetry-chart-number">{mode==='tokens'?(samples.at(-1)?.rate===null || samples.at(-1)?.rate===undefined?'—':samples.at(-1)!.rate!.toFixed(1)):(samples.at(-1)?.gpu===null || samples.at(-1)?.gpu===undefined?'—':samples.at(-1)!.gpu!.toFixed(0))}<span> {mode==='tokens'?'generated tokens/s':'GPU utilization %'}</span></div>
+        <div className="telemetry-chart-number">{mode==='tokens'?(currentSample?.rate===null || currentSample?.rate===undefined?'—':currentSample!.rate!.toFixed(1)):(currentSample?.gpu===null || currentSample?.gpu===undefined?'—':currentSample!.gpu!.toFixed(0))}<span> {mode==='tokens'?'generated tokens/s':'GPU utilization %'}</span></div>
         <div className="telemetry-bars" role="img" aria-label={mode==='tokens'?'Generated token throughput history':'GPU utilization history'}>{samples.map((sample,index)=>{
           const value=mode==='tokens'?sample.rate:sample.gpu
           return <div key={index} className={'telemetry-bar '+(value===null?'missing':'')} style={{height:(value===null?3:Math.max(3,Math.round(value/max*100)))+'%'}} title={sample.at+' · '+(value===null?'Not reported':value.toFixed(1)+(mode==='tokens'?' tokens/s':'%'))}/>
         })}{samples.length===0 && <div className="telemetry-empty">Waiting for the first sample</div>}</div>
-        <div className="telemetry-chart-foot"><span>{samples[0]?.at||'—'}</span><span>{samples.at(-1)?.at||'—'}</span></div>
+        <div className="telemetry-chart-foot"><span>{samples[0]?.at||'—'}</span><span>{currentSample?.at||'—'}</span></div>
         <small className="telemetry-disclaimer">Token throughput is derived from changes in reported usage counters, not a per-token streaming clock. Counters reset when YAG restarts.</small>
       </div>
       <div className="telemetry-hardware"><div className="telemetry-panel-head"><div><b>Hardware</b><span>Actual host-visible sensor readings</span></div><Cpu size={17}/></div>
