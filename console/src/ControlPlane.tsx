@@ -17,6 +17,14 @@ type ResourceMetrics = {
 type Scheduler = {max_inference:number;effective_max_inference?:number;admission_mode?:'adaptive'|'static';gpu_sensor_available?:boolean;gpu_request_vram_mb?:number;gpu_margin_percent?:number;max_per_key:number;queue_wait_ms:number;active:number;waiting:number}
 type Pool = {resource_queue_wait_ms:number;resource_waiting:number;resource_rejections:number;vram_source:string;data:{index:number;role:string;active_requests:number;attempts:number;successes:number;failures:number;cooldown_seconds:number;declared_models?:string[];model_allowlist_enabled?:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number;vram_reserved_mb:number;capacity_skips:number}[]}
 type ClientCreated = {id:number;api_key:string;enabled:boolean}
+const CLIENT_SCOPES = [
+  {value:'inference+models',label:'Local/default inference + models'},
+  {value:'inference+models+dedicated',label:'Inference + models + dedicated providers'},
+  {value:'inference+dedicated',label:'Inference + dedicated providers'},
+  {value:'inference',label:'Local/default inference only'},
+  {value:'models',label:'Model discovery only'},
+  {value:'monitor',label:'Monitoring only'},
+]
 type ProviderConfig = {index:number;url:string;key_env:string;models:string[];exclusive_models:boolean;priority:number;enabled:boolean;max_inflight:number;vram_budget_mb:number;vram_reservation_mb:number}
 type ProviderList = {editable:boolean;data:ProviderConfig[]}
 type ProviderProbe = {available:boolean;http_status:number;latency_ms:number;checked_at:number;models:string[]}
@@ -255,6 +263,18 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
     }catch(e){setErrors(prev=>({...prev,clients:(e as Error).message}))}
     finally{setBusy('')}
   }
+  async function changeClientScope(client:Client,scope:string) {
+    if(busy || !client.managed || scope===client.scope)return
+    if(scope.includes('dedicated') && !client.scope.includes('dedicated') &&
+       !window.confirm('Grant this PC access to dedicated providers? Cloud prompts and tool arguments can leave your LAN and incur charges.'))return
+    setBusy('client-scope')
+    try{
+      await adminPost(apiKey,'/api/admin/clients/scope',{id:client.id,scope})
+      await loadClients()
+      setNotice('Client permission updated without changing its API key.')
+    }catch(e){setErrors(prev=>({...prev,clients:(e as Error).message}))}
+    finally{setBusy('')}
+  }
   async function clientAction(client:Client,action:'enable'|'disable'|'revoke'|'rename') {
     if(busy)return
     let name=client.name
@@ -325,15 +345,19 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <input aria-label="New client name" value={clientName} maxLength={48}
             onChange={e=>setClientName(e.target.value)} placeholder="Client name (e.g. Studio PC)"/>
           <select aria-label="Client scope" value={clientScope} onChange={e=>setClientScope(e.target.value)}>
-            <option value="inference+models">Inference + models</option>
-            <option value="inference">Inference only</option>
-            <option value="models">Model discovery only</option>
-            <option value="monitor">Monitoring only</option>
+            {CLIENT_SCOPES.map(scope=><option key={scope.value} value={scope.value}>{scope.label}</option>)}
           </select>
           <button className="primary-button" disabled={!apiKey || !!busy || !clientName.trim()}>
             <UserPlus size={14}/> Add client
           </button>
         </form>
+        <div className="control-footnote">
+          Dedicated model access must be granted explicitly per client key. Such models may
+          send prompts and tool arguments to cloud providers and incur charges. Existing
+          primary and legacy all-scope administrator credentials are privileged.
+          Managed client permissions can be changed below without regenerating the key.
+          Static environment-issued keys keep their bootstrap scopes.
+        </div>
         {newKey && <div className="control-key">
           <b>New API key for client #{newKey.id} — displayed only once</b>
           <code>{newKey.api_key}</code>
@@ -347,6 +371,11 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
               {' · '}{c.enabled?'Active':'Disabled'}
               {' · '}{c.accepted_requests} accepted</small></div>
             <div className="control-actions">
+              {c.managed && <select aria-label={'Permissions for '+c.name}
+                value={c.scope} disabled={!!busy}
+                onChange={e=>void changeClientScope(c,e.target.value)}>
+                {CLIENT_SCOPES.map(scope=><option key={scope.value} value={scope.value}>{scope.label}</option>)}
+              </select>}
               <button className="outline-button small" disabled={!!busy}
                 onClick={()=>void clientAction(c,'rename')}>Rename</button>
               <button className="outline-button small" disabled={!!busy}

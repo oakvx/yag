@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler
 from integration import Backend, KEY, MockServer, UPKEY, request
 
 REPLICA_KEY="testing-replica-key-1234"
+LOCAL_ONLY_KEY="local-client-no-cloud-key-12345"
 
 
 class ProviderMock(BaseHTTPRequestHandler):
@@ -64,6 +65,9 @@ class ProviderManager(unittest.TestCase):
             YAG_UPSTREAM_URL="http://127.0.0.1:"+str(cls.backend.server_port)+"/v1",
             YAG_UPSTREAM_KEY=UPKEY,
             YAG_PROVIDER_STORE=str(cls.store),
+            YAG_CLIENT_STORE=str(Path(cls.tmp.name)/"clients.json"),
+            YAG_EXTRA_API_KEYS=LOCAL_ONLY_KEY,
+            YAG_EXTRA_KEY_SCOPES="inference+models",
             YAG_POOL_KEY_1=REPLICA_KEY,
             YAG_UPSTREAM_POOL="[]",
             YAG_MAX_INFERENCE="4",
@@ -236,6 +240,70 @@ class ProviderManager(unittest.TestCase):
                             {"model":"managed-model","messages":[]})
         self.assertEqual(code,502,body)
         self.assertNotIn(b"managed-replica",body)
+
+    def test_046_dedicated_models_require_explicit_per_pc_scope(self):
+        entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
+               "models":["managed-model"],"exclusive_models":True,"enabled":True}
+        self.assertEqual(self.apply([entry])[0],200)
+        # Ordinary LAN PC keys can discover models but not use a dedicated
+        # remote provider. The guard applies to all protocol adapters.
+        self.assertEqual(request(self.port,"GET","/v1/models",
+                                 key=LOCAL_ONLY_KEY)[0],200)
+        for path in ("/v1/chat/completions","/v1/completions",
+                     "/v1/embeddings","/v1/responses","/v1/messages",
+                     "/v1/images/generations","/v1/audio/speech"):
+            with self.subTest(path=path):
+                code,_,body=request(self.port,"POST",path,
+                                    {"model":"managed-model","messages":[]},
+                                    key=LOCAL_ONLY_KEY)
+                self.assertEqual(code,403,body)
+                self.assertIn(b"Dedicated model",body)
+        # The same client may still use an ordinary primary/local model.
+        code,_,body=request(self.port,"POST","/v1/chat/completions",
+                            {"model":"glm-test","messages":[]},
+                            key=LOCAL_ONLY_KEY)
+        self.assertEqual(code,200,body)
+        # A newly issued managed credential is granted only the explicitly
+        # selected dedicated scope. No elevated access to admin is implied.
+        code,_,body=request(self.port,"POST","/api/admin/clients",
+            {"name":"Cloud-approved workstation",
+             "scope":"inference+models+dedicated"})
+        self.assertEqual(code,201,body)
+        client_key=json.loads(body)["api_key"]
+        code,_,body=request(self.port,"POST","/v1/chat/completions",
+                            {"model":"managed-model","messages":[]},
+                            key=client_key)
+        self.assertEqual(code,200,body)
+        self.assertEqual(json.loads(body)["source"],"managed-replica")
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":1,"scope":"inference+models+dedicated"})[0],403)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"bogus"})[0],400)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"inference+models"})[0],200)
+        self.assertEqual(request(self.port,"POST","/v1/chat/completions",
+            {"model":"managed-model","messages":[]},key=client_key)[0],403)
+        self.assertEqual(request(self.port,"POST","/api/admin/clients/scope",
+            {"id":2,"scope":"inference+models+dedicated"})[0],200)
+        self.assertEqual(request(self.port,"POST","/v1/chat/completions",
+            {"model":"managed-model","messages":[]},key=client_key)[0],200)
+        self.assertEqual(request(self.port,"POST","/api/admin/providers/apply",
+                                 {"replicas":[]},key=client_key)[0],403)
+        # Managed scope survives restart, unlike in-memory request stats.
+        cls=type(self)
+        cls.proc.terminate();cls.proc.wait(timeout=10);cls.proc.stderr.close()
+        cls.launch()
+        code,_,body=request(self.port,"POST","/v1/chat/completions",
+                            {"model":"managed-model","messages":[]},
+                            key=client_key)
+        self.assertEqual(code,200,body)
+        self.assertEqual(request(self.port,"POST","/v1/chat/completions",
+                   {"model":"managed-model","messages":[]},
+                   key=LOCAL_ONLY_KEY)[0],403)
+        code,_,body=request(self.port,"GET","/api/admin/clients")
+        self.assertEqual(code,200,body)
+        self.assertIn("inference+models+dedicated",
+                      [item["scope"] for item in json.loads(body)["data"]])
 
     def test_047_cloud_models_survive_primary_discovery_outage(self):
         entry={"url":self.url,"key_env":"YAG_POOL_KEY_1",
