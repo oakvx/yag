@@ -56,7 +56,8 @@ function renderConversations() {
   root.replaceChildren()
   const query = el('chatSearch').value.toLocaleLowerCase().trim()
   const matching = state.conversations.filter(c => c.host === state.url &&
-    (c.title.toLocaleLowerCase().includes(query) || c.model.toLocaleLowerCase().includes(query)))
+    (c.title.toLocaleLowerCase().includes(query) || c.model.toLocaleLowerCase().includes(query) ||
+     c.messages.some(m => m.content.toLocaleLowerCase().includes(query))))
   if (!matching.length) {
     const p = document.createElement('p')
     p.className = 'conversation-placeholder'
