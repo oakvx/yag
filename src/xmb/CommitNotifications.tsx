@@ -138,11 +138,6 @@ export function CommitNotifications({
         aria-hidden={!open}
         inert={!open}
       >
-        <header className="console-notice-head">
-          <span className="console-notice-title">Notifications</span>
-          <span className="console-notice-count">{count} commits</span>
-        </header>
-
         {/* The section mark: the large icon sits level with the selected
             entry, with the back chevron beside it, as on the hardware. */}
         <div className="console-notice-rail">
@@ -194,7 +189,7 @@ export function CommitNotifications({
                   <span className="console-notice-body">
                     <span className="console-notice-top">
                       <span className="console-notice-subject">{commit.subject}</span>
-                      {on && <span className="console-notice-value">{elapsed(commit.date, now)}</span>}
+                      <span className="console-notice-value">{elapsed(commit.date, now)}</span>
                     </span>
                     {on && (
                       <span className="console-notice-detail">
