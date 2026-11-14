@@ -28,8 +28,19 @@ On the **central YAG Host**:
 1. Obtain an API key from the provider you intend to use and review its
    pricing, privacy policy, data residency and retention practices.
 2. Store the key **outside GitHub** as `YAG_POOL_KEY_1` in the Host's private
-   environment or deployment secret manager. Grant owner-only filesystem
-   permissions to the private environment file.
+   environment or deployment secret manager. For a local, interactive setup:
+   
+   ```sh
+   python scripts/lan.py provider-key set --alias YAG_POOL_KEY_1
+   python scripts/lan.py provider-key list
+   ```
+
+   The first command prompts for the key with hidden input; it never puts the
+   secret in shell history or prints it. It writes the restricted `.env.lan`
+   file, which is **not encrypted at rest** by YAG. Use full-disk encryption or
+   an external secret manager where required. For key rotation, repeat
+   `provider-key set` and restart the gateway. To clear an unused alias, run
+   `provider-key clear --alias YAG_POOL_KEY_1` after deleting its provider routes.
 3. Restart the gateway process/container after changing environment
    variables. YAG must have loaded the key before a managed provider alias
    becomes usable.
