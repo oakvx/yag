@@ -41,7 +41,9 @@ jobs:
           set -euo pipefail
           version="${RELEASE_TAG#v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || exit 1
-          sed -i -E "s/project\(yag VERSION [^ ]+ LANGUAGES C\)/project(yag VERSION $version LANGUAGES C)/" CMakeLists.txt
+          # CMake VERSION permits numeric components only; preserve pre-release text in the tag.
+          core_version="${version%%-*}"
+          sed -i -E "s/project\(yag VERSION [^ ]+ LANGUAGES C\)/project(yag VERSION $core_version LANGUAGES C)/" CMakeLists.txt
       - name: Install native build dependencies
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
       - uses: actions/setup-node@v4
@@ -244,6 +246,9 @@ jobs:
     needs: [verify-assets, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Configure required reviewers for production-release in repository settings.
+    environment:
+      name: ${{ contains(github.ref_name, '-') && 'release-candidate' || 'production-release' }}
     permissions:
       contents: write
     steps:
@@ -257,14 +262,29 @@ jobs:
       - name: Publish reviewed tag assets (installers unsigned, build provenance attested)
         env:
           GH_TOKEN: ${{ github.token }}
+          STABLE_RELEASE_APPROVED: ${{ vars.YAG_STABLE_RELEASE_APPROVED }}
         shell: bash
         run: |
           set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          release_flags=()
+          if [[ "$version" == *-* ]]; then
+            release_flags+=(--prerelease --latest=false)
+            release_note="YAG release candidate. Experimental: installers unsigned, real Colibri qualification is NOT implied. Do not treat as a production-certified release. See docs/deployment/releases.md."
+          else
+            # No stable publication from a tag alone. The repository operator
+            # must explicitly approve it AND review qualification evidence.
+            if [[ "$STABLE_RELEASE_APPROVED" != true ]]; then
+              echo "Stable publication blocked: set YAG_STABLE_RELEASE_APPROVED after approved Colibri qualification and independent security review." >&2
+              exit 1
+            fi
+            release_note="YAG reviewed stable build. Validate release-specific Colibri qualifications and published support limitations before deployment. Installers may remain unsigned. See docs/deployment/releases.md."
+          fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
           else
             gh release create "$GITHUB_REF_NAME" release-assets/* \
-              --verify-tag \
+              --verify-tag "${release_flags[@]}" \
               --title "YAG $GITHUB_REF_NAME" \
-              --notes "Experimental YAG Host (Linux x86_64) and YAG Desktop (Linux, Windows, macOS). See docs/deployment/releases.md. Desktop packages are unsigned; no real-GPU or real-model qualification is implied."
+              --notes "$release_note"
           fi
