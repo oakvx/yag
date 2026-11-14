@@ -36,8 +36,9 @@ pub(crate) async fn scan() -> Result<Vec<DiscoveredHost>, String> {
                     if port == 0 { continue; }
                     let name = info.get_fullname().chars().take(100).collect::<String>();
                     for addr in info.get_addresses() {
-                        if !allowed_address(*addr) { continue; }
-                        let url = format!("https://{}:{port}", addr);
+                        let ip = addr.to_ip_addr();
+                        if !allowed_address(ip) { continue; }
+                        let url = format!("https://{ip}:{port}");
                         candidates.insert(url.clone(), DiscoveredHost {name: name.clone(), url});
                     }
                 }
