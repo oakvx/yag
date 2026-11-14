@@ -384,12 +384,12 @@ int config_load(yag_config *c) {
        || env_limit("YAG_GPU_REQUEST_VRAM_MB","1024",32768,&c->adaptive_request_vram_mb)
        || env_limit("YAG_GPU_VRAM_MARGIN_PERCENT","10",50,&c->adaptive_margin_percent)
        || c->adaptive_request_vram_mb<128) {
-        fprintf(stderr,"Invalid adaptive GPU admission settings\\n");
+        fprintf(stderr,"Invalid adaptive GPU admission settings\n");
         return -1;
     }
     c->adaptive_scheduler=!strcmp(adaptive,"1");
     if(c->adaptive_scheduler && !c->max_inference) {
-        fprintf(stderr,"YAG_ADAPTIVE_SCHEDULER requires YAG_MAX_INFERENCE > 0\\n");
+        fprintf(stderr,"YAG_ADAPTIVE_SCHEDULER requires YAG_MAX_INFERENCE > 0\n");
         return -1;
     }
     c->adaptive_effective_max=c->max_inference;
