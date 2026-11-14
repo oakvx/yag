@@ -136,6 +136,18 @@ Preferences allow a system prompt (up to 4000 characters), a temperature
 from 0 to 2, and a token budget of 64–8192. Support for these settings
 depends on the upstream model. The system prompt and live API key stay in
 application memory; the opt-in local history does not persist them.
+The **Copy chat** button exports the active conversation as Markdown to the
+system clipboard only when explicitly pressed. Clipboard managers and other
+local applications may retain that copy.
+
+## Release checks and installer authenticity
+
+**Preferences → Check for new release** performs an explicit, outbound HTTPS
+request to the public `oakvx/yag` GitHub Releases metadata API. It sends
+no API keys or prompt text. This is a manual *version check*, not an
+automatic updater. App installers remain unsigned until dedicated
+Authenticode/macOS signing identities are configured; verify their
+published SHA-256 checksums before running them.
 
 ## Architecture
 
