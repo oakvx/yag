@@ -35,12 +35,14 @@ jobs:
         run: python tests/lan_manager_test.py
       - name: Test private provider pool configuration and encrypted backups
         run: python tests/lan_ops_test.py
+      - name: Exercise offline production preflight and cloud egress policy
+        run: python tests/production_preflight_test.py
+      - name: Validate Colibri release evidence and freshness
+        run: python tests/release_gate_test.py
       - name: Test offline encrypted backup verification and safe staging
         run: python tests/lan_recovery_test.py
       - name: Verify tagged release integrity and safe rollback staging
         run: python tests/release_verify_test.py
-      - name: Test real-model qualification evidence gate
-        run: python tests/release_gate_test.py
 
   host:
     name: C17 host and protocol tests
