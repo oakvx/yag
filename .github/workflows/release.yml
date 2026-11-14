@@ -200,7 +200,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          mkdir -m 700 -p "$RUNNER_TEMP/yag-rollback"
+          mkdir -m 700 "$RUNNER_TEMP/yag-rollback"
           python3 scripts/release_verify.py --release-dir release-assets \
             --tag "$RELEASE_TAG" \
             --stage-host "$RUNNER_TEMP/yag-rollback/$RELEASE_TAG"
