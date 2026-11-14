@@ -69,6 +69,9 @@ static int call_ollama(const yag_config *cfg,const char *path,
         curl_easy_setopt(curl,CURLOPT_HTTPHEADER,headers);
         curl_easy_setopt(curl,CURLOPT_PROTOCOLS,CURLPROTO_HTTP|CURLPROTO_HTTPS);
         curl_easy_setopt(curl,CURLOPT_FOLLOWLOCATION,0L);
+        /* Local Ollama administration must never use workstation proxy env. */
+        if(curl_easy_setopt(curl,CURLOPT_PROXY,"")!=CURLE_OK ||
+           curl_easy_setopt(curl,CURLOPT_NOPROXY,"*")!=CURLE_OK)goto cleanup;
         curl_easy_setopt(curl,CURLOPT_CONNECTTIMEOUT,5L);
         curl_easy_setopt(curl,CURLOPT_TIMEOUT,timeout);
         curl_easy_setopt(curl,CURLOPT_NOSIGNAL,1L);
@@ -89,6 +92,7 @@ static int call_ollama(const yag_config *cfg,const char *path,
         rc=(int)curl_easy_perform(curl);
         curl_easy_getinfo(curl,CURLINFO_RESPONSE_CODE,http_status);
     }
+cleanup:
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     free(url);
