@@ -70,3 +70,7 @@ if(Python3_Interpreter_FOUND)
  add_test(NAME provider_manager COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/provider_manager.py $<TARGET_FILE:yag>)
  add_test(NAME resource_pool COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/resource_pool.py $<TARGET_FILE:yag>)
 endif()
+
+if(Python3_Interpreter_FOUND)
+ add_test(NAME mdns_advertise COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/mdns_advertise_test.py)
+endif()
