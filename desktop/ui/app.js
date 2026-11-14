@@ -24,7 +24,8 @@ const state = {
   temperature: 0.7,
   maxTokens: 1024,
   systemPrompt: '',
-  relay: null
+  relay: null,
+  cloudConsent: new Set() // In-memory only; no implicit cross-session consent.
 }
 
 
@@ -194,7 +195,8 @@ function renderModels() {
     name.textContent = model.id
     name.title = model.id
     const label = document.createElement('small')
-    label.textContent = 'Remote inference'
+    label.textContent = model.yag_remote_https ? 'External HTTPS · may incur charges' :
+      (model.yag_dedicated ? 'Dedicated LAN provider' : 'Remote inference')
     meta.append(name, label)
     button.append(icon, meta)
     button.addEventListener('click', () => {
@@ -279,6 +281,7 @@ async function connect(event) {
     const changed = state.url !== url || state.apiKey !== apiKey
     if (changed && state.relay) await stopRelay()
     if (changed) {
+      state.cloudConsent.clear()
       saveActive()
       state.activeChatId = null
     }
@@ -314,6 +317,7 @@ async function disconnect() {
   state.activeChatId = null
   state.model = ''
   state.models = []
+  state.cloudConsent.clear()
   el('apiKey').value = ''
   clearConversation()
   renderModels()
@@ -325,6 +329,16 @@ async function sendMessage(event) {
   if (state.running || !state.model || !state.apiKey) return
   const content = el('prompt').value.trim()
   if (!content) return
+  // A managed external HTTPS model can send prompts and tool content outside
+  // the LAN. Confirm once per server/model in volatile session memory.
+  const currentModel = state.models.find(item => item.id === state.model)
+  if (currentModel?.yag_remote_https) {
+    const consentId = state.url + '|' + state.model
+    if (!state.cloudConsent.has(consentId)) {
+      if (!window.confirm('This model uses an external HTTPS provider. Your messages can leave the LAN and may incur provider charges. Continue?')) return
+      state.cloudConsent.add(consentId)
+    }
+  }
   if (state.messages.length >= 78) {
     showError('Conversation limit reached. Start a new conversation.')
     return

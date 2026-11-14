@@ -7,7 +7,7 @@ import ControlPlane from './ControlPlane'
 import TelemetryOverview from './TelemetryOverview'
 
 type Page = 'Overview' | 'Playground' | 'Models' | 'Control' | 'Integrations' | 'Requests' | 'Settings'
-type Model = { id: string; owned_by?: string }
+type Model = { id: string; owned_by?: string; yag_dedicated?: boolean; yag_remote_https?: boolean }
 type Route = { model: string }
 type ProviderRow = {kind:'default'|'route';model:string|null;attempts:number;successes:number;
     failures:number;bypassed:number;fallbacks:number;total_latency_ms:number;
@@ -174,9 +174,15 @@ function ProviderProbe({apiKey,model}: {apiKey:string;model?:string}) {
 function Playground({apiKey,models,model,setModel}: {apiKey: string; models: Model[]; model: string; setModel: (m: string) => void}) {
   const [messages,setMessages] = useState<Message[]>([]), [input,setInput] = useState(''), [busy,setBusy] = useState(false), [err,setErr] = useState(''), [temperature,setTemperature] = useState('0.7')
   const controller = useRef<AbortController | null>(null)
+  const cloudApproved = useRef<Set<string>>(new Set())
+  useEffect(() => { cloudApproved.current.clear() }, [apiKey])
   useEffect(() => () => controller.current?.abort(), [])
   const send = async (e: React.FormEvent) => {
     e.preventDefault(); const text=input.trim(); if(!text || busy || !apiKey || !model) return
+    if(models.find(m => m.id === model)?.yag_remote_https && !cloudApproved.current.has(model)) {
+      if(!window.confirm('External HTTPS provider: prompts and tools may leave your LAN and incur provider charges. Continue?')) return
+      cloudApproved.current.add(model)
+    }
     const history: Message[]=[...messages,{role:'user',content:text}]; setMessages([...history,{role:'assistant',content:''}]); setInput(''); setErr(''); setBusy(true); const ctrl=new AbortController(); controller.current=ctrl
     try {
       const res=await api('/v1/chat/completions',apiKey,{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({model,messages:history,stream:true,temperature:Number(temperature)})})

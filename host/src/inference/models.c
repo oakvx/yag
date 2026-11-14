@@ -94,6 +94,8 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
         if(!entry || !yyjson_mut_obj_add_str(d,entry,"object","model")
             || !yyjson_mut_obj_add_strcpy(d,entry,"id",cfg->routes[r].model)
             || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-configured-route")
+            || !yyjson_mut_obj_add_bool(d,entry,"yag_remote_https",
+                !strncmp(cfg->routes[r].url,"https://",8))
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
     /* Publish enabled managed-provider model IDs without probing remote APIs
@@ -117,6 +119,9 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
             if(!entry || !yyjson_mut_obj_add_str(d,entry,"object","model")
                 || !yyjson_mut_obj_add_strcpy(d,entry,"id",name)
                 || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-managed-provider")
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_dedicated",1)
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_remote_https",
+                    !strncmp(backend->url,"https://",8))
                 || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
         }
     }
