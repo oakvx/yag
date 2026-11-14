@@ -2,6 +2,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
 use tauri::{ipc::Channel, State};
+use reqwest::redirect::Policy;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -76,6 +77,7 @@ fn client() -> Result<reqwest::Client, String> {
     // Native OS root stores are respected; TLS certificate checks are never disabled.
     reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
+        .redirect(Policy::none()) // Never forward a bearer token across redirects.
         .build()
         .map_err(|_| "Could not initialize the secure HTTP client".to_string())
 }
@@ -289,7 +291,10 @@ async fn stream_chat(
         }
         active.insert(request_id.clone(), cancel.clone());
     }
-    let result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event).await;
+    let result = tokio::select! {
+        _ = cancel.cancelled() => Err("Generation stopped".into()),
+        result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event) => result,
+    };
     state.active.lock().await.remove(&request_id);
     result
 }
