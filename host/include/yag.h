@@ -42,6 +42,7 @@ typedef struct {
     int enabled;
     /* Operator-set admission controls, not measured GPU utilization. */
     unsigned max_inflight;
+    unsigned max_requests_per_run,requests_reserved;
     unsigned vram_budget_mb, vram_reservation_mb, vram_reserved_mb;
     unsigned long admission_capacity_skips;
     /* Optional operator-declared per-replica model allowlist (not auto-discovery). */
