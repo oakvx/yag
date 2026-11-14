@@ -150,11 +150,11 @@ jobs:
             esac
             mapfile -d '' files < <(find "release-input/yag-desktop-$platform" \
               -type f -name "*.$extension" -print0)
-            if (( ${D}{#files[@]} != 1 )); then
-              echo "Expected exactly one $platform .$extension bundle, got ${D}{#files[@]}" >&2
+            if (( ${#files[@]} != 1 )); then
+              echo "Expected exactly one $platform .$extension bundle, got ${#files[@]}" >&2
               exit 1
             fi
-            cp "${D}{files[0]}" "release-assets/yag-desktop-${D}{GITHUB_REF_NAME}-$platform.$extension"
+            cp "${files[0]}" "release-assets/yag-desktop-${GITHUB_REF_NAME}-$platform.$extension"
           done
           (
             cd release-assets
