@@ -14,9 +14,45 @@ struct yag_waiter {
     int key_index;
 };
 
+/* A measured budget, not a CUDA-core heuristic. Samples no more than once per
+ * second; the configured cap and per-key limits always remain upper bounds.
+ * Without supported GPU sensors we retain the configured static cap. */
+static void refresh_adaptive_capacity(yag_config *cfg) {
+    if(!cfg->adaptive_scheduler || !cfg->max_inference)return;
+    time_t now=time(NULL);
+    if(now==cfg->adaptive_last_sample)return;
+    cfg->adaptive_last_sample=now;
+    cfg->adaptive_effective_max=cfg->max_inference;
+    cfg->adaptive_sensor_available=0;
+    cfg->adaptive_gpu_utilization=0;
+    cfg->adaptive_vram_total_bytes=0;
+    cfg->adaptive_vram_used_bytes=0;
+    yag_gpu_snapshot sample={0};
+    if(!gpu_probe_primary(&sample))return;
+    cfg->adaptive_gpu_utilization=sample.has_utilization?
+        sample.utilization_percent:0;
+    if(!sample.has_vram || !sample.vram_total_bytes ||
+       sample.vram_used_bytes>sample.vram_total_bytes)return;
+    cfg->adaptive_sensor_available=1;
+    cfg->adaptive_vram_total_bytes=sample.vram_total_bytes;
+    cfg->adaptive_vram_used_bytes=sample.vram_used_bytes;
+    unsigned long long free_bytes=sample.vram_total_bytes-sample.vram_used_bytes;
+    unsigned long long margin=sample.vram_total_bytes*
+        cfg->adaptive_margin_percent/100ULL;
+    unsigned long long budget=(unsigned long long)cfg->adaptive_request_vram_mb*1048576ULL;
+    unsigned long long slots=(free_bytes>margin)?(free_bytes-margin)/budget:0;
+    /* Keep one slot to allow an already-resident model to make progress.
+     * Backend OOM protection is still ultimately the model runtime's job. */
+    if(!slots)slots=1;
+    if(slots>cfg->max_inference)slots=cfg->max_inference;
+    if(sample.has_utilization && sample.utilization_percent>=95 && slots>1)
+        slots=(slots+1)/2;
+    cfg->adaptive_effective_max=(unsigned)slots;
+}
 static int has_capacity(const yag_config *cfg, int key_index) {
     return (!cfg->max_inference ||
-             cfg->inference_active < cfg->max_inference)
+             cfg->inference_active < (cfg->adaptive_scheduler ?
+                 cfg->adaptive_effective_max : cfg->max_inference))
         && (!cfg->max_per_key ||
              cfg->inference_inflight[key_index] < cfg->max_per_key);
 }
@@ -33,6 +69,7 @@ int scheduler_acquire(yag_config *cfg,int key_index) {
     if(!cfg->max_inference && !cfg->max_per_key)return 1;
     int ok=0;
     pthread_mutex_lock(&cfg->lock);
+    refresh_adaptive_capacity(cfg);
     if(!cfg->inference_head && has_capacity(cfg,key_index)) {
         cfg->inference_active++;
         cfg->inference_inflight[key_index]++;
@@ -52,6 +89,7 @@ int scheduler_acquire(yag_config *cfg,int key_index) {
                 deadline.tv_nsec-=1000000000L;
             }
             for(;;) {
+                refresh_adaptive_capacity(cfg);
                 if(cfg->inference_head==&waiter && has_capacity(cfg,key_index)) {
                     cfg->inference_active++;
                     cfg->inference_inflight[key_index]++;
@@ -87,7 +125,24 @@ void scheduler_status(int fd,yag_config *cfg) {
     yyjson_mut_val *root=yyjson_mut_obj(d);
     int ok=root!=NULL;
     pthread_mutex_lock(&cfg->lock);
+    refresh_adaptive_capacity(cfg);
     if(ok)ok=yyjson_mut_obj_add_str(d,root,"object","gateway.scheduler")
+        && yyjson_mut_obj_add_str(d,root,"admission_mode",
+                 cfg->adaptive_scheduler?"adaptive":"static")
+        && yyjson_mut_obj_add_bool(d,root,"gpu_sensor_available",
+                 cfg->adaptive_sensor_available!=0)
+        && yyjson_mut_obj_add_uint(d,root,"effective_max_inference",
+                 cfg->adaptive_scheduler?cfg->adaptive_effective_max:cfg->max_inference)
+        && yyjson_mut_obj_add_uint(d,root,"gpu_request_vram_mb",
+                 cfg->adaptive_request_vram_mb)
+        && yyjson_mut_obj_add_uint(d,root,"gpu_margin_percent",
+                 cfg->adaptive_margin_percent)
+        && yyjson_mut_obj_add_uint(d,root,"gpu_utilization_percent",
+                 cfg->adaptive_gpu_utilization)
+        && yyjson_mut_obj_add_uint(d,root,"gpu_vram_total_bytes",
+                 cfg->adaptive_vram_total_bytes)
+        && yyjson_mut_obj_add_uint(d,root,"gpu_vram_used_bytes",
+                 cfg->adaptive_vram_used_bytes)
         && yyjson_mut_obj_add_uint(d,root,"max_inference",cfg->max_inference)
         && yyjson_mut_obj_add_uint(d,root,"max_per_key",cfg->max_per_key)
         && yyjson_mut_obj_add_uint(d,root,"queue_wait_ms",cfg->queue_wait_ms)
