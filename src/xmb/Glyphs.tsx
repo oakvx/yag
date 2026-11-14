@@ -4,8 +4,16 @@ import type { GlyphName } from "./categories";
 import { ConsoleIcon } from "./ConsoleIcons";
 
 /** Keep category glyphs visually identical inside the menu and overview application. */
-export function Glyph({ name, className }: { name: GlyphName; className?: string }) {
-  return <ConsoleIcon name={name} className={cn("shrink-0", className)} />;
+export function Glyph({
+  name,
+  className,
+  tone = "metal",
+}: {
+  name: GlyphName;
+  className?: string;
+  tone?: "metal" | "current";
+}) {
+  return <ConsoleIcon name={name} className={cn("shrink-0", className)} tone={tone} />;
 }
 
 export function YagEmblem({ size = 28, className }: { size?: number; className?: string }) {

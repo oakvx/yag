@@ -15,31 +15,50 @@ function iconOverride(name: Icon): string | null {
   return hasOptionalAsset(path) ? publicAsset(path) : null;
 }
 
-/** XMB artwork: one traced outline per icon, filled with the console gradient. */
-export function ConsoleIcon({ name, className }: { name: Icon; className?: string }) {
+/**
+ * XMB artwork: one traced outline per icon.
+ *
+ * `tone="metal"` fills the outline with the console gradient, the treatment the
+ * crossbar uses. `tone="current"` paints it with the inherited colour, so a
+ * document page can tint the same glyph to its own palette.
+ */
+export function ConsoleIcon({
+  name,
+  className,
+  tone = "metal",
+}: {
+  name: Icon;
+  className?: string;
+  tone?: "metal" | "current";
+}) {
   const override = iconOverride(name);
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const silver = `url(#silver-${id})`;
   const outline = XMB_ICON_PATHS[name];
+  const paint = tone === "metal" ? silver : "currentColor";
 
   return (
     <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" className={className}>
-      <defs>
-        <linearGradient id={`silver-${id}`} x1="22" y1="4" x2="40" y2="59" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#fff" /><stop offset=".28" stopColor="#e9f2f5" />
-          <stop offset=".5" stopColor="#c2d0da" /><stop offset=".55" stopColor="#91a4b5" />
-          <stop offset=".85" stopColor="#adbdc9" /><stop offset="1" stopColor="#8194a6" />
-        </linearGradient>
-        {override && (
+      {tone === "metal" && (
+        <defs>
+          <linearGradient id={`silver-${id}`} x1="22" y1="4" x2="40" y2="59" gradientUnits="userSpaceOnUse">
+            <stop stopColor="#fff" /><stop offset=".28" stopColor="#e9f2f5" />
+            <stop offset=".5" stopColor="#c2d0da" /><stop offset=".55" stopColor="#91a4b5" />
+            <stop offset=".85" stopColor="#adbdc9" /><stop offset="1" stopColor="#8194a6" />
+          </linearGradient>
+        </defs>
+      )}
+      {override && (
+        <defs>
           <mask id={`art-${id}`} maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
             <image href={override} x="0" y="0" width="64" height="64" preserveAspectRatio="xMidYMid meet" />
           </mask>
-        )}
-      </defs>
+        </defs>
+      )}
       {override ? (
-        <rect width="64" height="64" fill={silver} mask={`url(#art-${id})`} />
+        <rect width="64" height="64" fill={paint} mask={`url(#art-${id})`} />
       ) : (
-        <path d={outline} fill={silver} fillRule="evenodd" />
+        <path d={outline} fill={paint} fillRule="evenodd" />
       )}
     </svg>
   );
