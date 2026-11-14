@@ -150,9 +150,17 @@ async function main() {
 main().catch(error => {
   console.error('Console browser regression FAILED:', error.message)
   process.exitCode = 1
-}).finally(() => {
+}).finally(async () => {
   socket?.close()
   chrome?.kill()
   server?.kill()
-  rmSync(userData, {recursive:true, force:true})
+  // Wait for Chromium to stop writing its temporary profile. Without this
+  // synchronization a passing smoke test can randomly fail with ENOTEMPTY.
+  if (chrome && chrome.exitCode === null && chrome.signalCode === null) {
+    await Promise.race([
+      new Promise(resolve => chrome.once('exit', resolve)),
+      new Promise(resolve => setTimeout(resolve, 5000))
+    ])
+  }
+  rmSync(userData, {recursive:true, force:true, maxRetries:10, retryDelay:200})
 })
