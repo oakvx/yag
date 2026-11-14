@@ -1,55 +1,177 @@
-name: Release Linux package
+name: Package and release YAG
 
 on:
   push:
     tags:
       - "v[0-9]*"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: yag-packages-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  linux:
-    name: Linux x86_64 release
+  host:
+    name: Package Linux x86_64 Host
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+        with:
+          persist-credentials: false
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: console/package-lock.json
-      - name: Build native binary and run tests
+      - name: Compile and test Host
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
-      - name: Build Console
+      - name: Compile React Console
         run: npm ci --prefix console && npm run build --prefix console
-      - name: Archive with documented runtime dependencies
+      - name: Create native Host archive
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p package/console
           cp build/yag package/
           cp -r console/dist package/console/
           cp README.md package/
           cp -r docs package/
           cat > package/RUNTIME.txt <<'EOF'
-          YAG Linux x86_64 package
-          Requires GNU/Linux with compatible glibc and libcurl4 runtime libraries.
-          Export YAG_API_KEY (minimum 16 characters), set the HTTP(S) upstream,
-          and start ./yag from this unpacked directory.
-          Binary is dynamically linked; it is not a portable static executable.
-          Do not expose the HTTP listener to an untrusted network.
+          YAG native Host for Linux x86_64
+          Requires a compatible glibc and libcurl4 system runtime.
+          Export YAG_API_KEY (at least 16 characters) and configure the upstream.
+          Start ./yag from this extracted directory.
+          The binary is dynamically linked, not a statically portable executable.
+          Do not expose the listener directly on untrusted networks.
           EOF
           tar -C package -czf yag-linux-x86_64.tar.gz .
-          sha256sum yag-linux-x86_64.tar.gz > yag-linux-x86_64.tar.gz.sha256
-      - name: Publish GitHub release for tag
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yag-host-linux-x86_64
+          path: yag-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  desktop:
+    name: Package Desktop ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            bundles: deb
+            platform: linux
+          - os: windows-latest
+            bundles: nsis
+            platform: windows
+          - os: macos-latest
+            bundles: dmg
+            platform: macos
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Linux packaging prerequisites
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            curl wget file libxdo-dev libssl-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Install desktop CLI
+        run: npm install --no-audit --no-fund
+      - name: Check frontend and generate app icons
+        run: |
+          npm run check
+          npm run icons
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Build unsigned native package
+        run: npm run build -- --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yag-desktop-${{ matrix.platform }}
+          path: desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish reviewed tag
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [host, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: yag-*
+          path: release-input
+          merge-multiple: false
+      - name: Verify assets and calculate SHA-256 for every package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp release-input/yag-host-linux-x86_64/yag-linux-x86_64.tar.gz release-assets/
+          for platform in linux windows macos; do
+            case "$platform" in
+              linux) extension=deb ;;
+              windows) extension=exe ;;
+              macos) extension=dmg ;;
+            esac
+            mapfile -d '' files < <(find "release-input/yag-desktop-$platform" \
+              -type f -name "*.$extension" -print0)
+            if (( ${D}{#files[@]} != 1 )); then
+              echo "Expected exactly one $platform .$extension bundle, got ${D}{#files[@]}" >&2
+              exit 1
+            fi
+            cp "${D}{files[0]}" "release-assets/yag-desktop-${D}{GITHUB_REF_NAME}-$platform.$extension"
+          done
+          (
+            cd release-assets
+            sha256sum yag-linux-x86_64.tar.gz yag-desktop-* > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
+      - name: Publish signed-off tag artifacts (installers currently unsigned)
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            yag-linux-x86_64.tar.gz yag-linux-x86_64.tar.gz.sha256 \
-            --title "YAG $GITHUB_REF_NAME" \
-            --notes "Experimental Linux x86_64 gateway and React Console. Requires system libcurl4. See RUNTIME.txt, README and deployment notes."
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" release-assets/* \
+              --verify-tag \
+              --title "YAG $GITHUB_REF_NAME" \
+              --notes "Experimental YAG Host (Linux x86_64) and YAG Desktop (Linux, Windows, macOS). See docs/deployment/releases.md. Desktop packages are unsigned; no real-GPU or real-model qualification is implied."
+          fi
