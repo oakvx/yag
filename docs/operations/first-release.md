@@ -83,6 +83,32 @@ branch/tag deployment protections there; do not enable that variable until
 actual Colibri qualification and the applicable security gates have passed.
 A prerelease uses the separate `release-candidate` environment.
 
+### Mandatory authenticated Colibri workflow run for stable tags
+
+In addition to protected-environment reviewer approval and
+`YAG_STABLE_RELEASE_APPROVED=true`, provide the **numeric run ID** of a
+successful, manually dispatched `Qualify a real model on Colibri` workflow
+in `YAG_STABLE_QUALIFICATION_RUN_ID` (prefer the `production-release`
+GitHub Environment variable). The stable publication job:
+
+1. Retrieves the workflow-run and job metadata using its limited GitHub
+   Actions read permission; no arbitrary URLs are accepted.
+2. Requires exactly the reviewed release commit on `main`, a successful
+   workflow dispatch, the expected workflow path, the labeled
+   `self-hosted/linux/yag-colibri` runner and successful full
+   `release_candidate` qualification step.
+3. Downloads the metadata-only artifact from that run and validates its
+   SHA-256 model ID, protocol/tool/SSE pass results, same commit, fresh
+   UTC date and reported NVIDIA GPU/driver inventory.
+4. Fails closed before publishing if any condition or artifact is missing.
+
+This keeps a stale, generic mocked or unqualified workflow artifact from
+silently authorizing a stable release. It does **not** prove the runner's
+physical identity beyond GitHub's labels, verify an Ollama model digest,
+substitute for a real recovery rehearsal or conduct independent security
+review. The operator must verify those separately and only then approve
+the protected environment.
+
 The variable is an **explicit operator approval**, not cryptographic proof
 of evidence. The release workflow cannot independently confirm third-party
 security review, physical restore drills, valid signing certificates or

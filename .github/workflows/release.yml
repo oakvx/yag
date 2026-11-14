@@ -251,6 +251,7 @@ jobs:
       name: ${{ contains(github.ref_name, '-') && 'release-candidate' || 'production-release' }}
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -259,6 +260,33 @@ jobs:
         with:
           name: yag-release-packages
           path: release-assets
+      - name: Require authenticated Colibri evidence before any stable publication
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COLIBRI_QUALIFICATION_RUN_ID: ${{ vars.YAG_STABLE_QUALIFICATION_RUN_ID }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$COLIBRI_QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Stable publication blocked: configure YAG_STABLE_QUALIFICATION_RUN_ID for an approved Colibri workflow run." >&2
+            exit 1
+          fi
+          evidence_dir="$RUNNER_TEMP/yag-release-qualification"
+          mkdir -m 700 "$evidence_dir"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$COLIBRI_QUALIFICATION_RUN_ID" \
+            > "$evidence_dir/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$COLIBRI_QUALIFICATION_RUN_ID/jobs?per_page=100" \
+            > "$evidence_dir/jobs.json"
+          python3 scripts/verify_colibri_run.py \
+            --run-info "$evidence_dir/run.json" \
+            --jobs "$evidence_dir/jobs.json" \
+            --commit "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
+          gh run download "$COLIBRI_QUALIFICATION_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" --name yag-real-model-qualification \
+            --dir "$evidence_dir"
+          python3 scripts/release_gate.py \
+            --evidence "$evidence_dir/qualification.json" --commit "$GITHUB_SHA"
       - name: Publish reviewed tag assets (installers unsigned, build provenance attested)
         env:
           GH_TOKEN: ${{ github.token }}
