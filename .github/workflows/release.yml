@@ -193,6 +193,19 @@ jobs:
             sha256sum yag-linux-x86_64.tar.gz yag-desktop-* > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
+      - name: Rehearse offline verified Host staging for a tagged release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -m 700 -p "$RUNNER_TEMP/yag-rollback"
+          python3 scripts/release_verify.py --release-dir release-assets \
+            --tag "$RELEASE_TAG" \
+            --stage-host "$RUNNER_TEMP/yag-rollback/$RELEASE_TAG"
+          test -x "$RUNNER_TEMP/yag-rollback/$RELEASE_TAG/yag"
+          test -f "$RUNNER_TEMP/yag-rollback/$RELEASE_TAG/console/dist/index.html"
       - uses: actions/upload-artifact@v4
         with:
           name: yag-release-packages
