@@ -123,6 +123,8 @@ struct ChatPayload<'a> {
     model: &'a str,
     messages: &'a [ChatMessage],
     stream: bool,
+    temperature: f32,
+    max_tokens: u32,
 }
 
 #[derive(Debug, PartialEq)]
@@ -190,6 +192,8 @@ async fn run_chat(
     messages: &[ChatMessage],
     cancel: &CancellationToken,
     on_event: &Channel<ChatEvent>,
+    temperature: f32,
+    max_tokens: u32,
 ) -> Result<(), String> {
     let origin = endpoint(url)?;
     key_valid(api_key)?;
@@ -204,7 +208,11 @@ async fn run_chat(
     {
         return Err("Conversation exceeds the supported message limits".into());
     }
-    let payload = ChatPayload { model, messages, stream: true };
+    if !temperature.is_finite() || !(0.0..=2.0).contains(&temperature)
+        || !(64..=8192).contains(&max_tokens) {
+        return Err("Invalid inference settings".into());
+    }
+    let payload = ChatPayload { model, messages, stream: true, temperature, max_tokens };
     let response = client()?
         .post(format!("{origin}/v1/chat/completions"))
         .bearer_auth(api_key)
@@ -278,6 +286,8 @@ async fn stream_chat(
     messages: Vec<ChatMessage>,
     request_id: String,
     on_event: Channel<ChatEvent>,
+    temperature: f32,
+    max_tokens: u32,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     if request_id.is_empty() || request_id.len() > 80 {
@@ -293,7 +303,7 @@ async fn stream_chat(
     }
     let result = tokio::select! {
         _ = cancel.cancelled() => Err("Generation stopped".into()),
-        result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event) => result,
+        result = run_chat(&url, &api_key, &model, &messages, &cancel, &on_event, temperature, max_tokens) => result,
     };
     state.active.lock().await.remove(&request_id);
     result
