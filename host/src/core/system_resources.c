@@ -110,6 +110,25 @@ static int add_gpu_sysfs(yyjson_mut_doc *d,yyjson_mut_val *gpu,int *count) {
     yyjson_mut_val *devices=yyjson_mut_obj_add_arr(d,gpu,"devices");
     if(!devices)return 0;
     *count=0;
+    /* Prefer the full NVIDIA NVML reading over a temperature-only DRM
+     * entry for the same GPU; never publish duplicate device cards. */
+    yag_gpu_snapshot primary={0};
+    if(gpu_probe_primary(&primary) && primary.source &&
+       !strcmp(primary.source,"nvml_primary_device")) {
+        yyjson_mut_val *device=yyjson_mut_obj(d);
+        int ok=device && yyjson_mut_obj_add_str(d,device,"id","gpu0");
+        if(ok && primary.has_utilization)
+            ok=yyjson_mut_obj_add_uint(d,device,"utilization_percent",
+                primary.utilization_percent);
+        if(ok && primary.has_vram)
+            ok=yyjson_mut_obj_add_uint(d,device,"vram_total_bytes",
+                primary.vram_total_bytes)
+                && yyjson_mut_obj_add_uint(d,device,"vram_used_bytes",
+                primary.vram_used_bytes);
+        if(!ok || !yyjson_mut_arr_add_val(devices,device))return 0;
+        *count=1;
+        return yyjson_mut_obj_add_str(d,gpu,"scope",primary.source);
+    }
     for(unsigned i=0;i<16;i++) {
         char path[160],name[24];
         unsigned long long busy=0,used=0,total=0,temp=0;
