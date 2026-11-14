@@ -51,6 +51,17 @@ cmake -S . -B build && cmake --build build -j && ./build/yag
 
 ---
 
+## GitHub Actions automation
+
+GitHub Actions now tests Host, Console and Desktop; performs scheduled
+CodeQL and dependency checks; and packages the Linux Host plus native
+Windows, macOS and Linux Desktop installers. Weekly snapshot packages
+are available as Actions artifacts; reviewed `vMAJOR.MINOR.PATCH` tags
+publish versioned GitHub Releases with SHA-256 checksums. A separate,
+opt-in self-hosted Colibri runner can qualify real inference models.
+See [automation and runner setup](docs/operations/github-actions.md) and
+[release packages](docs/deployment/releases.md).
+
 ## YAG Desktop (optional)
 
 Need a client rather than an SDK? [YAG Desktop](desktop/README.md) provides a native
