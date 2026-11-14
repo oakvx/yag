@@ -145,6 +145,24 @@ class LanOperationsTest(unittest.TestCase):
                 lan_ops.provider_key(path,"clear","YAG_POOL_KEY_2")
             self.assertEqual(lan_ops.read_entries(path)[1]["YAG_POOL_KEY_2"],"")
 
+    def test_runtime_request_ceiling_roundtrip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=new_config(Path(temp))
+            url="https://openrouter.ai/api/v1"
+            with contextlib.redirect_stdout(io.StringIO()):
+                lan_ops.configure_provider(path,"add",url,models=["cloud/model"],
+                    exclusive_models=True,max_requests_per_run=25)
+            entries=lan_ops.read_pool(path)
+            self.assertEqual(entries[0]["max_requests_per_run"],25)
+            for invalid in (-1,1000001,True,2.5):
+                with self.subTest(invalid=invalid),self.assertRaises(ValueError):
+                    lan_ops.configure_provider(path,"add",
+                        "https://api.openai.com/v1",models=["another/model"],
+                        exclusive_models=True,max_requests_per_run=invalid)
+            with self.assertRaises(ValueError):
+                lan_ops.configure_provider(path,"remove",url,max_requests_per_run=1)
+            self.assertEqual(lan_ops.read_pool(path),entries)
+
     def test_resource_budget_roundtrip_and_invalid_estimates(self):
         with tempfile.TemporaryDirectory() as temp:
             path=new_config(Path(temp))
