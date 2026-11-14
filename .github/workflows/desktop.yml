@@ -2,7 +2,7 @@ name: YAG Desktop
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main]
     paths:
       - "desktop/**"
       - ".github/workflows/desktop.yml"
