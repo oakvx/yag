@@ -70,6 +70,35 @@ The preceding model ID is an **illustration only**: verify the exact current
 provider model ID and that your key has access before using it. Provider
 listing, token accounting and pricing can change.
 
+### Optional per-process request ceiling
+
+When adding or editing a provider, set `max_requests_per_run` to a positive
+integer (maximum 1,000,000), or configure **Maximum requests per server run**
+in the local Console. Via CLI:
+
+```sh
+python scripts/lan.py providers add \
+  --url https://openrouter.ai/api/v1 \
+  --key-env YAG_POOL_KEY_1 \
+  --model YOUR_EXACT_MODEL_ID \
+  --exclusive-models \
+  --max-requests-per-run 100
+```
+
+YAG reserves a count **before** initiating each upstream request. Once the
+ceiling is exhausted, further admissions to that backend are rejected (HTTP
+503) immediately, without entering the resource wait queue. Failed or
+cancelled requests still count conservatively. Other backends, if eligible,
+can serve their own models; dedicated IDs never fall back to a generic
+backend.
+
+This is an **in-memory, per-process safety ceiling**, not a financial budget.
+It resets when YAG restarts or its provider registry is edited, and it does
+not know input token prices, exchange rates or the provider's actual charges.
+Do not use it as a monthly billing guarantee or a substitute for provider-side
+spend limits. `GET /api/providers/pool` reports the configured ceiling and
+requests already reserved, without exposing secrets or prompt text.
+
 ### Per-PC dedicated provider access
 
 By default, a LAN client's `inference+models` key can use ordinary local
