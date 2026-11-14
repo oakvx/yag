@@ -7,6 +7,11 @@ on:
   pull_request:
     paths:
       - ".github/workflows/release.yml"
+      - "console/**"
+      - "desktop/**"
+      - "CMakeLists.txt"
+      - "host/**"
+      - "scripts/release_verify.py"
   schedule:
     - cron: "17 4 * * 1"
   workflow_dispatch:
