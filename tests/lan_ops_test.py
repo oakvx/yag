@@ -32,7 +32,9 @@ class LanOperationsTest(unittest.TestCase):
         for url in ("http://192.168.0.12:11434/v1",
                     "http://colibri:11434/v1",
                     "http://ollama.local:11434/v1",
-                    "https://models.example.com/v1"):
+                    "https://models.example.com/v1",
+                    "https://openrouter.ai/api/v1",
+                    "https://generativelanguage.googleapis.com/v1beta/openai"):
             with self.subTest(url=url):
                 self.assertEqual(lan_ops.validate_backend(url),url)
         for url in ("", "http://8.8.8.8:11434/v1",
@@ -42,7 +44,10 @@ class LanOperationsTest(unittest.TestCase):
                     "http://127.0.0.1:0/v1",
                     "http://colibri:abc/v1",
                     "https://models.example.com/v1?key=secret",
-                    "http://colibri/api/chat", "file:///tmp/v1"):
+                    "http://colibri/api/chat", "file:///tmp/v1",
+                    "http://192.168.1.50/api/v1",
+                    "https://models.example.com/unsafe",
+                    "https://openrouter.ai/api/v1/"):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 lan_ops.validate_backend(url)
 
