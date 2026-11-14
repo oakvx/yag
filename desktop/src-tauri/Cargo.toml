@@ -6,6 +6,10 @@ authors = ["YAG contributors"]
 edition = "2021"
 build = "build.rs"
 
+[lib]
+name = "yag_desktop_lib"
+path = "src/lib.rs"
+
 [build-dependencies]
 tauri-build = { version = "2" }
 
