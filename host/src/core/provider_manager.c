@@ -121,6 +121,7 @@ static int parse_replicas(const char *json,size_t length,
         yyjson_val *item=yyjson_arr_get(list,i);
         yyjson_val *url=yyjson_obj_get(item,"url");
         yyjson_val *models=yyjson_obj_get(item,"models");
+        yyjson_val *exclusive=yyjson_obj_get(item,"exclusive_models");
         yyjson_val *key=yyjson_obj_get(item,"key_env");
         yyjson_val *enabled=yyjson_obj_get(item,"enabled");
         yyjson_val *priority=yyjson_obj_get(item,"priority");
@@ -135,13 +136,16 @@ static int parse_replicas(const char *json,size_t length,
             !strcmp(yyjson_get_str(url),cfg->upstream) ||
             yyjson_obj_size(item)!=(size_t)(1+(models?1:0)+(key?1:0)
                                           +(enabled?1:0)+(priority?1:0)
-                                          +(max?1:0)+(budget?1:0)+(reserve?1:0)) ||
+                                          +(max?1:0)+(budget?1:0)+(reserve?1:0)
+                                          +(exclusive?1:0)) ||
             (models && (!yyjson_is_arr(models) ||
                 yyjson_arr_size(models)>32)) ||
             (key && (!yyjson_is_str(key) ||
                 yyjson_get_len(key)!=strlen(yyjson_get_str(key)) ||
                 !private_key_reference(yyjson_get_str(key)))) ||
             (enabled && !yyjson_is_bool(enabled)) ||
+            (exclusive && (!yyjson_is_bool(exclusive) ||
+               (yyjson_get_bool(exclusive) && (!models || !yyjson_arr_size(models))))) ||
             (priority && (!yyjson_is_uint(priority) ||
                 yyjson_get_uint(priority)>100)) ||
             (max && (!yyjson_is_uint(max) || yyjson_get_uint(max)>32)) ||
@@ -158,6 +162,7 @@ static int parse_replicas(const char *json,size_t length,
         if(!p->url){good=0;break;}
         (*count)++;
         p->enabled=enabled?yyjson_get_bool(enabled):1;
+        p->exclusive_models=exclusive?yyjson_get_bool(exclusive):0;
         p->priority=priority?(unsigned)yyjson_get_uint(priority):50;
         p->max_inflight=max?(unsigned)yyjson_get_uint(max):0;
         p->vram_budget_mb=mb;
@@ -241,6 +246,7 @@ static char *serialize_pool(const yag_pool_backend pool[8],size_t count) {
         yyjson_mut_val *models=o?yyjson_mut_obj_add_arr(doc,o,"models"):NULL;
         good=models && yyjson_mut_obj_add_str(doc,o,"url",p->url)
             && yyjson_mut_obj_add_bool(doc,o,"enabled",p->enabled!=0)
+            && yyjson_mut_obj_add_bool(doc,o,"exclusive_models",p->exclusive_models!=0)
             && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
             && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
             && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
@@ -322,6 +328,7 @@ static void list_providers(int fd,yag_config *cfg) {
             && yyjson_mut_obj_add_str(doc,o,"key_env",
                                       p->key_env?p->key_env:"")
             && yyjson_mut_obj_add_bool(doc,o,"enabled",p->enabled)
+            && yyjson_mut_obj_add_bool(doc,o,"exclusive_models",p->exclusive_models!=0)
             && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
             && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
             && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
