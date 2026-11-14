@@ -55,6 +55,12 @@ Choose the exact installed model ID, the protocol, and whether to require
 streaming and function calling. Enabling tools is intentionally opt-in: not
 every model can generate valid function calls.
 
+An explicitly run Colibri qualification uploads a sanitized JSON artifact
+(`yag-real-model-qualification`, retained for 14 days) containing the commit
+SHA, a model-ID fingerprint and protocol-level results. No provider URL,
+prompt, output or secret is included; nevertheless, access to CI artifacts
+must be restricted because model fingerprints can be guessed for public IDs.
+
 The workflow builds YAG locally, starts it bound only to localhost with a
 random temporary key, calls the real inference backend, and exits. The
 qualification fixture does not execute an external tool or print actual
