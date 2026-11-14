@@ -162,5 +162,13 @@ main().catch(error => {
       new Promise(resolve => setTimeout(resolve, 5000))
     ])
   }
-  rmSync(userData, {recursive:true, force:true, maxRetries:10, retryDelay:200})
+  try {
+    rmSync(userData, {recursive:true, force:true, maxRetries:10, retryDelay:200})
+  } catch (error) {
+    // A reparented Chrome helper can briefly recreate a profile entry even
+    // after the browser process exits. Do not fail a successful UI assertion
+    // due to an OS temporary-directory race on the ephemeral CI runner.
+    if (!['ENOTEMPTY', 'EBUSY', 'EPERM'].includes(error.code)) throw error
+    console.warn('Chromium profile cleanup deferred to temporary-directory GC')
+  }
 })
