@@ -2,9 +2,10 @@
 // asset dependency or a separately installed graphics tool.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 
-const dir = new URL('../src-tauri/icons/', import.meta.url)
+const dir = fileURLToPath(new URL('../src-tauri/icons/', import.meta.url))
 mkdirSync(dir, { recursive: true })
 
 const crcTable = Array.from({ length: 256 }, (_, index) => {
@@ -61,7 +62,7 @@ function iconPng(size) {
     chunk('IEND', Buffer.alloc(0))
   ])
 }
-function write(name, data) { writeFileSync(join(dir.pathname, name), data) }
+function write(name, data) { writeFileSync(join(dir, name), data) }
 const png32 = iconPng(32)
 const png128 = iconPng(128)
 const png256 = iconPng(256)
