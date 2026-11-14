@@ -225,15 +225,30 @@ static int measured_upstream(yag_config *cfg,const yag_config *target,
 /* Per-request VRAM reservations are operator estimates, NOT measured physical
  * GPU usage. Admission only controls traffic passing through this gateway. */
 #define MAX_POOL_WAITERS 24
+/* A dedicated model ID is never sent to the primary or a generic replica.
+ * Disabled/unhealthy dedicated backends fail closed instead of leaking a
+ * request to a backend that may not own the model or its data policy. */
+static int is_exclusive_model(const yag_config *cfg,const char *model) {
+    if(!model)return 0;
+    for(size_t i=0;i<cfg->pool_count;i++) {
+        const yag_pool_backend *backend=&cfg->pool[i];
+        if(!backend->exclusive_models)continue;
+        for(size_t j=0;j<backend->model_count;j++)
+            if(!strcmp(backend->models[j],model))return 1;
+    }
+    return 0;
+}
 static int pool_choose_locked(yag_config *cfg,const char *model,int *saturated) {
     int chosen=-1;
     unsigned lowest=0xffffffffu,best_priority=101u;
     time_t now=time(NULL);
     size_t total=cfg->pool_count+1;
+    int exclusive=is_exclusive_model(cfg,model);
     *saturated=0;
     for(size_t offset=0;offset<total;offset++) {
         size_t index=(cfg->pool_cursor+offset)%total;
         yag_pool_backend *backend=index==0?NULL:&cfg->pool[index-1];
+        if(exclusive && (!backend || !backend->exclusive_models))continue;
         unsigned active=index==0?cfg->default_pool_active:backend->active;
         time_t until=index==0?cfg->default_pool_unavailable_until:
             backend->unavailable_until;
@@ -433,8 +448,9 @@ int upstream_for_model(const yag_config *c,const char *model,const char *path,
         int rc=measured_upstream(state,replica,entry,path,body,len,
                                  cb,ctx,status,cancel_fd);
         long code=status?*status:0;
+        int exclusive=index>0 && c->pool[index-1].exclusive_models;
         pool_complete(state,index,rc,code);
-        if(index>0 && c->fallback_to_default && !code
+        if(index>0 && !exclusive && c->fallback_to_default && !code
             && (rc==CURLE_COULDNT_CONNECT || rc==CURLE_COULDNT_RESOLVE_HOST)) {
             pthread_mutex_lock(&state->lock);
             entry->fallthroughs++;
