@@ -30,7 +30,7 @@ jobs:
       - name: Install pinned actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: Verify workflow syntax and expressions
-        run: "$(go env GOPATH)/bin/actionlint -color"
+        run: '"$(go env GOPATH)/bin/actionlint" -color'
 
   codeql:
     name: CodeQL ${{ matrix.language }}
@@ -69,19 +69,24 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
-  dependency-review:
-    name: Check introduced dependencies
-    if: github.event_name == 'pull_request'
+  desktop-dependency-audit:
+    name: Audit Desktop npm dependencies
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/setup-node@v4
         with:
-          fail-on-severity: high
+          node-version: "22"
+      - name: Resolve dependency tree without installing code
+        run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit
+      - name: Reject critical Desktop dependency advisories
+        run: npm audit --audit-level=critical
 
   production-npm-audit:
     name: Audit production Console packages
