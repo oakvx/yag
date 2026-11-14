@@ -119,9 +119,12 @@ export function ProjectPage() {
                     MIT License ↗
                   </a>
                 </div>
-                <div className="mt-5">
+                <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
                   <RouteLink to="/status" className="font-mono text-[11px] text-amber hover:underline">
                     See what is implemented and what is not →
+                  </RouteLink>
+                  <RouteLink to="/profile" className="font-mono text-[11px] text-amber hover:underline">
+                    Open the maintainer profile →
                   </RouteLink>
                 </div>
               </div>

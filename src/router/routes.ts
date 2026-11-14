@@ -9,7 +9,8 @@ export type RoutePath =
   | "/security"
   | "/status"
   | "/deploy"
-  | "/project";
+  | "/project"
+  | "/profile";
 
 export type SubsystemGroup = "Thesis" | "System Core" | "Wire & Routing" | "Trust & Operations";
 
@@ -202,6 +203,20 @@ export const ROUTES: RouteDefinition[] = [
     seoTitle: "Open Source & Contribution · YAG — Yet Another Gateway",
     seoDescription:
       "Explore the oakvx/yag repository structure, MIT license, experimental scope philosophy, and open qualification tasks.",
+  },
+  {
+    path: "/profile",
+    order: 11,
+    index: "11",
+    label: "Profile",
+    shortLabel: "Profile",
+    group: "Thesis",
+    signalMode: "open",
+    packetTag: "PROFILE · MAINTAINER · SESSION",
+    summary: "Maintainer identity, project profile and the browser-local facts of this console session.",
+    seoTitle: "Profile · YAG — Yet Another Gateway",
+    seoDescription:
+      "Who maintains YAG, the project identity card, and the browser-local facts of this console session — no accounts, no telemetry, no network calls.",
   },
 ];
 

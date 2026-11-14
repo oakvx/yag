@@ -11,6 +11,7 @@ import { SecurityPage } from "./pages/SecurityPage";
 import { SourcePage } from "./pages/SourcePage";
 import { StatusPage } from "./pages/StatusPage";
 import { ConfigurationPage, OperationsPage, SystemInfoPage } from "./pages/SystemUtilities";
+import { ProfilePage } from "./pages/ProfilePage";
 import { RouterProvider, useRouter } from "./router/RouterContext";
 import type { RoutePath } from "./router/routes";
 
@@ -33,6 +34,7 @@ function ActiveRouteView() {
     "/status": StatusPage,
     "/deploy": DeployPage,
     "/project": ProjectPage,
+    "/profile": ProfilePage,
   };
 
   const Component = views[path] ?? HomePage;

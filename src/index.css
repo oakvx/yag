@@ -93,7 +93,7 @@
 .console-crossbar { position: absolute; top: var(--category-y); left: 0; width: 100%; height: calc(var(--category-size) * 1.35); transition: opacity 220ms ease; }
 .console-category-track { display: flex; width: max-content; transform: translate3d(calc(var(--anchor-x) - var(--category-gap) / 2 - var(--selected-category) * var(--category-gap)), 0, 0); transition: transform 420ms cubic-bezier(0.2, 0.75, 0.25, 1); }
 .console-category { position: relative; display: block; flex: 0 0 var(--category-gap); width: var(--category-gap); height: calc(var(--category-size) * 1.3); padding: 0; border: 0; background: transparent; color: #fff; outline-offset: 5px; }
-.console-category-art { position: absolute; left: 50%; top: 0; display: block; width: var(--category-size); height: var(--category-size); transform: translate(-50%, -50%) scale(0.75); opacity: 0.47; filter: drop-shadow(0 2px 2px #0005); transition: transform 330ms ease, opacity 300ms ease, filter 300ms ease; }
+.console-category-art { position: absolute; left: 50%; top: 0; display: block; width: var(--category-size); height: var(--category-size); transform: translate(-50%, -50%) scale(0.75); opacity: 0.58; filter: drop-shadow(0 2px 2px #0005); transition: transform 330ms ease, opacity 300ms ease, filter 300ms ease; }
 .console-category-art svg { width: 100%; height: 100%; }
 .console-category.is-selected .console-category-art { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 3px 2px #0005) drop-shadow(0 0 6px #d6f0ff26); }
 .console-category-label { position: absolute; top: calc(var(--category-size) * 0.65); left: 50%; transform: translateX(-50%); font: 400 clamp(12px, 1.02vw, 28px)/1.25 var(--font-sans); white-space: nowrap; opacity: 0; text-shadow: 0 1px 3px #0008; transition: opacity 240ms; }
@@ -101,9 +101,9 @@
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
 .console-destinations ul { list-style: none; padding: 0; margin: 0; }
-.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); opacity: 0.45; transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
+.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); opacity: 0.62; transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
 .console-destination-position.is-selected { opacity: 1; z-index: 3; }
-.console-destination-position.is-above:not(.is-selected) { opacity: 0.27; }
+.console-destination-position.is-above:not(.is-selected) { opacity: 0.42; }
 .console-destination { display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
 .console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(0.73); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
 .console-item-art svg { display: block; width: 100%; height: 100%; }
@@ -115,9 +115,9 @@
 .console-selection-light::before, .console-selection-light::after { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #ecfaff16 18%, #ecfaff07 60%, transparent); }
 .console-selection-light::before { top: 0; }
 .console-selection-light::after { bottom: 0; }
-.console-description { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap)); top: calc(var(--item-size) * 0.65 + var(--selection-offset, 0) * var(--item-step)); max-width: 45vw; pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(11.5px, 0.88vw, 23px); line-height: 1.65; text-shadow: 0 1px 3px #0008; }
-.console-description p { margin: 0; color: #d7e1ebbc; }
-.console-description p + p { margin-top: 3px; color: #b4cbdc85; font-size: 0.86em; }
+.console-description { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap)); top: calc(var(--item-size) * 0.65 + var(--selection-offset, 0) * var(--item-step)); max-width: 45vw; pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(12.5px, 0.95vw, 25px); line-height: 1.65; text-shadow: 0 1px 3px #0008; }
+.console-description p { margin: 0; color: #d7e1ebc9; }
+.console-description p + p { margin-top: 5px; color: #b4cbdcab; font-size: 0.9em; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
 .from-left { animation: consoleItemsLeft 300ms ease both; }
 @keyframes consoleDescriptionIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
@@ -127,15 +127,15 @@
 /* Original-style date strip, without a conventional site header. */
 .console-clock { position: absolute; z-index: 60; right: 5.7vw; top: 6.3vh; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: clamp(205px, 22.8vw, 600px); height: clamp(26px, 3.05vh, 48px); padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(13px, 1.08vw, 29px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
 .console-clock svg { width: 0.95em; height: 0.95em; }
-.console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1b0; transition: opacity 220ms; }
+.console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
-.console-wordmark { font-family: "PS4 Logo", var(--font-xmb), sans-serif; font-size: clamp(17px, 1.55vw, 40px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
-.console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(9px, 0.62vw, 17px); color: #b3cadc83; }
-.console-identity-caption > span { font-size: 0.9em; color: #b3cadc65; }
-.console-sound { display: flex; align-items: center; gap: 6px; margin-left: 1.4vw; padding: 5px; border: 0; background: transparent; color: #b3cadc85; font-size: clamp(10px, 0.65vw, 17px); }
+.console-wordmark { font-family: "PS4 Logo", var(--font-xmb), sans-serif; font-size: clamp(19px, 1.72vw, 44px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(10px, 0.7vw, 19px); color: #b3cadc9c; }
+.console-identity-caption > span { font-size: 0.92em; color: #b3cadc7d; }
+.console-sound { display: flex; align-items: center; gap: 6px; margin-left: 1.4vw; padding: 5px; border: 0; background: transparent; color: #b3cadc99; font-size: clamp(11px, 0.72vw, 19px); }
 .console-sound:hover { color: #edf6ff; }
 .console-sound svg { width: 1.4em; height: 1.4em; }
-.console-help { position: absolute; z-index: 20; right: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6b0; font-size: clamp(11px, 0.78vw, 21px); text-shadow: 0 1px 2px #0005; }
+.console-help { position: absolute; z-index: 20; right: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6c2; font-size: clamp(12px, 0.87vw, 23px); text-shadow: 0 1px 2px #0005; }
 .console-help button { display: inline-flex; align-items: center; gap: 0.35em; padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
 .console-help button:hover { color: white; }
 .console-help kbd, .console-app-back-hint kbd { font: inherit; }
@@ -266,15 +266,15 @@
   .console-clock { top: 4vh; right: 5vw; width: 47vw; height: 24px; font-size: 12px; }
   .console-destination-position { width: calc(100vw - var(--anchor-x) - 4vw + var(--item-size) / 2); }
   .console-item-label { white-space: normal; max-width: calc(100vw - var(--anchor-x) - 62px); }
-  .console-description { top: calc(38px + var(--selection-offset, 0) * var(--item-step)); max-width: calc(100vw - var(--anchor-x) - 55px); font-size: 11px; line-height: 1.5; }
+  .console-description { top: calc(38px + var(--selection-offset, 0) * var(--item-step)); max-width: calc(100vw - var(--anchor-x) - 55px); font-size: 12px; line-height: 1.5; }
   .console-description p + p { display: none; }
   .console-selection-light { width: 66vw; left: 24px; }
   .console-identity { left: 6vw; bottom: 5vh; gap: 9px; }
-  .console-wordmark { font-size: 18px; }
-  .console-identity-caption { font-size: 8px; }
-  .console-sound { margin-left: 5px; font-size: 10px; }
+  .console-wordmark { font-size: 20px; }
+  .console-identity-caption { font-size: 9px; }
+  .console-sound { margin-left: 5px; font-size: 11px; }
   .console-sound > span { display: none; }
-  .console-help { right: 6vw; bottom: 11vh; font-size: 10px; gap: 1.1em; }
+  .console-help { right: 6vw; bottom: 11vh; font-size: 11px; gap: 1.1em; }
   .console-help-arrows { font-size: 14px; }
   .console-application { padding: 3vh 4vw 0; }
   .console-application-header { height: 95px; padding-right: 0; padding-top: 30px; gap: 12px; }
@@ -291,7 +291,7 @@
 }
 @media (max-height: 480px) and (orientation: landscape) {
   .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step: 18vh; --category-size: 38px; --item-size: 34px; --menu-font: 14px; }
-  .console-description { font-size: 10px; top: 24px; }
+  .console-description { font-size: 11px; top: 24px; }
   .console-description p + p { display: none; }
   .console-help { bottom: 5vh; }
   .console-identity { bottom: 5vh; }
