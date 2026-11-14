@@ -99,6 +99,27 @@ class LanOperationsTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 lan_ops.configure_provider(path,"remove",url,models=["glm-test"])
 
+    def test_dedicated_cloud_model_cli_roundtrip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=new_config(Path(temp))
+            url="https://openrouter.ai/api/v1"
+            with contextlib.redirect_stdout(io.StringIO()):
+                lan_ops.configure_provider(path,"add",url,"YAG_POOL_KEY_1",
+                                           models=["provider/example"],
+                                           exclusive_models=True)
+            pool=lan_ops.read_pool(path)
+            self.assertEqual(pool[0]["exclusive_models"],True)
+            self.assertEqual(pool[0]["models"],["provider/example"])
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                lan_ops.configure_provider(path,"list")
+            self.assertIn("dedicated model routing",output.getvalue())
+            self.assertNotIn("private-upstream-secret",output.getvalue())
+            with self.assertRaises(ValueError):
+                lan_ops.configure_provider(path,"add","https://api.openai.com/v1",
+                                           exclusive_models=True)
+            self.assertEqual(lan_ops.read_pool(path),pool)
+
     def test_resource_budget_roundtrip_and_invalid_estimates(self):
         with tempfile.TemporaryDirectory() as temp:
             path=new_config(Path(temp))
