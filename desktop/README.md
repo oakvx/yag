@@ -1,8 +1,9 @@
 # YAG Desktop (initial LAN client)
 
 YAG Desktop is a **native, optional client** for the existing YAG Host.
-It provides a chat workspace, remote model inventory, streaming responses,
-cancellation and a server connection dialog. **The client never runs Ollama
+It provides a multi-conversation chat workspace, safe Markdown/code rendering,
+model selection, inference settings, streaming responses, cancellation, and a
+server connection dialog with optional LAN discovery. **The client never runs Ollama
 or model weights**. Host-side model management, rate limiting, GPU telemetry
 and administration remain on the central machine.
 
@@ -65,14 +66,76 @@ blocked. For remote hosts, use HTTPS with a trusted certificate.
 - The webview has no HTTP plugin, shell plugin or filesystem plugin.
   Its strict CSP blocks remote resources; model output is rendered as
   plain text, never interpreted as HTML.
-- Conversation history is in memory only. It is cleared on application
-  exit and on changing models/servers; YAG itself may have separate
-  operator-side aggregate token metrics.
+- Conversations are retained in memory while the application runs. The user
+  may **opt in** to persistent chat history from Preferences. When enabled,
+  message text is stored unencrypted in the WebView's private application
+  profile (not in YAG Host), bounded to 40 chats and 80 messages per chat.
+  Deactivate the setting to erase saved history, or use Delete all history.
+  **Do not enable persistent history for sensitive conversations** on a shared
+  or unencrypted device. No API key is stored with this history.
 - Client credentials are never granted host administrative privileges.
   The desktop uses only `GET /v1/models` and
   `POST /v1/chat/completions`.
-- No model auto-discovery/broadcast, telemetry export, cloud key storage,
-  provider subscription or localhost OpenAI relay is included yet.
+- Host discovery reads multicast DNS-SD announcements but never authenticates
+  based on them. HTTPS certificate validation and an individual scoped key are
+  still required. No cloud provider key storage or provider subscriptions exist.
+- The optional localhost relay uses its **own random in-memory token**.
+  Only 127.0.0.1 is bound; it explicitly rejects Host-header rebinding,
+  browser Origin headers, requests without the token and unsupported routes.
+  It stops when Desktop exits, disconnects, or Stop relay is pressed.
+
+
+## Optional mDNS discovery on the LAN Host
+
+The Discover button searches for `_yag._tcp.local.` advertisements.
+**YAG never connects automatically** to a discovered service. The server
+operator must explicitly publish an announcement for the client to find:
+
+```sh
+python -m pip install zeroconf
+python scripts/mdns_advertise.py --lan-ip 192.168.1.50 --name Colibri --port 443
+```
+
+Run this in a separate terminal on the **central Host**, while the
+YAG + Caddy LAN stack is running. Replace the address with the Host's
+actual private IPv4. The optional utility can be managed as an OS service,
+but is not automatically started by Docker Compose. It publishes only the
+address and display name, no keys or model identifiers. Multicast DNS must
+be permitted by your operating system and network. Discovery does not
+install CA roots or trust self-signed certificates automatically.
+
+## Optional localhost API for IDEs and other applications
+
+From the connected Desktop application open **Preferences** then **Start
+local relay**. Copy the URL and *temporary relay token* into your
+OpenAI-compatible application. Example:
+
+```text
+OpenAI base URL: http://127.0.0.1:49152/v1
+API key:         yag-relay-<new-random-token>
+Model:           an ID from the Desktop model list
+```
+
+The port is dynamically allocated, not necessarily 49152. The token
+changes every time the relay starts and is **not** your YAG Host API key.
+There is no public LAN listener, proxy of arbitrary URLs or automatic
+browser CORS permission.
+
+Supported: `GET /v1/models`, `POST /v1/chat/completions` (including
+streaming). Other OpenAI endpoints such as Responses, embeddings and
+Anthropic Messages remain available by connecting applications **directly
+to YAG Host**, not through the local relay.
+
+The relay forwards prompts to the configured central Host. It does not
+provide confidentiality against malware on the **same client OS** and
+should not be used to give untrusted local programs access to inference.
+
+## Conversation settings
+
+Preferences allow a system prompt (up to 4000 characters), a temperature
+from 0 to 2, and a token budget of 64–8192. Support for these settings
+depends on the upstream model. The system prompt and live API key stay in
+application memory; the opt-in local history does not persist them.
 
 ## Architecture
 
