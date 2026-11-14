@@ -267,7 +267,8 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
     if(strcmp(uri,"/api/admin/clients") && strcmp(uri,"/api/admin/clients/enable")
         && strcmp(uri,"/api/admin/clients/disable")
         && strcmp(uri,"/api/admin/clients/revoke")
-        && strcmp(uri,"/api/admin/clients/rename"))return 0;
+        && strcmp(uri,"/api/admin/clients/rename")
+        && strcmp(uri,"/api/admin/clients/scope"))return 0;
     if(!cfg->client_store || !*cfg->client_store) {
         failure(fd,503,"Runtime client management is not enabled");
         return 1;
@@ -348,10 +349,15 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
             yyjson_doc_free(d);return 1;
         }
         int rename_action=!strcmp(uri,"/api/admin/clients/rename");
+        int scope_action=!strcmp(uri,"/api/admin/clients/scope");
         yyjson_val *name=yyjson_obj_get(root,"name");
-        if(yyjson_obj_size(root)!=(size_t)(rename_action?2:1)
+        yyjson_val *scope=yyjson_obj_get(root,"scope");
+        unsigned requested_scope=scope_action && yyjson_is_str(scope)?
+            parse_scope(yyjson_get_str(scope)):0;
+        if(yyjson_obj_size(root)!=(size_t)((rename_action || scope_action)?2:1)
             || (rename_action && (!yyjson_is_str(name)
-                || !valid_name(yyjson_get_str(name),yyjson_get_len(name))))) {
+                || !valid_name(yyjson_get_str(name),yyjson_get_len(name))))
+            || (scope_action && !requested_scope)) {
             failure(fd,400,"Invalid client action");
             yyjson_doc_free(d);return 1;
         }
@@ -359,8 +365,9 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
         if(rename_action && !new_name){
             failure(fd,500,"Out of memory");yyjson_doc_free(d);return 1;
         }
-        int saved=-1,missing=0;
+        int saved=-1,missing=0,not_managed=0;
         char *old_label=NULL,*old_secret=NULL;
+        unsigned old_scope=0;
         unsigned char old_enabled=0,old_managed=0;
         pthread_mutex_lock(&cfg->lock);
         if(slot>=cfg->extra_key_count || !cfg->extra_keys[slot])missing=1;
@@ -368,7 +375,10 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
             old_label=cfg->key_labels[slot];
             old_enabled=cfg->key_enabled[slot];
             old_managed=cfg->key_managed[slot];
-            if(rename_action)cfg->key_labels[slot]=new_name;
+            old_scope=cfg->extra_key_scopes[slot];
+            if(scope_action && !old_managed)not_managed=1;
+            else if(scope_action)cfg->extra_key_scopes[slot]=requested_scope;
+            else if(rename_action)cfg->key_labels[slot]=new_name;
             else if(!strcmp(uri,"/api/admin/clients/enable"))
                 cfg->key_enabled[slot]=1;
             else if(!strcmp(uri,"/api/admin/clients/disable"))
@@ -381,8 +391,9 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
                 cfg->key_enabled[slot]=0;
                 cfg->key_labels[slot]=NULL;
             } else cfg->key_enabled[slot]=0; /* static keys can only be disabled */
-            saved=save_locked(cfg);
+            if(!not_managed)saved=save_locked(cfg);
             if(saved) {
+                cfg->extra_key_scopes[slot]=old_scope;
                 cfg->key_enabled[slot]=old_enabled;
                 cfg->key_managed[slot]=old_managed;
                 cfg->key_labels[slot]=old_label;
@@ -394,6 +405,7 @@ int client_registry_handle(int fd,yag_config *cfg,const char *method,
         }
         pthread_mutex_unlock(&cfg->lock);
         if(missing)failure(fd,404,"Client not found");
+        else if(not_managed)failure(fd,403,"Only managed client scopes can be edited");
         else if(saved)failure(fd,503,"Client registry could not be saved");
         else {
             if(rename_action)free(old_label);
