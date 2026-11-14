@@ -258,7 +258,6 @@ static char *serialize_pool(const yag_pool_backend pool[8],size_t count) {
             && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
             && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
             && yyjson_mut_obj_add_uint(doc,o,"max_requests_per_run",p->max_requests_per_run)
-            && yyjson_mut_obj_add_uint(doc,o,"max_requests_per_run",p->max_requests_per_run)
             && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
             && yyjson_mut_obj_add_uint(doc,o,"vram_reservation_mb",
                                        p->vram_reservation_mb);
@@ -341,6 +340,7 @@ static void list_providers(int fd,yag_config *cfg) {
             && yyjson_mut_obj_add_bool(doc,o,"exclusive_models",p->exclusive_models!=0)
             && yyjson_mut_obj_add_uint(doc,o,"priority",p->priority)
             && yyjson_mut_obj_add_uint(doc,o,"max_inflight",p->max_inflight)
+            && yyjson_mut_obj_add_uint(doc,o,"max_requests_per_run",p->max_requests_per_run)
             && yyjson_mut_obj_add_uint(doc,o,"vram_budget_mb",p->vram_budget_mb)
             && yyjson_mut_obj_add_uint(doc,o,"vram_reservation_mb",
                                        p->vram_reservation_mb);
