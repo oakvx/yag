@@ -257,6 +257,66 @@
   .signal-flow-slow { stroke-dasharray: 8 132; animation: signalDash 4.2s linear infinite; }
   @keyframes signalDash { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
   .xmb-glass { background: #08223cf5; border: 1px solid #d8eafb36; box-shadow: 0 20px 60px #0005; }
+
+  /* XMB PAGE FURNITURE. The console's own vocabulary, reused inside the
+     documents: square glass panels, a translucent column head and rows that
+     read like crossbar entries — glyph, small-caps key, value. */
+  .xmb-surface { container-type: inline-size; container-name: xmbcol; background: linear-gradient(180deg, #0d2b4bec, #08223cf7 46%, #061a30f7); border: 1px solid #d8eafb2b; box-shadow: 0 22px 60px #0006, inset 0 1px 0 #d8eafb1c; }
+  .xmb-column-head { display: flex; align-items: center; gap: 12px; padding: 11px 16px; background: linear-gradient(90deg, #1c5e9cb0 0%, #12406f66 46%, #0a264000 100%); border-bottom: 1px solid #d8eafb24; }
+  .xmb-column-head svg { width: 20px; height: 20px; flex: none; color: #cfe6f8; }
+  .xmb-column-title { font-family: var(--font-xmb); font-size: 13.5px; font-weight: 400; letter-spacing: .09em; text-transform: uppercase; color: #eaf4fc; }
+  .xmb-column-note { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: #8fb6d6; }
+  .xmb-column-lede { padding: 13px 16px 0; font-family: var(--font-xmb); font-size: 17px; line-height: 1.35; letter-spacing: .012em; color: #eef5fb; text-shadow: 0 1px 2px #0006; }
+  .xmb-row { display: grid; grid-template-columns: 20px 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 9px 16px; border-top: 1px solid #d5eff51a; transition: background 160ms ease; }
+  .xmb-row:first-child { border-top: 0; }
+  .xmb-row:hover { background: linear-gradient(90deg, #a4d1e816 0%, #a4d1e804 40%, #a4d1e800 74%); }
+  .xmb-row-icon { width: 20px; height: 20px; color: #a8cbe6; transition: color 160ms ease; }
+  .xmb-row:hover .xmb-row-icon { color: #eaf4fb; }
+  .xmb-row-key { font-family: var(--font-mono); font-size: 10px; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; color: #8da5bb; }
+  .xmb-row-value { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; color: #dfeaf4; }
+  .xmb-row-value a { color: #cfe6f8; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #b8d9ee4d; }
+  .xmb-row-value a:hover { color: #fff; text-decoration-color: #b8d9ee; }
+  .xmb-avatar { display: grid; place-items: center; width: 76px; height: 76px; flex: none; background: linear-gradient(180deg, #16456f, #0a2542); border: 1px solid #d8eafb33; box-shadow: inset 0 1px 0 #d8eafb26, 0 12px 28px #0007; }
+  .xmb-avatar svg { width: 44px; height: 44px; color: #dbeeff; filter: drop-shadow(0 2px 3px #0007); }
+  .xmb-quote { border-left: 2px solid #b8d9ee4d; padding-left: 14px; font-family: var(--font-xmb); font-size: 14px; line-height: 1.7; color: #d5e6f4; }
+  .xmb-tile { display: flex; gap: 13px; padding: 13px 15px; background: #0b264373; border: 1px solid #d8eafb21; transition: border-color 180ms ease, background 180ms ease; }
+  .xmb-tile:hover { border-color: #b8d9ee70; background: #a4d1e80f; }
+  .xmb-tile svg { width: 22px; height: 22px; flex: none; color: #a8cbe6; transition: color 180ms ease; }
+  .xmb-tile:hover svg { color: #eaf4fb; }
+  .xmb-tile-title { font-family: var(--font-xmb); font-size: 14px; letter-spacing: .04em; color: #edf4fa; }
+  .xmb-tile-sub { margin-top: 4px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; color: #93aec4; }
+  .xmb-note { display: flex; gap: 11px; padding: 10px 16px; border-top: 1px solid #d5eff51a; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; color: #b6cadd; }
+  .xmb-note:first-child { border-top: 0; }
+  .xmb-note::before { content: ""; width: 5px; height: 5px; margin-top: 7px; flex: none; background: #c6e3f2b3; transform: rotate(45deg); }
+  .xmb-masthead::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 130% at 18% 130%, #4d8fd022 0%, transparent 56%), radial-gradient(90% 110% at 76% 140%, #9fd4ff14 0%, transparent 62%); }
+  .xmb-masthead .display { font-family: var(--font-xmb); font-weight: 400; letter-spacing: .012em; }
+  .xmb-masthead li { border-radius: 2px; border-color: #d8eafb2b; background: #0b26435c; }
+}
+
+/* Page-level split: one column of panels until the document is wide enough
+   to hold two, then the panels take their XMB column widths. */
+.xmb-page-grid { display: grid; gap: 16px; }
+.xmb-tile-grid { display: grid; gap: 8px; }
+
+@media (min-width: 1120px) {
+  .xmb-page-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .xmb-span-4 { grid-column: span 4; }
+  .xmb-span-5 { grid-column: span 5; }
+  .xmb-span-7 { grid-column: span 7; }
+  .xmb-span-8 { grid-column: span 8; }
+}
+
+/* Two tiles per row once the column itself is wide enough to carry them. */
+@container xmbcol (min-width: 560px) {
+  .xmb-tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* A column narrower than a label plus a value stacks its rows instead of
+   squeezing the value into a sliver. */
+@container xmbcol (max-width: 460px) {
+  .xmb-row { grid-template-columns: 20px minmax(0, 1fr); gap: 3px 12px; }
+  .xmb-row-key { grid-column: 2; }
+  .xmb-row-value { grid-column: 2; }
 }
 
 @media (min-width: 2600px) {
@@ -287,6 +347,12 @@
   .console-app-back-hint { min-height: 42px; height: 42px; }
   .boot-brand { left: 32%; top: 44%; width: 62%; }
   .console-audio-panel { left: -85px; width: min(242px, 82vw); }
+  .xmb-row { grid-template-columns: 20px minmax(0, 1fr); gap: 4px 12px; padding: 10px 13px; }
+  .xmb-row-key { grid-column: 2; }
+  .xmb-row-value { grid-column: 2; }
+  .xmb-column-head { padding: 10px 13px; }
+  .xmb-avatar { width: 62px; height: 62px; }
+  .xmb-avatar svg { width: 36px; height: 36px; }
 }
 @media (pointer: coarse) {
   .console-help { display: none; }
