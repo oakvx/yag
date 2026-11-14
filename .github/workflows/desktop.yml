@@ -1,0 +1,72 @@
+name: YAG Desktop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Native desktop - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            bundles: deb
+            artifact: linux
+          - os: windows-latest
+            bundles: nsis
+            artifact: windows
+          - os: macos-latest
+            bundles: dmg
+            artifact: macos
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            curl wget file libxdo-dev libssl-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+      - name: Install desktop packaging CLI
+        run: npm install --no-audit --no-fund
+      - name: Validate JavaScript and generate icons
+        run: |
+          npm run check
+          npm run icons
+      - name: Test native URL and streaming parser
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Package native desktop
+        run: npm run build -- --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yag-desktop-${{ matrix.artifact }}
+          path: desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error

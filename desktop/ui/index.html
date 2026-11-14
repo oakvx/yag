@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>YAG Desktop</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Model and server navigation">
+      <div class="brand"><div class="brand-mark">Y</div><div><strong>YAG</strong><span>DESKTOP</span></div></div>
+      <div class="sidebar-divider"></div>
+      <div class="section-heading"><span>CONNECTION</span></div>
+      <button id="serverButton" class="server-button" type="button" aria-label="Configure server connection">
+        <span id="connectionIndicator" class="status-dot"></span>
+        <span class="server-meta"><strong id="serverLabel">Not connected</strong><small id="serverHint">Select a YAG host</small></span>
+        <span class="chevron">›</span>
+      </button>
+      <div class="section-heading model-heading"><span>AVAILABLE MODELS</span><button id="refreshButton" class="icon-button" title="Refresh models" aria-label="Refresh models" type="button">↻</button></div>
+      <div id="models" class="models" role="listbox" aria-label="Available AI models"><p class="muted model-placeholder">Connect to a YAG server to discover its models.</p></div>
+      <div class="sidebar-bottom">
+        <div class="sidebar-info"><span class="info-dot"></span><span>Inference runs on the host, not on this device.</span></div>
+        <button id="newChatButton" class="sidebar-action" type="button"><span>＋</span> New conversation</button>
+        <div class="sidebar-version">YAG DESKTOP <span>0.1.0</span></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="page-title"><span class="eyebrow">WORKSPACE / CHAT</span><strong id="currentModel">Select a model</strong></div>
+        <div class="topbar-actions"><span id="statusText" class="status-text">Disconnected</span><span id="statusPill" class="pill">OFFLINE</span></div>
+      </header>
+      <section id="chat" class="chat" aria-label="Conversation" aria-live="polite">
+        <div id="emptyState" class="empty-state">
+          <div class="empty-logo">Y</div>
+          <div class="empty-eyebrow">NETWORK AI WORKSPACE</div>
+          <h1>One server.<br>Every model.</h1>
+          <p>Connect to your YAG Host, select an available model and start a conversation. All inference stays on the server you control.</p>
+          <button id="emptyConnectButton" class="primary-button" type="button">Connect to YAG Host <span>↗</span></button>
+        </div>
+        <div id="messages" class="messages"></div>
+      </section>
+      <div id="errorBanner" class="error-banner" role="alert" hidden></div>
+      <div class="composer-shell">
+        <form id="chatForm" class="composer">
+          <label class="sr-only" for="prompt">Message</label>
+          <textarea id="prompt" rows="2" maxlength="32768" placeholder="Connect to a server to begin…" disabled></textarea>
+          <div class="composer-actions">
+            <span id="composerHint">Select a model to start chatting</span>
+            <button id="sendButton" class="send-button" type="submit" disabled>Send <span>↑</span></button>
+            <button id="stopButton" class="stop-button" type="button" hidden>Stop ■</button>
+          </div>
+        </form>
+        <div class="footer-line"><span>PRIVATE NETWORK · TLS RECOMMENDED</span><span id="usageText">No requests yet</span></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="connectionDialog" class="modal-backdrop" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
+      <div class="modal-header"><div><div class="eyebrow">SERVER CONFIGURATION</div><h2 id="dialogTitle">Connect to YAG</h2></div><button id="closeDialogButton" type="button" class="icon-button" aria-label="Close connection dialog">×</button></div>
+      <p class="modal-copy">Enter the HTTPS address of your YAG Host and a client API key issued by its administrator. Your key stays in memory and is never saved to disk.</p>
+      <form id="connectForm">
+        <label for="serverUrl">SERVER ADDRESS</label>
+        <input id="serverUrl" type="url" required spellcheck="false" autocomplete="url" placeholder="https://192.168.1.50">
+        <div class="field-note">Use the HTTPS LAN endpoint. For local development only: http://127.0.0.1:8080</div>
+        <label for="apiKey">CLIENT API KEY</label>
+        <input id="apiKey" type="password" required minlength="16" autocomplete="off" spellcheck="false" placeholder="Paste your client key">
+        <div class="field-note">Install the host's trusted root CA on this computer. Certificate verification is never bypassed.</div>
+        <div id="connectionError" class="dialog-error" role="alert" hidden></div>
+        <div class="modal-actions"><button id="disconnectButton" type="button" class="secondary-button">Disconnect</button><button id="connectButton" type="submit" class="primary-button">Connect & discover models <span>↗</span></button></div>
+      </form>
+    </section>
+  </div>
+</body>
+</html>

@@ -11,3 +11,9 @@ __pycache__/
 lan-clients.txt
 lan-root-ca.crt
 backups/
+
+# Native desktop build outputs
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/icons/
+desktop/src-tauri/gen/
