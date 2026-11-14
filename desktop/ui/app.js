@@ -43,7 +43,7 @@ function setStatus(online) {
   el('statusPill').textContent = online ? 'CONNECTED' : 'OFFLINE'
   el('statusText').textContent = online ? 'Ready for inference' : 'Disconnected'
   el('serverLabel').textContent = online ? new URL(state.url).host : 'Not connected'
-  el('serverHint').textContent = online ? 'Secure YAG Host' : 'Select a YAG host'
+  el('serverHint').textContent = online ? 'YAG Host' : 'Select a YAG host'
   el('currentModel').textContent = state.model || 'Select a model'
   el('prompt').disabled = !online || !state.model || state.running
   el('prompt').placeholder = online ? 'Ask ' + (state.model || 'a model') + ' anything…' : 'Connect to a server to begin…'
