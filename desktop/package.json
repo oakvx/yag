@@ -1,0 +1,15 @@
+{
+  "name": "yag-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native LAN client for YAG",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node --check ui/app.js && node --check scripts/generate-icons.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
