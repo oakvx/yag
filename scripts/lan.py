@@ -211,6 +211,8 @@ def main(argv=None):
     providers.add_argument("--key-env", help="Name of a configured private upstream key")
     providers.add_argument("--model", action="append", dest="replica_models",
                            help="Model ID supported by this replica (repeatable, add only)")
+    providers.add_argument("--exclusive-models", action="store_true",
+                           help="Reserve declared IDs for this backend; never fall back to Ollama")
     providers.add_argument("--max-inflight", type=int, default=0,
                            help="Replica concurrent inference limit (0=unlimited, max 32)")
     providers.add_argument("--vram-budget-mb", type=int, default=0,
@@ -257,7 +259,8 @@ def main(argv=None):
         if args.action == "providers":
             configure_provider(ENV_PATH, args.operation, args.url, args.key_env,
                                args.replica_models, args.max_inflight,
-                               args.vram_budget_mb, args.vram_reservation_mb)
+                               args.vram_budget_mb, args.vram_reservation_mb,
+                               args.exclusive_models)
             return 0
         if args.action == "backup":
             require_docker(config)
