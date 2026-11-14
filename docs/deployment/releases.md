@@ -1,8 +1,23 @@
 # Releases and platform support
 
-Tag a reviewed, tested commit with `vMAJOR.MINOR.PATCH` and push the tag.
-The release workflow compiles the Linux x86_64 gateway, builds the Console,
-runs CTest and attaches an archive plus SHA-256 checksum to GitHub Releases.
+GitHub Actions packages **YAG Host** and **YAG Desktop** from the same
+reviewed commit.
+
+- **Linux Host:** native `yag-linux-x86_64.tar.gz` (dynamic glibc/libcurl
+  dependencies), plus the bundled React administration Console and docs.
+- **Windows Desktop:** unsigned NSIS `.exe` installer.
+- **Linux Desktop:** unsigned `.deb` installer.
+- **macOS Desktop:** unsigned `.dmg` disk image built on `macos-latest`
+  (currently an ARM64 runner).
+
+The `Package and release YAG` workflow also runs weekly on Monday and can
+be started manually from GitHub Actions. These runs upload downloadable
+**workflow artifacts**, retained for 14 days. They do **not** create tags or
+publish releases automatically.
+
+## Publish a versioned GitHub Release
+
+Tag a reviewed and tested commit with `vMAJOR.MINOR.PATCH`:
 
 ```sh
 git checkout main && git pull --ff-only
@@ -10,13 +25,31 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-Replace the example tag with the actual version. **Tagging publishes a release**;
-it is intentionally not done as part of an ordinary feature PR.
+Replace the example tag with the actual version. On a version tag the
+workflow compiles and tests the Host and all three Desktop installers. The
+release-publishing job executes **only after every build succeeds** and
+attaches all packages and a single `SHA256SUMS.txt` file. It verifies every
+checksum immediately before publication. The workflow can safely update
+assets on an existing release tag, but cannot publish a tag that does not
+exist.
 
-The archive is **not statically linked** and requires a compatible Linux glibc
-and libcurl runtime. It is not a Windows or macOS build. For a self-contained
-deployment option, build the separate Docker image described in
-[Docker deployment](docker.md).
+The Host Linux archive is **not** a Windows or macOS native server build.
+For a cross-platform central server, use the separate Docker/Compose
+deployment described in [Docker deployment](docker.md) and
+[LAN hub](lan-hub.md). YAG Desktop itself is an optional native client.
 
-No production security, real-model compatibility or performance guarantee
-is implied by a successful packaging workflow.
+### Security and operational limits
+
+Desktop installers are currently **unsigned** (no Authenticode signing,
+Apple notarization or release provenance signature is configured). The
+SHA-256 manifest detects accidental or malicious file changes only when
+you obtain the expected checksum from a trustworthy source; it does not
+establish publisher identity.
+
+GitHub-hosted CI tests the code and uses mocks; it does not verify GPU
+performance, driver compatibility or real-model tool use on Colibri.
+For an opt-in self-hosted real-model workflow and remaining integration
+limits, see [GitHub Actions operations](../operations/github-actions.md).
+
+No production security or performance guarantee is implied by successful
+packaging.
