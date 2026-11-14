@@ -325,8 +325,10 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
           <input aria-label="New client name" value={clientName} maxLength={48}
             onChange={e=>setClientName(e.target.value)} placeholder="Client name (e.g. Studio PC)"/>
           <select aria-label="Client scope" value={clientScope} onChange={e=>setClientScope(e.target.value)}>
-            <option value="inference+models">Inference + models</option>
-            <option value="inference">Inference only</option>
+            <option value="inference+models">Inference + models (local/default)</option>
+            <option value="inference+models+dedicated">Inference + models + dedicated providers (cloud permitted)</option>
+            <option value="inference+dedicated">Inference + dedicated providers (cloud permitted)</option>
+            <option value="inference">Inference only (local/default)</option>
             <option value="models">Model discovery only</option>
             <option value="monitor">Monitoring only</option>
           </select>
@@ -334,6 +336,12 @@ export default function ControlPlane({apiKey,onUseModel}:{apiKey:string;onUseMod
             <UserPlus size={14}/> Add client
           </button>
         </form>
+        <div className="control-footnote">
+          Dedicated model access must be granted explicitly per client key. Such models may
+          send prompts and tool arguments to cloud providers and incur charges. Existing
+          primary and legacy all-scope administrator credentials are privileged.
+          Changing a scope requires issuing a replacement key and revoking the old one.
+        </div>
         {newKey && <div className="control-key">
           <b>New API key for client #{newKey.id} — displayed only once</b>
           <code>{newKey.api_key}</code>
