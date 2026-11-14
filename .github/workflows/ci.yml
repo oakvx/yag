@@ -116,7 +116,7 @@ jobs:
             -e YAG_API_KEY=integration-key-dummy-12345 \
             -e YAG_UPSTREAM_URL=http://127.0.0.1:8000/v1 yag:ci
           trap 'docker stop yag-ci-smoke || true' EXIT
-          for i in $(seq 1 45); do
+          for ((i=0; i<45; i++)); do
             if curl --fail --silent http://127.0.0.1:18080/health; then exit 0; fi
             sleep 1
           done
@@ -135,7 +135,7 @@ jobs:
           trap '${compose[@]} down --remove-orphans || true' EXIT
           "${compose[@]}" up --no-build -d yag caddy
           ready=0
-          for i in $(seq 1 15); do
+          for ((i=0; i<15; i++)); do
             if curl -ksSf https://127.0.0.1:18443/health > /dev/null; then ready=1; break; fi
             sleep 1
           done

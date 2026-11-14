@@ -1,0 +1,105 @@
+name: Security and dependency review
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 3 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-lint:
+    name: Validate GitHub Actions workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Install pinned actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Verify workflow syntax and expressions
+        run: '"$(go env GOPATH)/bin/actionlint" -color'
+
+  codeql:
+    name: CodeQL ${{ matrix.language }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: c-cpp
+            build_mode: manual
+          - language: javascript-typescript
+            build_mode: none
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install C development dependencies
+        if: matrix.language == 'c-cpp'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build_mode }}
+          queries: security-extended
+      - name: Build Host for C/C++ dataflow analysis
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake -S . -B build-codeql -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build-codeql --parallel
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  desktop-dependency-audit:
+    name: Audit Desktop npm dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve dependency tree without installing code
+        run: npm install --package-lock-only --ignore-scripts --no-fund --no-audit
+      - name: Reject critical Desktop dependency advisories
+        run: npm audit --audit-level=critical
+
+  production-npm-audit:
+    name: Audit production Console packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: console/package-lock.json
+      - name: Reject critical runtime advisories
+        run: npm audit --prefix console --omit=dev --audit-level=critical

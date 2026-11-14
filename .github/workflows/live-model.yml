@@ -1,0 +1,91 @@
+name: Qualify a real model on Colibri
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Exact model ID served by the inference backend"
+        required: true
+        type: string
+      protocol:
+        description: "Gateway protocol(s) to exercise"
+        type: choice
+        default: all
+        options:
+          - all
+          - chat
+          - responses
+          - anthropic
+      stream:
+        description: "Require completed streaming responses"
+        type: boolean
+        default: true
+      tools:
+        description: "Require real function-tool selection and result replay (model must support tools)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: colibri-live-qualification
+  cancel-in-progress: false
+
+jobs:
+  model-qualification:
+    name: Real model / real inference backend
+    # Never check out unreviewed branches on a privileged local runner.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, yag-colibri]
+    timeout-minutes: 35
+    environment: local-inference
+    env:
+      YAG_REAL_UPSTREAM_URL: ${{ vars.YAG_REAL_UPSTREAM_URL }}
+      YAG_REAL_UPSTREAM_KEY: ${{ secrets.YAG_REAL_UPSTREAM_KEY }}
+      YAG_REAL_MODEL: ${{ inputs.model }}
+      YAG_QUALIFICATION_PROTOCOL: ${{ inputs.protocol }}
+      YAG_QUALIFICATION_STREAM: ${{ inputs.stream }}
+      YAG_QUALIFICATION_TOOLS: ${{ inputs.tools }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify runner setup without printing private configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$YAG_REAL_UPSTREAM_URL" || {
+            echo "Configure repository variable YAG_REAL_UPSTREAM_URL before running." >&2
+            exit 1
+          }
+          command -v cmake
+          command -v python3
+          command -v cc
+      - name: Build isolated gateway on the runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-live -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-live --parallel
+      - name: Qualify actual inference and model protocols
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--host ./build-live/yag --protocol "$YAG_QUALIFICATION_PROTOCOL")
+          if [[ "$YAG_QUALIFICATION_STREAM" == true ]]; then args+=(--stream); fi
+          if [[ "$YAG_QUALIFICATION_TOOLS" == true ]]; then args+=(--tools); fi
+          python3 tests/real_provider_probe.py "${args[@]}"
+      - name: Record qualification scope without model content
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "### Real-model qualification"
+            echo "Selected model: \`$YAG_REAL_MODEL\`"
+            echo "Protocols: \`$YAG_QUALIFICATION_PROTOCOL\`"
+            echo "Streaming: \`$YAG_QUALIFICATION_STREAM\`"
+            echo "Tool replay required: \`$YAG_QUALIFICATION_TOOLS\`"
+            echo "Runner: self-hosted Colibri (Linux)"
+            echo "This proves only this runtime + model combination, not general compatibility."
+          } >> "$GITHUB_STEP_SUMMARY"
