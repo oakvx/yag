@@ -14,7 +14,7 @@ import threading
 
 def validate(ip_raw, name_raw, port):
     ip = ipaddress.IPv4Address(ip_raw)
-    if not (ip.is_private or ip.is_link_local) or ip.is_multicast or ip.is_unspecified:
+    if not (ip.is_private or ip.is_link_local) or ip.is_multicast or ip.is_unspecified or ip.is_loopback:
         raise ValueError("Advertise only a private IPv4 address belonging to the Host")
     if not (1 <= port <= 65535):
         raise ValueError("Port must be between 1 and 65535")
