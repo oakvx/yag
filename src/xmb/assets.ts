@@ -33,24 +33,20 @@ export async function assetExists(path: string, kind: "image" | "audio"): Promis
 
 // Register a local Rodin face only when a supplied file exists. Otherwise the
 // static face in index.css proceeds directly from local() to the CDN fallback.
+// The display wordmark face is loaded separately, and shared, by brandFont.ts.
 const localFonts = [
   { path: "fonts/SCE-PS3-Rodin-LATIN.woff2", format: "woff2" },
   { path: "fonts/SCE-PS3-Rodin-LATIN.ttf", format: "truetype" },
 ].filter(({ path }) => hasOptionalAsset(path));
-const bootLogoFont = hasOptionalAsset("fonts/PS4-Logo.otf");
 
-if (localFonts.length || bootLogoFont) {
+if (localFonts.length) {
   const style = document.createElement("style");
   const sources = localFonts.map(({ path, format }) => `url("${publicAsset(path)}") format("${format}")`);
-  style.textContent = `${localFonts.length ? `@font-face {
+  style.textContent = `@font-face {
     font-family: "SCE-PS3 Rodin LATIN";
     src: local("SCE-PS3 Rodin LATIN"), ${sources.join(", ")},
       url("https://fonts.cdnfonts.com/s/65233/SCEPS3%20RODIN%20LATIN%20REGULAR.woff") format("woff");
     font-style: normal; font-weight: 400; font-display: swap;
-  }` : ""}${bootLogoFont ? `@font-face {
-    font-family: "PS4 Logo";
-    src: url("${publicAsset("fonts/PS4-Logo.otf")}") format("opentype");
-    font-style: normal; font-weight: 400; font-display: swap;
-  }` : ""}`;
+  }`;
   document.head.appendChild(style);
 }

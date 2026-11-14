@@ -1,10 +1,10 @@
 import type { WaveFrame } from "./bootState";
 
-interface Ribbon { phase: number; width: number; centre: number; slope: number; opacity: number }
+interface Ribbon { phase: number; offset: number; width: number; weight: number }
 const RIBBONS: Ribbon[] = [
-  { phase: 1.15, width: 0.175, centre: 0.51, slope: -0.035, opacity: 0.62 },
-  { phase: 3.65, width: 0.105, centre: 0.52, slope: 0.03, opacity: 0.8 },
-  { phase: 5.4, width: 0.125, centre: 0.535, slope: -0.014, opacity: 0.52 },
+  { phase: 0.4, offset: -0.045, width: 1.0, weight: 1.0 },
+  { phase: 2.55, offset: 0.0, width: 0.9, weight: 0.68 },
+  { phase: 4.7, offset: 0.045, width: 0.82, weight: 0.48 },
 ];
 
 /** Canvas2D fallback keeps the same shared timeline if WebGL is unavailable or lost. */
@@ -29,18 +29,31 @@ export function drawWave2D(ctx: CanvasRenderingContext2D, w: number, h: number, 
   ctx.fillRect(0, 0, w, h);
   if (exposure <= 0 || progress <= 0) return;
 
-  const segs = w < 760 ? 68 : 100;
-  const bands = w < 760 ? 12 : 22;
-  const step = w / segs;
-  const point = (r: Ribbon, x: number, v: number) => {
-    const n = x / w * 2 - 1;
-    const twist = n * 3.8 - time * 0.12 + r.phase;
-    const homeCenter = h * (r.centre + r.slope * n + Math.sin(n * 3.5 - time * 0.06 + r.phase) * 0.038);
-    const bootCenter = h * (0.36 - x / w * 0.045 + Math.sin(n * 2.1 - time * 0.06) * 0.015);
-    const spread = h * mix(r.width * (0.55 + 0.45 * Math.abs(Math.cos(n * 2.3 + r.phase))), 0.018 + 0.12 * Math.sin(Math.PI * Math.max(0, Math.min(1, x / w))), boot);
-    const pulseDist = x / w - swellPosition;
-    const impulse = swell * h * 0.02 * Math.exp(-pulseDist * pulseDist * 24) * Math.sin(pulseDist * 16 + r.phase);
-    return mix(homeCenter, bootCenter, boot) + v * spread * Math.cos(twist) + Math.sin(v * 2.7 + twist) * spread * 0.36 + impulse;
+  const t = time * 0.075;
+  const samples = w < 760 ? 120 : 220;
+  const step = w / samples;
+
+  // The same analytic band the shader draws, so the fallback keeps the look.
+  const band = (r: Ribbon, x: number) => {
+    const nx = x / w;
+    const phase = r.phase;
+    const travelling = nx * 4.1 - t + phase;
+    const secondary = nx * 8.0 - t * 0.39 + phase * 1.6;
+    const twist = nx * 3.8 - t * 0.72 + phase;
+    const wave = 0.5 + 0.5 * Math.sin(twist);
+    const homeCentre = 0.505 + r.offset
+      + 0.041 * Math.sin(travelling) + 0.018 * Math.sin(secondary) - (nx - 0.5) * 0.037;
+    const homeHalf = (0.030 + 0.082 * wave * wave) * r.width;
+    const bootCentre = 0.36 - nx * 0.065 + 0.012 * Math.sin(nx * 4.0 - t * 0.65);
+    const bootHalf = 0.008 + 0.115 * Math.sqrt(Math.max(0, Math.sin(Math.max(0, Math.min(1, nx)) * Math.PI)))
+      * (0.6 + 0.4 * (0.5 + 0.5 * Math.cos(twist * 2.0)));
+    const pulse = swellPosition - nx;
+    const impulse = swell * 0.018 * Math.exp(-pulse * pulse * 32) * Math.sin(-pulse * 20 + phase);
+    return {
+      centre: h * (mix(homeCentre, bootCentre, boot) + impulse),
+      half: h * mix(homeHalf, bootHalf, boot),
+      twist,
+    };
   };
 
   ctx.save();
@@ -48,22 +61,36 @@ export function drawWave2D(ctx: CanvasRenderingContext2D, w: number, h: number, 
   ctx.rect(0, 0, w * Math.min(1, progress * 1.08), h);
   ctx.clip();
   ctx.globalCompositeOperation = "lighter";
-  for (let index = 0; index < RIBBONS.length; index++) {
-    const r = RIBBONS[index];
-    const weight = index === 0 ? 1 : 1 - boot;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  for (const r of RIBBONS) {
+    const weight = r.weight === 1 ? 1 : (1 - boot) * r.weight;
     if (weight <= 0) continue;
-    for (let band = 0; band < bands; band++) {
-      const v0 = -1 + 2 * band / bands;
-      const v1 = -1 + 2 * (band + 1) / bands;
-      const sheen = Math.pow(Math.abs(Math.sin((v0 + v1) * 1.85 + r.phase + time * 0.08)), 9);
-      const alpha = (0.014 + sheen * 0.05) * r.opacity * weight * exposure;
+    const middle: [number, number][] = [];
+    const halves: number[] = [];
+    for (let s = 0; s <= samples; s++) {
+      const x = s * step;
+      const b = band(r, x);
+      middle.push([x, b.centre]);
+      halves.push(b.half);
+    }
+    // Concentric bands approximate the soft light profile of the shader.
+    const passes = 16;
+    const ramp = 0.13 / (passes * (passes + 1) / 2);
+    for (let pass = 0; pass < passes; pass++) {
+      const ratio = 1.12 - (pass / (passes - 1)) * 0.9;
+      const alpha = ramp * (passes - pass) * weight * exposure;
       ctx.beginPath();
-      for (let s = 0; s <= segs; s++) {
-        const x = s * step;
-        const y = point(r, x, v0);
-        if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      for (let s = 0; s < middle.length; s++) {
+        const [x, y] = middle[s];
+        const offset = halves[s] * ratio;
+        if (s === 0) ctx.moveTo(x, y - offset);
+        else ctx.lineTo(x, y - offset);
       }
-      for (let s = segs; s >= 0; s--) ctx.lineTo(s * step, point(r, s * step, v1));
+      for (let s = middle.length - 1; s >= 0; s--) {
+        const [x, y] = middle[s];
+        ctx.lineTo(x, y + halves[s] * ratio);
+      }
       ctx.closePath();
       ctx.fillStyle = css(ribbonColor, alpha);
       ctx.fill();
