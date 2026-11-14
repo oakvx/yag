@@ -184,6 +184,11 @@ static int parse_replicas(const char *json,size_t length,
             p->models[p->model_count]=strdup(yyjson_get_str(m));
             if(!p->models[p->model_count]){good=0;break;}
             p->model_count++;
+            if(p->exclusive_models)
+                for(size_t r=0;r<cfg->route_count;r++)
+                    if(!strcmp(p->models[p->model_count-1],
+                               cfg->routes[r].model))good=0;
+            if(!good)break;
         }
         if(!good)break;
     }
