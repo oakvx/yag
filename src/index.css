@@ -59,14 +59,17 @@
   --category-y: 25.1vh;
   --selected-y: 46.1vh;
   --category-gap: 10.65vw;
+  /* The top-right rail: the information icon and the clock share one fixed
+     margin, so the corner reads identically on every screen. */
+  --rail-right: 48px;
   /* The console's own proportions: a selected category mark at ~5.3% of the
      width, a destination mark at ~5.7%, and its label at ~2.1%. Both axes
      count, so a short window keeps the same relationships. */
   --category-size: clamp(46px, min(5.3vw, 9vh), 132px);
   --item-size: clamp(50px, min(5.7vw, 9.6vh), 132px);
-  --item-step: 14.1vh;
+  --item-step-base: 14.1vh;
   --label-gap: clamp(24px, 3.2vw, 80px);
-  --menu-font: clamp(18px, min(2.25vw, 3.9vh), 42px);
+  --menu-font: clamp(18px, min(2.25vw, 3.9vh), 38px);
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -109,15 +112,15 @@
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
 .console-destinations ul { list-style: none; padding: 0; margin: 0; }
-.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); opacity: 0.62; transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
-.console-destination-position.is-selected { opacity: 1; z-index: 3; }
-.console-destination-position.is-above:not(.is-selected) { opacity: 0.42; }
+/* Size and opacity ride on --item-scale, set per row from the distance to
+   the selection: the hardware interpolates continuously, not in two sizes. */
+.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
+.console-destination-position.is-selected { z-index: 3; }
 .console-destination { position: relative; display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
-.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(0.66); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
+.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(calc(0.66 + 0.34 * var(--item-scale, 0.55))); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
 .console-item-art svg { display: block; width: 100%; height: 100%; }
 .console-destination-position.is-selected .console-item-art { transform: scale(1); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
-.console-item-label { font-size: var(--menu-font); font-weight: 400; line-height: 1.3; white-space: nowrap; text-shadow: 0 2px 3px #00112c88; transition: opacity 200ms ease; }
-.console-destination-position:not(.is-selected) .console-item-label { font-size: 0.78em; }
+.console-item-label { font-size: max(calc(var(--menu-font) * var(--item-scale, 1)), 13px); font-weight: 400; line-height: 1.3; white-space: nowrap; text-shadow: 0 2px 3px #00112c88; transition: opacity 200ms ease; }
 .console-destination-position.is-selected .console-item-label { text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
 .console-external { display: inline-block; margin-left: 12px; font-size: 0.65em; opacity: 0.7; }
 .console-selection-light { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap) - 50px); top: calc(var(--item-size) * -0.45 + var(--selection-offset, 0) * var(--item-step)); width: min(710px, 55vw); height: calc(var(--item-size) * 0.9); pointer-events: none; background: linear-gradient(90deg, transparent, #ebf9ff0c 12%, #effaff09 55%, transparent); transition: top 350ms ease, opacity 200ms ease; }
@@ -126,9 +129,11 @@
 .console-selection-light::after { bottom: 0; }
 /* The selected row carries its own description, beside the label: the block can
    never land on the next destination, however long the text grows. */
-.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: min(34vw, 470px); pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(13px, min(1.18vw, 2vh), 26px); line-height: 1.5; text-shadow: 0 1px 3px #0008; }
-.console-description-lead { color: #d7e1ebc9; }
-.console-description-detail { color: #b4cbdcab; font-size: 0.9em; }
+/* A fixed width and a dark veil keep the second sentence readable even when
+   it lands on the bright crest of a wave. */
+.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: 380px; pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(13px, min(1.18vw, 2vh), 24px); line-height: 1.5; padding: 8px 18px 8px 12px; border-radius: 3px; background: linear-gradient(90deg, #04142ae6 0%, #04142aa6 58%, #04142a00 100%); }
+.console-description-lead { color: #fff; text-shadow: 0 1px 2px #000a; }
+.console-description-detail { color: #d3e4f4; font-size: 0.92em; text-shadow: 0 1px 2px #000b; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
 .from-left { animation: consoleItemsLeft 300ms ease both; }
 @keyframes consoleDescriptionIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
@@ -136,7 +141,7 @@
 @keyframes consoleItemsLeft { from { opacity: 0; margin-left: -18px; } to { opacity: 1; margin-left: 0; } }
 
 /* Original-style date strip, without a conventional site header. */
-.console-clock { position: absolute; z-index: 60; right: 5.7vw; top: 6.3vh; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: clamp(205px, 22.8vw, 600px); height: clamp(30px, min(5.2vh, 3.4vw), 56px); padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 32px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
+.console-clock { position: absolute; z-index: 60; right: var(--rail-right); top: 60px; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: 300px; height: 48px; padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 26px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
 .console-clock svg { width: 0.95em; height: 0.95em; }
 /* The notification list: the hardware keeps a circular information button
    in the top right corner, and pressing it opens the pending items as a
@@ -145,13 +150,13 @@
    with its value to the right of the subject and its description underneath;
    the entries around it step away and fade, as on the hardware. Here the
    pending items are the repository's own commits. */
-.console-notice-toggle { position: absolute; z-index: 63; right: 5.7vw; top: 1.1vh; width: 3.9vh; height: 3.9vh; min-width: 26px; min-height: 26px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #dcecf8c4; opacity: 0.82; cursor: pointer; transition: color 200ms ease, opacity 200ms ease, transform 240ms ease; }
+.console-notice-toggle { position: absolute; z-index: 63; right: var(--rail-right); top: 12px; width: 3.9vh; height: 3.9vh; min-width: 26px; min-height: 26px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #dcecf8c4; opacity: 0.82; cursor: pointer; transition: color 200ms ease, opacity 200ms ease, transform 240ms ease; }
 .console-notice-toggle svg { width: 100%; height: 100%; }
 .console-notice-toggle:hover { color: #fff; opacity: 1; }
 .console-notice-toggle[data-open="true"] { color: #fff; opacity: 1; }
 .console-notice-dot { position: absolute; top: 2%; right: 2%; width: 20%; height: 20%; border-radius: 50%; background: #c6e9ff; box-shadow: 0 0 7px #9fd8ff9e; transition: opacity 200ms ease; }
-.console-notice-toggle[data-open="true"] .console-notice-dot { opacity: 0; }
-.console-notice-panel { --notice-font: clamp(13px, min(1.28vw, 2.15vh), 27px); --notice-step: clamp(40px, 6.6vh, 76px); position: absolute; z-index: 62; inset: 0; overflow: hidden; opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.03) translateX(-0.8vw); transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, visibility 0s 420ms; }
+.console-notice-dot[data-on="false"] { opacity: 0; }
+.console-notice-panel { --notice-font: clamp(14px, min(1.4vw, 2.3vh), 30px); --notice-step: clamp(44px, 6.8vh, 84px); position: absolute; z-index: 62; inset: 0; overflow: hidden; opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.03) translateX(-0.8vw); transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, visibility 0s 420ms; }
 .console-notice-panel[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease; }
 /* The section mark: back chevron and large icon, level with the selected
    entry, the way the hardware parks its category icon beside the list. */
@@ -160,53 +165,64 @@
 .console-notice-back:hover { color: #fff; }
 .console-notice-rail-icon { display: block; width: var(--item-size); height: var(--item-size); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
 .console-notice-rail-icon svg { display: block; width: 100%; height: 100%; }
-.console-notice-list { position: absolute; left: var(--anchor-x); top: var(--selected-y); width: calc(100% - var(--anchor-x) - 5vw); margin: 0; padding: 0; list-style: none; }
-.console-notice-item { position: absolute; left: 0; top: 0; width: 100%; transform: translate3d(0, calc(var(--notice-offset, 0) * var(--notice-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
+/* The list owns the whole column of the screen, and a gradient mask keeps
+   its edges clear: entries dissolve before the top of the screen and long
+   before the footer, so nothing ever lands on the chrome below. */
+.console-notice-list { position: absolute; left: var(--anchor-x); top: 0; width: calc(100% - var(--anchor-x) - 5vw); height: 100%; margin: 0; padding: 0; list-style: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 76vh, transparent 87vh); mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 76vh, transparent 87vh); }
+.console-notice-item { position: absolute; left: 0; top: var(--selected-y); width: 100%; transform: translate3d(0, calc(var(--notice-offset, 0) * var(--notice-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
 .console-notice-item.is-selected { z-index: 3; }
-.console-notice-link { display: flex; align-items: flex-start; gap: clamp(12px, 1.1vw, 22px); width: 100%; color: #dbe9f6; text-decoration: none; font-size: var(--notice-font); line-height: 1.35; transition: color 180ms ease; }
+.console-notice-link { display: flex; align-items: flex-start; gap: clamp(14px, 1.2vw, 24px); width: 100%; color: #dbe9f6; text-decoration: none; font-size: max(calc(var(--notice-font) * var(--item-scale, 1)), 12px); line-height: 1.35; transition: color 180ms ease; }
 .console-notice-link:hover { color: #fff; }
 /* The enlarged, brightened row is the cursor: the hardware draws no ring
    around its selection, so neither do we. */
 .console-notice-link:focus-visible { outline: none; }
-/* The hollow circle every entry carries; the newest commit's is filled. */
-.console-notice-bullet { flex: none; width: 0.42em; height: 0.42em; margin-top: 0.4em; border: 1.5px solid currentColor; border-radius: 50%; opacity: 0.85; }
-.console-notice-item[data-fresh="true"] .console-notice-bullet { background: currentColor; }
-.console-notice-item.is-selected .console-notice-bullet { opacity: 1; box-shadow: 0 0 6px #d6f0ff40; }
-.console-notice-body { display: flex; flex: 1; flex-direction: column; gap: 0.2em; min-width: 0; }
-.console-notice-item:not(.is-selected) .console-notice-link { font-size: calc(var(--notice-font) * 0.7); }
-.console-notice-top { display: flex; align-items: baseline; gap: 26px; width: 100%; min-width: 0; }
-.console-notice-subject { min-width: 0; text-shadow: 0 2px 3px #00112c88; }
-/* Unselected entries keep the list's rhythm: one line, cut with an ellipsis
-   rather than wrapping over the entry below. The selected entry may wrap. */
-.console-notice-item:not(.is-selected) .console-notice-subject { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The entry's kind icon, where the hardware parks its little picture. */
+.console-notice-icon { flex: none; width: 1.25em; height: 1.25em; margin-top: 0.12em; filter: drop-shadow(0 2px 2px #0006); }
+.console-notice-icon svg { display: block; width: 100%; height: 100%; }
+/* Unread entries carry one small bright dot; it disappears once the
+   cursor selects the entry, as the hardware marks the new. */
+.console-notice-new { flex: none; width: 0.3em; height: 0.3em; margin-top: 0.62em; border-radius: 50%; background: #cfe9ff; box-shadow: 0 0 6px #9fd8ff99; }
+.console-notice-item:not(.is-selected) .console-notice-new { opacity: 0.55; }
+.console-notice-body { display: flex; flex: 1; flex-direction: column; gap: 0.22em; min-width: 0; }
+.console-notice-top { display: flex; align-items: baseline; gap: 20px; width: 100%; min-width: 0; }
+/* Every title runs one line, cut with an ellipsis at the list's edge. */
+.console-notice-subject { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 3px #00112c88; }
+.console-notice-subtitle { display: block; margin-top: 1px; font-size: 0.6em; opacity: 0.66; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .console-notice-item.is-selected .console-notice-subject { font-weight: 600; color: #fff; text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
-/* The selected entry's value, where the hardware prints "Off". */
-.console-notice-value { flex: none; margin-left: auto; font-size: 0.62em; letter-spacing: 0.06em; color: #cfe4f4d9; font-variant-numeric: tabular-nums; }
-/* Unselected entries keep a faint value at the right edge too, the way the
-   reference screen shows its dimmed "Off" beside every setting. */
-.console-notice-item:not(.is-selected) .console-notice-value { font-size: 0.72em; }
+/* The commit's date and time in the console's clock format, right aligned
+   in a fixed tabular column at the edge of the screen. */
+.console-notice-time { flex: none; margin-left: auto; width: 13ch; text-align: right; font-size: 0.68em; letter-spacing: 0.04em; color: #cfe4f4cc; font-variant-numeric: tabular-nums; }
+.console-notice-item:not(.is-selected) .console-notice-time { font-size: 0.78em; opacity: 0.8; }
 /* The selected entry's description, underneath its subject. */
-.console-notice-detail { max-width: min(46vw, 640px); font-size: 0.58em; line-height: 1.5; color: #c9dcea; text-shadow: 0 1px 3px #0008; animation: consoleDescriptionIn 420ms 100ms both; }
+.console-notice-detail { max-width: min(46vw, 640px); font-size: 0.62em; line-height: 1.5; color: #cfe2f2; text-shadow: 0 1px 3px #000a; animation: consoleDescriptionIn 420ms 100ms both; }
 .console-notice-sha { font-family: var(--font-mono); color: #a8cbe2b8; }
-.console-notice-foot { position: absolute; left: var(--anchor-x); bottom: 7vh; }
-.console-notice-foot a { font-size: clamp(11px, min(0.9vw, 1.5vh), 18px); letter-spacing: 0.06em; color: #a9c8de; text-decoration: none; text-shadow: 0 1px 3px #0008; }
-.console-notice-foot a:hover { color: #fff; }
 /* The list takes the screen: behind it the waves stand alone, the way the
    reference screen shows nothing but the list and its rail. The menu, the
    wordmark and the key hints sink into the background; the clock stays up
    top, as the hardware keeps its clock on that corner. */
 .console-environment[data-notices="open"] .console-menu { opacity: 0; pointer-events: none; }
 .console-environment[data-notices="open"] :is(.console-identity, .console-help) { opacity: 0.2; }
+/* New-commit toasts: a dark rounded bar on the top-right rail, queued and
+   played one at a time. It never takes focus and never moves the cursor. */
+.console-toast-region { position: absolute; z-index: 64; top: 118px; right: var(--rail-right); width: min(420px, 60vw); pointer-events: none; }
+.console-toast { display: flex; align-items: center; gap: 12px; padding: 9px 16px 9px 11px; color: #eef6fd; background: rgba(6, 22, 40, 0.78); border: 1px solid #d5eff530; border-radius: 10px; box-shadow: 0 10px 30px #0007; backdrop-filter: blur(6px); animation: consoleToastIn 340ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.console-toast[data-leaving="true"] { animation: consoleToastOut 300ms ease both; }
+.console-toast-icon { flex: none; width: 26px; height: 26px; }
+.console-toast-icon svg { display: block; width: 100%; height: 100%; }
+.console-toast-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: 0.02em; }
+@keyframes consoleToastIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes consoleToastOut { to { opacity: 0; transform: translateY(-6px); } }
 
-.console-identity { position: absolute; z-index: 20; left: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
+.console-identity { position: absolute; z-index: 20; left: var(--rail-right); bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
 .console-wordmark { font-family: var(--font-xmb), sans-serif; font-size: clamp(20px, min(2vw, 3.2vh), 46px); font-weight: 400; letter-spacing: 0.08em; text-shadow: 0 1px 2px #0005; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+.console-identity-meta { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .console-identity-caption { display: flex; flex-direction: column; gap: 3px; font-size: clamp(11px, min(0.85vw, 1.4vh), 20px); color: #b3cadc9c; }
 .console-identity-caption > span { font-size: 0.92em; color: #b3cadc7d; }
-.console-sound { display: flex; align-items: center; gap: 6px; margin-left: 1.4vw; padding: 5px; border: 0; background: transparent; color: #b3cadc99; font-size: clamp(11px, 0.72vw, 19px); }
+.console-sound { display: flex; align-items: center; gap: 6px; margin-left: 0; padding: 5px; border: 0; background: transparent; color: #b3cadc99; font-size: clamp(11px, 0.72vw, 19px); }
 .console-sound:hover { color: #edf6ff; }
 .console-sound svg { width: 1.4em; height: 1.4em; }
-.console-help { position: absolute; z-index: 20; right: 5.7vw; bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6c2; font-size: clamp(13px, min(1.15vw, 1.9vh), 26px); text-shadow: 0 1px 2px #0005; transition: opacity 220ms ease; }
+.console-help { position: absolute; z-index: 20; right: var(--rail-right); bottom: 5.6vh; display: flex; align-items: center; gap: 1.3em; color: #c3d9e6c2; font-size: clamp(13px, min(1.15vw, 1.9vh), 26px); text-shadow: 0 1px 2px #0005; transition: opacity 220ms ease; }
 .console-help button { display: inline-flex; align-items: center; gap: 0.35em; padding: 0; border: 0; background: none; color: inherit; font-size: inherit; }
 .console-help button:hover { color: white; }
 .console-help kbd, .console-app-back-hint kbd { font: inherit; }
@@ -393,23 +409,25 @@
   .console-environment { --category-size: 132px; --item-size: 126px; }
 }
 @media (max-width: 760px) {
-  .console-environment { --anchor-x: 23vw; --category-y: 25vh; --selected-y: 45vh; --category-gap: 23vw; --category-size: 54px; --item-size: 52px; --item-step: 13.7vh; --label-gap: 22px; --menu-font: 19px; }
+  .console-environment { --anchor-x: 23vw; --category-y: 25vh; --selected-y: 45vh; --category-gap: 23vw; --category-size: 54px; --item-size: 52px; --item-step-base: 13.7vh; --rail-right: 16px; --label-gap: 22px; --menu-font: 21px; }
   .console-category-label { font-size: 13px; top: 36px; }
-  .console-clock { top: 4vh; right: 5vw; width: 47vw; height: 24px; font-size: 12px; }
+  .console-clock { top: 48px; right: var(--rail-right); width: 176px; height: 30px; font-size: 13px; }
   .console-destination-position { width: calc(100vw - var(--anchor-x) - 4vw + var(--item-size) / 2); }
   .console-item-label { white-space: normal; max-width: calc(100vw - var(--anchor-x) - 62px); }
   .console-description { position: absolute; top: calc(100% + 6px); left: calc(var(--item-size) + var(--label-gap)); width: min(380px, calc(100vw - var(--anchor-x) - var(--label-gap) - var(--item-size) - 12px)); max-width: none; font-size: 12px; line-height: 1.5; }
   .console-description-detail { display: none; }
   .console-selection-light { width: 66vw; left: 24px; }
-  .console-identity { left: 6vw; bottom: 5vh; gap: 9px; }
+  .console-identity { left: var(--rail-right); bottom: 5vh; gap: 9px; }
   .console-wordmark { font-size: 20px; }
   .console-identity-caption { font-size: 9px; }
   .console-sound { margin-left: 5px; font-size: 11px; }
   .console-sound > span { display: none; }
-  .console-help { right: 6vw; bottom: 11vh; font-size: 11px; gap: 1.1em; }
-  .console-help-arrows { font-size: 14px; }
-  .console-notice-toggle { right: 5vw; top: 1.4vh; width: 32px; height: 32px; }
-  .console-notice-panel { --notice-step: 6vh; --notice-font: 15px; }
+  .console-help { right: var(--rail-right); bottom: 11vh; font-size: 11px; gap: 1.1em; }
+  /* On a phone the command bar keeps only its icons. */
+  .console-help-arrows, .console-help-label { display: none; }
+  .console-toast-region { top: 96px; width: calc(100vw - 2 * var(--rail-right)); }
+  .console-notice-toggle { right: var(--rail-right); top: 8px; width: 32px; height: 32px; }
+  .console-notice-panel { --notice-step: 6.4vh; --notice-font: 15px; }
   .console-notice-rail { left: 3vw; gap: 6px; }
   .console-notice-back { width: 24px; height: 24px; font-size: 24px; }
   .console-notice-list { width: calc(100% - var(--anchor-x) - 4vw); }
@@ -435,7 +453,7 @@
   .console-help { display: none; }
 }
 @media (max-height: 480px) and (orientation: landscape) {
-  .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step: 18vh; --category-size: 42px; --item-size: 38px; --menu-font: 16px; }
+  .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step-base: 18vh; --category-size: 42px; --item-size: 38px; --menu-font: 16px; }
   .console-description { font-size: 12px; }
   .console-description-detail { display: none; }
   .console-help { bottom: 5vh; }

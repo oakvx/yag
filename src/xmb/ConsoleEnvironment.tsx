@@ -257,7 +257,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
       <ConsoleClock />
-      <CommitNotifications active={!isApp} open={noticesOpen} onOpenChange={setNoticesOpen} />
+      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} onOpenChange={setNoticesOpen} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
       {/* The menu itself is the home screen. No application is mounted underneath. */}
@@ -270,7 +270,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         aria-label="YAG cross media menu"
         role="main"
         aria-hidden={isApp || !bootReady || undefined}
-        inert={isApp || paletteOpen || !bootReady}
+        inert={isApp || paletteOpen || !bootReady || noticesOpen}
         tabIndex={-1}
         onWheel={(e) => {
           if (isApp) return;
@@ -345,7 +345,12 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           key={category.id}
           aria-label={`${category.label} destinations`}
           className={cn("console-destinations", direction === "right" ? "from-right" : "from-left")}
-          style={{ "--selection-offset": selectionOffset } as CSSProperties}
+          style={{
+            "--selection-offset": selectionOffset,
+            // The list may never reach the footer: a category with many
+            // entries earns a smaller step, fitted above it.
+            "--item-step": `min(var(--item-step-base), calc((84dvh - var(--selected-y)) / ${Math.max(category.items.length - 1, 1)}))`,
+          } as CSSProperties}
           onMouseLeave={() => { setHoverAnchor(null); resetHover(); }}
         >
           <div className="console-selection-light" aria-hidden="true" />
@@ -355,11 +360,18 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
               // Previous entries move above the crossbar; selection remains at the intersection.
               const offset = delta < 0 ? delta - 1.35 : delta;
               const on = i === menuCursor.item;
+              // Size and brightness interpolate with the distance from the
+              // selection, the way the hardware's list does: the selected
+              // label stands at full size, entries around it step down and
+              // dim, entries above the crossbar a little more.
+              const distance = Math.abs(i - menuCursor.item);
+              const scale = distance === 0 ? 1 : Math.max(0.46, 0.86 - distance * 0.13);
+              const opacity = (distance === 0 ? 1 : Math.max(0.68, 0.86 - distance * 0.09)) * (delta < 0 ? 0.62 : 1);
               return (
                 <li
                   key={item.id}
                   className={cn("console-destination-position", on && "is-selected", delta < 0 && "is-above")}
-                  style={{ "--item-offset": offset } as CSSProperties}
+                  style={{ "--item-offset": offset, "--item-scale": scale, opacity } as CSSProperties}
                 >
                   <a
                     ref={(node) => { itemRefs.current[i] = node; }}
@@ -436,15 +448,19 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         >
           YAG
         </button>
-        <span className="console-identity-caption">Yet Another Gateway <span>Experimental</span></span>
-        <AudioControls onReplay={boot.replay} />
+        {/* Caption and audio stack in one column: the block never reaches
+            the menu's own column, however narrow the screen. */}
+        <span className="console-identity-meta">
+          <span className="console-identity-caption">Yet Another Gateway <span>Experimental</span></span>
+          <AudioControls onReplay={boot.replay} />
+        </span>
       </div>
 
       {!isApp && (
-        <div className="console-help" data-console-action inert={paletteOpen || !bootReady}>
-          <span className="console-help-arrows" aria-hidden="true">↔ ↕</span><span>Navigate</span>
-          <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /> Select</button>
-          <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /> Back</button>
+        <div className="console-help" data-console-action inert={paletteOpen || !bootReady || noticesOpen}>
+          <span className="console-help-arrows" aria-hidden="true">↔ ↕</span><span className="console-help-label">Navigate</span>
+          <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /><span className="console-help-label">Select</span></button>
+          <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /><span className="console-help-label">Back</span></button>
         </div>
       )}
 
