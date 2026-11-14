@@ -69,7 +69,7 @@ jobs:
           Do not expose the listener directly on untrusted networks.
           EOF
           tar -C package -czf yag-linux-x86_64.tar.gz .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: yag-host-linux-x86_64
           path: yag-linux-x86_64.tar.gz
@@ -148,7 +148,7 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build unsigned native package
         run: npm run build -- --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: yag-desktop-${{ matrix.platform }}
           path: desktop/src-tauri/target/release/bundle/**
@@ -193,7 +193,7 @@ jobs:
             sha256sum yag-linux-x86_64.tar.gz yag-desktop-* > SHA256SUMS.txt
             sha256sum --check SHA256SUMS.txt
           )
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: yag-release-packages
           path: release-assets/*
