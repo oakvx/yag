@@ -5,6 +5,22 @@ YAG Host can route selected model IDs through HTTPS upstreams. This is the
 catalog or a billing system. No public provider credentials belong in YAG
 Desktop or in the GitHub repository.
 
+## Gateway-issued egress metadata
+
+YAG Host normalizes the model list returned by the default provider instead of
+trusting arbitrary `yag_*` fields supplied by an upstream. The Host publishes
+`yag_remote_https`, `yag_dedicated`, and `yag_loopback_only` for default,
+static-route, and managed-provider model IDs. For a default model, it also
+considers eligible managed pools and model-specific routes. If any candidate
+can leave loopback, `yag_loopback_only` is **false**. Desktop and its local
+relay require explicit consent before using or exposing unverified models;
+older Hosts without the flag are treated conservatively.
+
+This is **transport metadata**, not a guarantee that a loopback proxy never
+forwards to paid external APIs. A proxy on `127.0.0.1` can still make cloud
+requests. Maintain provider-side monetary limits and explicit per-client
+permissions; do not treat this metadata as an invoice or egress firewall.
+
 ## Supported API base paths
 
 The Host's private Provider Manager permits these exact suffixes:

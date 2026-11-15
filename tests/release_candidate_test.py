@@ -27,6 +27,28 @@ class CandidatePolicyTests(unittest.TestCase):
         self.assertTrue(validate('v0.1.0-rc.1',SHA,fixtures()))
         self.assertTrue(validate('v4.15.23-rc.39',SHA,fixtures()))
 
+    def test_weekly_tags_require_opt_in_and_real_monday(self):
+        tag = 'v0.1.0-weekly.20261116'
+        self.assertTrue(validate(tag, SHA, fixtures(), weekly=True))
+        with self.assertRaises(ValueError):
+            validate(tag, SHA, fixtures())
+        for invalid in (
+            'v0.1.0-weekly.20261115',  # Sunday
+            'v0.1.0-weekly.20260230',  # Invalid date
+            'v0.1.0-weekly.20261116;echo',
+            'v0.1.0-weekly.202611160',
+            'v0.1.0-weekly.20261123-rc.1',
+            'v0.1.0',
+        ):
+            with self.subTest(tag=invalid), self.assertRaises(ValueError):
+                validate(invalid, SHA, fixtures(), weekly=True)
+
+    def test_weekly_still_requires_exact_main_ci_and_security(self):
+        data = fixtures()
+        data['workflow_runs'].append(run('Security and dependency review', number=4, result='failure'))
+        with self.assertRaisesRegex(ValueError, 'Latest'):
+            validate('v0.1.0-weekly.20261116', SHA, data, weekly=True)
+
     def test_dangerous_tags_rejected(self):
         for tag in ('v0.1.0','v0.1.0-rc.0','v0.1.0-rc.1;whoami',
                     'v00.1.0-rc.1','v1.02.0-rc.1','v1.2.3-rc.01',

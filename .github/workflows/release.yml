@@ -12,8 +12,6 @@ on:
       - "CMakeLists.txt"
       - "host/**"
       - "scripts/release_verify.py"
-  schedule:
-    - cron: "17 4 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -154,6 +152,10 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build unsigned native package
+        # Only tagged releases are regarded as installed stable/RC/weekly
+        # versions. Branch artifacts remain local builds eligible for updates.
+        env:
+          YAG_DESKTOP_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: npm run build -- --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v7
         with:
@@ -253,9 +255,9 @@ jobs:
     needs: [verify-assets, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # Configure required reviewers for production-release in repository settings.
+    # Weekly prereleases are automatic; RC and stable environments may require manual review.
     environment:
-      name: ${{ contains(github.ref_name, '-') && 'release-candidate' || 'production-release' }}
+      name: ${{ contains(github.ref_name, '-weekly.') && 'weekly-prerelease' || (contains(github.ref_name, '-') && 'release-candidate' || 'production-release') }}
     permissions:
       contents: write
       actions: read
@@ -267,6 +269,25 @@ jobs:
         with:
           name: yag-release-packages
           path: release-assets
+      - name: Require successful exact-main CI and security checks for weekly tags
+        if: contains(github.ref_name, '-weekly.')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME" --jq '.object.sha')"
+          if [[ "$tag_commit" != "$GITHUB_SHA" || "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "Weekly release tag and checked-out source disagree." >&2
+            exit 1
+          fi
+          umask 077
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" \
+            > "$RUNNER_TEMP/yag-weekly-runs.json"
+          python3 scripts/release_candidate.py --weekly \
+            --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --runs-file "$RUNNER_TEMP/yag-weekly-runs.json"
       - name: Require authenticated Colibri evidence before any stable publication
         if: ${{ !contains(github.ref_name, '-') }}
         shell: bash
@@ -303,7 +324,10 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           release_flags=()
-          if [[ "$version" == *-* ]]; then
+          if [[ "$version" == *-weekly.* ]]; then
+            release_flags+=(--prerelease --latest=false)
+            release_note="YAG weekly experimental build from reviewed main. Not production-qualified: real Colibri/model acceptance and independent security review remain outstanding. Desktop installers are unsigned. Includes Host and Desktop packages with SHA-256 checksums and Sigstore provenance. See docs/deployment/releases.md."
+          elif [[ "$version" == *-* ]]; then
             release_flags+=(--prerelease --latest=false)
             release_note="YAG release candidate. Experimental: installers unsigned, real Colibri qualification is NOT implied. Do not treat as a production-certified release. See docs/deployment/releases.md."
           else
@@ -316,6 +340,10 @@ jobs:
             release_note="YAG reviewed stable build. Validate release-specific Colibri qualifications and published support limitations before deployment. Installers may remain unsigned. See docs/deployment/releases.md."
           fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            if [[ "$version" == *-weekly.* ]]; then
+              echo "Weekly releases are immutable; refusing to overwrite published packages." >&2
+              exit 1
+            fi
             gh release upload "$GITHUB_REF_NAME" release-assets/* --clobber
           else
             gh release create "$GITHUB_REF_NAME" release-assets/* \

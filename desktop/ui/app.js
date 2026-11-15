@@ -6,6 +6,7 @@ const tauri = window.__TAURI__
 const invoke = tauri.core.invoke
 const Channel = tauri.core.Channel
 const Workspace = window.YagWorkspace
+const Models = window.YagModels
 const Markdown = window.YagMarkdown
 
 const el = (id) => document.getElementById(id)
@@ -25,7 +26,10 @@ const state = {
   maxTokens: 1024,
   systemPrompt: '',
   relay: null,
-  cloudConsent: new Set() // In-memory only; no implicit cross-session consent.
+  cloudConsent: new Set(), // In-memory only; no implicit cross-session consent.
+  updateInfo: null,
+  updateDismissed: null,
+  updateChecking: false
 }
 
 
@@ -169,6 +173,14 @@ function setStatus(online) {
   el('disconnectButton').disabled = state.running
   updateRelayDisplay()
 }
+function selectModel(id) {
+  if (state.running || !state.models.some(model => model.id === id)) return
+  if (state.model !== id) clearConversation()
+  state.model = id
+  renderModels()
+  setStatus(true)
+  el('prompt').focus()
+}
 function renderModels() {
   const root = el('models')
   root.replaceChildren()
@@ -179,7 +191,19 @@ function renderModels() {
     root.append(p)
     return
   }
-  state.models.forEach((model) => {
+  const pinned = Models.favorites(state.url)
+  const visible = Models.filter(state.models, el('modelSearch').value, pinned)
+  if (!visible.length) {
+    const p = document.createElement('p')
+    p.className = 'muted model-placeholder'
+    p.textContent = 'No matching models. Clear the search to view all models.'
+    root.append(p)
+    return
+  }
+  visible.forEach((model) => {
+    const row = document.createElement('div')
+    row.className = 'model-row'
+
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'model-item' + (model.id === state.model ? ' active' : '')
@@ -196,17 +220,29 @@ function renderModels() {
     name.title = model.id
     const label = document.createElement('small')
     label.textContent = model.yag_remote_https ? 'External HTTPS · may incur charges' :
-      (model.yag_dedicated ? 'Dedicated LAN provider' : 'Remote inference')
+      (model.yag_dedicated ? 'Dedicated provider · verify costs' :
+        (model.yag_loopback_only ? 'Loopback upstream · local proxy' :
+          'Unverified destination · review egress'))
     meta.append(name, label)
     button.append(icon, meta)
-    button.addEventListener('click', () => {
-      if (state.model !== model.id) clearConversation()
-      state.model = model.id
+    button.addEventListener('click', () => selectModel(model.id))
+    const star = document.createElement('button')
+    star.type = 'button'
+    star.className = 'model-favorite' + (pinned.includes(model.id) ? ' pinned' : '')
+    star.textContent = pinned.includes(model.id) ? '★' : '☆'
+    star.title = pinned.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'
+    star.setAttribute('aria-label', star.title + ': ' + model.id)
+    star.setAttribute('aria-pressed', String(pinned.includes(model.id)))
+    star.addEventListener('click', () => {
+      if (!Models.toggle(state.url, model.id)) {
+        showError('Could not save model favorites on this device.')
+        return
+      }
       renderModels()
-      setStatus(true)
-      el('prompt').focus()
+      el('modelSearch').focus()
     })
-    root.append(button)
+    row.append(button, star)
+    root.append(row)
   })
 }
 function renderMessages() {
@@ -293,6 +329,7 @@ async function connect(event) {
     renderConversations()
     // Only the non-secret server address is remembered.
     localStorage.setItem('yag.desktop.url', url)
+    el('modelSearch').value = ''
     renderModels()
     setStatus(true)
     closeDialog()
@@ -318,6 +355,7 @@ async function disconnect() {
   state.model = ''
   state.models = []
   state.cloudConsent.clear()
+  el('modelSearch').value = ''
   el('apiKey').value = ''
   clearConversation()
   renderModels()
@@ -332,10 +370,11 @@ async function sendMessage(event) {
   // A managed external HTTPS model can send prompts and tool content outside
   // the LAN. Confirm once per server/model in volatile session memory.
   const currentModel = state.models.find(item => item.id === state.model)
-  if (currentModel?.yag_remote_https) {
+  if (currentModel && (!currentModel.yag_loopback_only ||
+      currentModel.yag_remote_https || currentModel.yag_dedicated)) {
     const consentId = state.url + '|' + state.model
     if (!state.cloudConsent.has(consentId)) {
-      if (!window.confirm('This model uses an external HTTPS provider. Your messages can leave the LAN and may incur provider charges. Continue?')) return
+      if (!window.confirm('YAG cannot confirm this model stays on the local Host. The route may use an external provider and incur charges. Continue for this session?')) return
       state.cloudConsent.add(consentId)
     }
   }
@@ -414,6 +453,7 @@ function updateRelayDisplay() {
   el('relayDetails').hidden = !state.relay
   el('startRelay').disabled = !state.online || !state.apiKey || !!state.relay
   el('stopRelay').disabled = !state.relay
+  el('relayCloudAccess').disabled = !!state.relay
   if (state.relay) {
     el('relayUrl').textContent = state.relay.url + '/v1'
     el('relayKey').textContent = state.relay.token
@@ -423,16 +463,29 @@ function updateRelayDisplay() {
   }
 }
 async function stopRelay() {
-  try { await invoke('stop_relay') }
-  catch (error) { el('relayError').hidden = false; el('relayError').textContent = String(error) }
-  finally { state.relay = null; updateRelayDisplay() }
+  try {
+    await invoke('stop_relay')
+    state.relay = null
+    // Reconsent is required each time a relay is started.
+    el('relayCloudAccess').checked = false
+  } catch (error) {
+    el('relayError').hidden = false
+    el('relayError').textContent = String(error)
+  } finally { updateRelayDisplay() }
 }
 async function startRelay() {
   if (!state.online || !state.apiKey || state.relay) return
+  const allowExternal = el('relayCloudAccess').checked
+  if (allowExternal && !window.confirm(
+    'Allow local programs holding the relay token to access dedicated or paid external AI providers? These requests may incur charges and leave your LAN.'
+  )) {
+    el('relayCloudAccess').checked = false
+    return
+  }
   el('relayError').hidden = true
   el('startRelay').disabled = true
   try {
-    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey})
+    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey, allowExternal})
   } catch (error) {
     el('relayError').textContent = String(error)
     el('relayError').hidden = false
@@ -481,17 +534,83 @@ el('copyChatButton').addEventListener('click', async () => {
     showError('Clipboard access denied. Check operating-system permissions.')
   }
 })
-el('checkUpdates').addEventListener('click', async () => {
+const updateSetting = 'yag.desktop.autoUpdateCheck.v1'
+el('autoCheckUpdates').checked = localStorage.getItem(updateSetting) === 'true'
+
+function showUpdateResult(release) {
+  state.updateInfo = release
+  const newer = release.update_available
+  const supported = release.download_supported
+  el('updateStatus').textContent = 'Installed: ' + release.current +
+    ' · Latest published: ' + release.latest + ' (' + release.channel + ')' +
+    (newer ? (supported ? ' · Update available' : ' · Update available, but no compatible installer for this CPU') : ' · Up to date')
+  el('downloadUpdate').hidden = !newer || !supported
+  el('copyReleaseLink').hidden = false
+  const visible = newer && state.updateDismissed !== release.latest
+  el('updateBanner').hidden = !visible
+  if (visible) el('updateBannerText').textContent = 'YAG ' + release.latest + ' is available for review.'
+}
+
+async function checkForUpdates() {
+  if (state.updateChecking) return
+  state.updateChecking = true
   const button = el('checkUpdates')
   button.disabled = true
   el('updateStatus').textContent = 'Checking published GitHub Releases…'
   try {
     const release = await invoke('check_updates')
-    el('updateStatus').textContent = 'Installed: ' + release.current +
-      ' · Latest release: ' + release.latest + ' · ' + release.url
+    showUpdateResult(release)
   } catch (error) {
-    el('updateStatus').textContent = String(error)
-  } finally { button.disabled = false }
+    el('updateStatus').textContent = 'Update check failed: ' + String(error)
+  } finally {
+    button.disabled = false
+    state.updateChecking = false
+  }
+}
+
+el('checkUpdates').addEventListener('click', checkForUpdates)
+el('autoCheckUpdates').addEventListener('change', () => {
+  try {
+    if (el('autoCheckUpdates').checked) {
+      localStorage.setItem(updateSetting, 'true')
+      checkForUpdates()
+    } else {
+      localStorage.removeItem(updateSetting)
+    }
+  } catch {
+    el('autoCheckUpdates').checked = false
+    el('updateStatus').textContent = 'Could not save update preference.'
+  }
+})
+el('reviewUpdate').addEventListener('click', openSettings)
+el('dismissUpdate').addEventListener('click', () => {
+  state.updateDismissed = state.updateInfo?.latest || null
+  el('updateBanner').hidden = true
+})
+el('copyReleaseLink').addEventListener('click', async () => {
+  if (!state.updateInfo) return
+  try {
+    await navigator.clipboard.writeText(state.updateInfo.url)
+    el('updateStatus').textContent = 'Release page link copied. ' + state.updateInfo.url
+  } catch {
+    el('updateStatus').textContent = 'Clipboard unavailable. Release page: ' + state.updateInfo.url
+  }
+})
+el('downloadUpdate').addEventListener('click', async () => {
+  const release = state.updateInfo
+  if (!release?.update_available || !release.download_supported) return
+  const button = el('downloadUpdate')
+  button.disabled = true
+  el('updateStatus').textContent = 'Downloading and verifying SHA-256 integrity…'
+  try {
+    const location = await invoke('download_update', { tag: release.latest })
+    el('updateStatus').textContent = 'Verified installer saved to ' + location +
+      '. Verify GitHub Sigstore provenance before manually installing this unsigned package.'
+  } catch (error) {
+    el('updateStatus').textContent = 'Download blocked: ' + String(error)
+  } finally {
+    button.disabled = false
+  }
 })
 el('settingsButton').addEventListener('click', openSettings)
 el('closeSettingsButton').addEventListener('click', closeSettings)
@@ -541,6 +660,18 @@ el('copyRelayKey').addEventListener('click', () => {
   })
 })
 
+el('modelSearch').addEventListener('input', renderModels)
+el('modelSearch').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    const matched = Models.filter(state.models, el('modelSearch').value, Models.favorites(state.url))
+    if (matched.length) selectModel(matched[0].id)
+  } else if (event.key === 'Escape') {
+    el('modelSearch').value = ''
+    renderModels()
+    el('modelSearch').blur()
+  }
+})
 el('chatSearch').addEventListener('input', renderConversations)
 el('newSidebarChat').addEventListener('click', clearConversation)
 el('serverButton').addEventListener('click', openDialog)
@@ -559,6 +690,13 @@ el('prompt').addEventListener('keydown', (event) => {
   }
 })
 document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' &&
+      el('connectionDialog').hidden && el('settingsDialog').hidden) {
+    event.preventDefault()
+    el('modelSearch').focus()
+    el('modelSearch').select()
+    return
+  }
   if (event.key === 'Escape' && !el('connectionDialog').hidden) closeDialog()
   if (event.key === 'Escape' && !el('settingsDialog').hidden) closeSettings()
 })
@@ -570,3 +708,4 @@ renderMessages()
 setStatus(false)
 renderConversations()
 openDialog()
+if (el('autoCheckUpdates').checked) checkForUpdates()

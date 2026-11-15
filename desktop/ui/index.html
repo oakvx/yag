@@ -7,6 +7,7 @@
   <title>YAG Desktop</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./workspace.js" defer></script>
+  <script src="./models.js" defer></script>
   <script src="./markdown.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
@@ -22,6 +23,8 @@
         <span class="chevron">›</span>
       </button>
       <div class="section-heading model-heading"><span>AVAILABLE MODELS</span><button id="refreshButton" class="icon-button" title="Refresh models" aria-label="Refresh models" type="button">↻</button></div>
+      <label class="sr-only" for="modelSearch">Find a model</label>
+      <input id="modelSearch" class="model-search" type="search" placeholder="Find model…  Ctrl+K" maxlength="120" autocomplete="off" spellcheck="false" aria-label="Find a model">
       <div id="models" class="models" role="listbox" aria-label="Available AI models"><p class="muted model-placeholder">Connect to a YAG server to discover its models.</p></div>
       <div class="section-heading chats-heading"><span>CONVERSATIONS</span><button id="newSidebarChat" class="icon-button" type="button" title="New conversation" aria-label="New conversation">＋</button></div>
       <label class="sr-only" for="chatSearch">Search conversations</label>
@@ -39,6 +42,11 @@
         <div class="page-title"><span class="eyebrow">WORKSPACE / CHAT</span><strong id="currentModel">Select a model</strong></div>
         <div class="topbar-actions"><button id="copyChatButton" class="secondary-button" type="button" disabled>Copy chat</button><button id="settingsButton" class="secondary-button" type="button">Preferences</button><span id="statusText" class="status-text">Disconnected</span><span id="statusPill" class="pill">OFFLINE</span></div>
       </header>
+      <div id="updateBanner" class="update-banner" role="status" hidden>
+        <span id="updateBannerText"></span>
+        <button id="reviewUpdate" class="secondary-button" type="button">Review update</button>
+        <button id="dismissUpdate" class="icon-button" type="button" aria-label="Dismiss update notification">×</button>
+      </div>
       <section id="chat" class="chat" aria-label="Conversation" aria-live="polite">
         <div id="emptyState" class="empty-state">
           <div class="empty-logo">Y</div>
@@ -98,15 +106,23 @@
       <button id="clearHistory" class="secondary-button" type="button">Delete all locally saved conversations</button>
       <div class="settings-divider"></div>
       <h3>Local API relay</h3>
-      <p class="field-note">Expose the connected YAG models as a local OpenAI-compatible API on 127.0.0.1 only. A separate temporary token is required, including for local programs.</p>
+      <p class="field-note">Expose selected YAG models as a local OpenAI-compatible API on 127.0.0.1 only. A separate temporary token is required, including for local programs.</p>
+      <label class="switch-line"><input id="relayCloudAccess" type="checkbox"> Also expose dedicated/external provider models</label>
+      <p class="field-note">Off by default. Enabling this allows applications using the local relay token to send requests to potentially paid third-party providers. Host key scopes and limits still apply. Legacy Hosts may not identify all cloud models.</p>
       <div class="modal-actions"><button id="startRelay" class="secondary-button" type="button">Start local relay</button><button id="stopRelay" class="secondary-button" type="button" disabled>Stop relay</button></div>
       <div id="relayDetails" class="relay-details" hidden><strong>Local endpoint</strong><code id="relayUrl"></code><strong>Temporary API key</strong><code id="relayKey"></code><button id="copyRelayKey" class="secondary-button" type="button">Copy token</button></div>
       <p id="relayError" class="dialog-error" role="alert" hidden></p>
       <div class="settings-divider"></div>
       <h3>Application updates</h3>
-      <p class="field-note">Check GitHub Releases manually. This sends no chat text or API keys. Installers are currently unsigned; verify downloaded files before installing.</p>
-      <button id="checkUpdates" class="secondary-button" type="button">Check for new release</button>
+      <label class="switch-line"><input id="autoCheckUpdates" type="checkbox"> Check GitHub for updates when Desktop starts</label>
+      <p class="field-note">Optional: queries the public GitHub Releases API without sending API keys, models or chat contents. Includes experimental weekly builds and release candidates. GitHub can observe your IP address.</p>
+      <div class="modal-actions update-actions">
+        <button id="checkUpdates" class="secondary-button" type="button">Check for updates</button>
+        <button id="downloadUpdate" class="secondary-button" type="button" hidden>Download verified installer</button>
+      </div>
       <p id="updateStatus" class="field-note" role="status"></p>
+      <button id="copyReleaseLink" class="secondary-button" type="button" hidden>Copy release page link</button>
+      <p class="field-note">Packages are checked against published SHA-256 checksums but remain unsigned. A checksum alone is not proof of publisher identity. Verify GitHub Sigstore provenance before manual installation. YAG never silently runs an installer.</p>
     </section>
   </div>
 </body>

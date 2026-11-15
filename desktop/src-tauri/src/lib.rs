@@ -1,5 +1,6 @@
 mod discovery;
 mod relay;
+mod updates;
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ struct Model {
     yag_dedicated: bool,
     #[serde(default)]
     yag_remote_https: bool,
+    #[serde(default)]
+    yag_loopback_only: bool,
 }
 
 #[derive(Deserialize)]
@@ -327,14 +330,23 @@ async fn cancel_chat(request_id: String, state: State<'_, AppState>) -> Result<(
 
 
 #[tauri::command]
-async fn start_relay(url: String, api_key: String, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
+async fn start_relay(url: String, api_key: String, allow_external: bool, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
     let origin = endpoint(&url)?;
     key_valid(&api_key)?;
-    // Validate the key against the actual gateway before making it available locally.
-    list_models(url, api_key.clone()).await?;
+    // Snapshot the authenticated inventory. External/dedicated IDs are denied
+    // unless the user explicitly opted into exposing them to localhost apps.
+    let models = list_models(url, api_key.clone()).await?;
+    let allowed = models.into_iter()
+        .filter(|model| allow_external ||
+            (model.yag_loopback_only && !model.yag_remote_https && !model.yag_dedicated))
+        .map(|model| model.id)
+        .collect::<Vec<_>>();
+    if allowed.is_empty() {
+        return Err("No relay-eligible models. Enable external provider access explicitly if intended.".into());
+    }
     let mut active = state.relay.lock().await;
     if active.is_some() { return Err("A local relay is already running".into()); }
-    let (info, handle) = relay::start(origin, api_key).await?;
+    let (info, handle) = relay::start(origin, api_key, allowed).await?;
     *active = Some(handle);
     Ok(info)
 }
@@ -353,43 +365,23 @@ async fn discover_hosts() -> Result<Vec<discovery::DiscoveredHost>, String> {
 }
 
 
-#[derive(Serialize)]
-struct VersionInfo {
-    current: String,
-    latest: String,
-    url: String,
-}
 #[tauri::command]
-async fn check_updates() -> Result<VersionInfo, String> {
-    // This explicit user-triggered check never transmits client API keys,
-    // conversation content or identifiable model names.
-    let response = client()?
-        .get("https://api.github.com/repos/oakvx/yag/releases/latest")
-        .header("User-Agent", "YAG-Desktop-Update-Check")
-        .timeout(Duration::from_secs(8))
-        .send().await.map_err(|_| "Could not reach GitHub Releases".to_string())?;
-    if !response.status().is_success() {
-        return Err("No published GitHub Release could be retrieved".into());
-    }
-    let release: serde_json::Value = response.json().await
-        .map_err(|_| "Invalid release metadata".to_string())?;
-    let latest = release.get("tag_name").and_then(|v| v.as_str()).unwrap_or("");
-    if latest.len() > 40 || !latest.starts_with('v') ||
-        !latest[1..].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.') {
-        return Err("Unexpected version tag from GitHub".into());
-    }
-    Ok(VersionInfo {
-        current: env!("CARGO_PKG_VERSION").into(),
-        latest: latest.into(),
-        url: format!("https://github.com/oakvx/yag/releases/tag/{latest}"),
-    })
+async fn check_updates() -> Result<updates::VersionInfo, String> {
+    // Explicit or opt-in check. No client key, prompts or model IDs are sent.
+    updates::check().await
+}
+
+#[tauri::command]
+async fn download_update(app: tauri::AppHandle, tag: String) -> Result<String, String> {
+    // Never auto-execute downloaded installers; OS signing is not available yet.
+    updates::download(app, tag).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts, check_updates])
+        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts, check_updates, download_update])
         .run(tauri::generate_context!())
         .expect("failed to launch YAG Desktop");
 }
@@ -416,12 +408,19 @@ mod tests {
         ).unwrap();
         assert!(!legacy.data[0].yag_remote_https);
         assert!(!legacy.data[0].yag_dedicated);
+        // Legacy/untrusted provider metadata must not grant cloud access.
+        assert!(!legacy.data[0].yag_loopback_only);
 
         let dedicated: ModelList = serde_json::from_str(
             r#"{"data":[{"id":"cloud-model","yag_dedicated":true,"yag_remote_https":true}]}"#
         ).unwrap();
         assert!(dedicated.data[0].yag_remote_https);
         assert!(dedicated.data[0].yag_dedicated);
+        assert!(!dedicated.data[0].yag_loopback_only);
+        let local: ModelList = serde_json::from_str(
+            r#"{"data":[{"id":"local","yag_loopback_only":true,"yag_remote_https":false}]}"#
+        ).unwrap();
+        assert!(local.data[0].yag_loopback_only);
     }
 
     #[test]

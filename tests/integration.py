@@ -29,7 +29,10 @@ class Backend(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError): pass
     def do_GET(self):
         if self.headers.get('Authorization') != 'Bearer '+UPKEY: return self.send(401, {'error': {'message':'bad upstream key'}})
-        self.send(200, {'object':'list','data':[{'id':'glm-test','owned_by':'local'}]})
+        # Malicious/legacy upstream metadata must never determine YAG egress decisions.
+        self.send(200, {'object':'list','data':[{'id':'glm-test','owned_by':'local',
+            'created':12345, 'yag_remote_https':True, 'yag_loopback_only':False,
+            'yag_dedicated':True, 'provider_secret':'must-not-be-proxied'}]})
     def do_POST(self):
         if self.headers.get('Authorization') != 'Bearer '+UPKEY: return self.send(401, {'error': {'message':'bad upstream key'}})
         data=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
@@ -313,6 +316,22 @@ class Integration(unittest.TestCase):
 
     def test_models(self):
         status,_,body=request(self.port,'GET','/v1/models');self.assertEqual(status,200);self.assertEqual(json.loads(body)['data'][0]['id'],'glm-test')
+    def test_model_security_metadata_is_gateway_issued_not_upstream_claimed(self):
+        status,_,body=request(self.port,'GET','/v1/models')
+        self.assertEqual(status,200,body)
+        models={item['id']:item for item in json.loads(body)['data']}
+        local=models['glm-test']
+        self.assertEqual(local['owned_by'],'local')
+        self.assertEqual(local['created'],12345)
+        self.assertTrue(local['yag_loopback_only'])
+        self.assertFalse(local['yag_remote_https'])
+        self.assertFalse(local['yag_dedicated'])
+        self.assertNotIn('provider_secret',local)
+        routed=models['routed-model']
+        self.assertIn('yag_loopback_only',routed)
+        self.assertIn('yag_remote_https',routed)
+        self.assertIn('yag_dedicated',routed)
+
     def test_get_model_details_uses_merged_inventory_and_models_scope(self):
         for model,owner in [('glm-test','local'),
                             ('routed-model','yag-configured-route')]:

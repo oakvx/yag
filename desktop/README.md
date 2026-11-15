@@ -73,12 +73,15 @@ blocked. For remote hosts, use HTTPS with a trusted certificate.
   Deactivate the setting to erase saved history, or use Delete all history.
   **Do not enable persistent history for sensitive conversations** on a shared
   or unencrypted device. No API key is stored with this history.
-- Models that YAG explicitly marks as using an external HTTPS provider
-  display an egress/charges warning. Desktop requires a one-time confirmation
-  per server/model during the current process; consent is **not persisted**.
-  The operator must still control dedicated client scopes and provider
-  billing. Missing metadata from an older Host or an unrestricted default
-  upstream does **not** guarantee that a model is local.
+- YAG Host computes trusted model transport flags from its own configured
+  routes. Desktop marks external HTTPS, dedicated or **unverified** destinations
+  and requires an explicit one-time confirmation per server/model for the
+  current process. Consent is **not persisted**. An older Host without
+  `yag_loopback_only` is treated as unverified, rather than silently safe.
+  The operator must still control dedicated client scopes and billing.
+  `yag_loopback_only` confirms that configured upstream endpoints use
+  loopback; **it cannot prove that a local proxy never forwards cloud calls**.
+  Static fallback routes and unreviewed provider registries require care.
 - Client credentials are never granted host administrative privileges.
   The desktop uses only `GET /v1/models` and
   `POST /v1/chat/completions`.
@@ -136,6 +139,37 @@ The relay forwards prompts to the configured central Host. It does not
 provide confidentiality against malware on the **same client OS** and
 should not be used to give untrusted local programs access to inference.
 
+**Paid-provider isolation:** By default the relay publishes and accepts only
+models affirmatively marked `yag_loopback_only=true` by the Host, and not
+marked as external HTTPS or dedicated. Legacy Hosts without this metadata are
+denied until explicit operator opt-in. Its
+`/v1/models` response lists only these explicitly allowed IDs, and chat
+requests for other model IDs are rejected with HTTP 403 before contacting
+the Host. The list is a snapshot taken when the relay starts, not an
+automatically expanding inventory. Restart the relay after installing a
+new model. Preferences offers a **per-start, explicit confirmation** to
+include dedicated/external models when needed. This may incur charges or
+send content outside your LAN; the option is neither persisted nor
+implicitly enabled when reconnecting. The Host's scoped keys remain the
+final authority. **Older Hosts or unrestricted default routes may fail
+to label cloud models**, so operators must configure routing carefully
+and enforce provider billing limits independently.
+
+## Model quick switch and favorites
+
+Use the **Find model** field in the sidebar to filter the Host model catalog
+without making another network request. Press **Ctrl+K** (or **Cmd+K** on
+macOS) to focus it; type a model name and press **Enter** to select the first
+matching model. Press **Escape** to clear the search. Favorites appear
+first in the list and can be pinned or unpinned with the adjacent star.
+
+Favorites are saved only after the user explicitly clicks the star, and
+are stored locally in the WebView profile as bounded model IDs grouped by
+canonical Host origin (up to eight origins and 20 models per origin).
+They never store client keys, prompts or model responses. Favorites are
+not sent to a remote service and selecting a cloud model still requires
+the separate per-session cloud egress confirmation.
+
 ## Conversation settings
 
 Preferences allow a system prompt (up to 4000 characters), a temperature
@@ -148,12 +182,32 @@ local applications may retain that copy.
 
 ## Release checks and installer authenticity
 
-**Preferences → Check for new release** performs an explicit, outbound HTTPS
-request to the public `oakvx/yag` GitHub Releases metadata API. It sends
-no API keys or prompt text. This is a manual *version check*, not an
-automatic updater. App installers remain unsigned until dedicated
-Authenticode/macOS signing identities are configured; verify their
-published SHA-256 checksums before running them.
+**Preferences → Check for updates** queries the public `oakvx/yag` GitHub
+Releases API and includes complete weekly experimental releases, release
+candidates and stable versions. The separate **Check GitHub for updates
+when Desktop starts** option is **disabled by default**. Enabling it
+stores only a local boolean and checks once when the app starts (and
+immediately when enabled). GitHub sees the network request's IP address;
+no client API key, model ID, prompts or conversation text are sent.
+
+When a newer compatible build exists, the update banner links to
+Preferences. **Download verified installer** retrieves the platform-specific
+package and `SHA256SUMS.txt` over HTTPS, enforcing fixed GitHub hosts,
+release tag and asset-name allowlists, strict size limits and SHA-256
+verification before writing a new file in the system Downloads folder.
+A filename collision aborts the write rather than replacing files.
+Unsupported architectures do not offer downloads. Release discovery and
+all paths are generated natively, never accepted from renderer input.
+
+**Important:** SHA-256 protects integrity relative to the published
+checksum, but a checksum hosted alongside a binary does not establish
+publisher identity. Use `gh attestation verify <package> --repo oakvx/yag`
+for Sigstore provenance validation before manually running a downloaded
+installer. This remains an explicitly confirmed, manual installation;
+YAG does not silently execute, elevate or replace the running app.
+Windows/macOS installers are currently unsigned at the operating-system
+level pending Authenticode signing and Apple notarization. Unattended
+installation is intentionally disabled until a signed update channel exists.
 
 ## Architecture
 
