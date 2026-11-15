@@ -73,12 +73,15 @@ blocked. For remote hosts, use HTTPS with a trusted certificate.
   Deactivate the setting to erase saved history, or use Delete all history.
   **Do not enable persistent history for sensitive conversations** on a shared
   or unencrypted device. No API key is stored with this history.
-- Models that YAG explicitly marks as using an external HTTPS provider
-  display an egress/charges warning. Desktop requires a one-time confirmation
-  per server/model during the current process; consent is **not persisted**.
-  The operator must still control dedicated client scopes and provider
-  billing. Missing metadata from an older Host or an unrestricted default
-  upstream does **not** guarantee that a model is local.
+- YAG Host computes trusted model transport flags from its own configured
+  routes. Desktop marks external HTTPS, dedicated or **unverified** destinations
+  and requires an explicit one-time confirmation per server/model for the
+  current process. Consent is **not persisted**. An older Host without
+  `yag_loopback_only` is treated as unverified, rather than silently safe.
+  The operator must still control dedicated client scopes and billing.
+  `yag_loopback_only` confirms that configured upstream endpoints use
+  loopback; **it cannot prove that a local proxy never forwards cloud calls**.
+  Static fallback routes and unreviewed provider registries require care.
 - Client credentials are never granted host administrative privileges.
   The desktop uses only `GET /v1/models` and
   `POST /v1/chat/completions`.
@@ -137,7 +140,9 @@ provide confidentiality against malware on the **same client OS** and
 should not be used to give untrusted local programs access to inference.
 
 **Paid-provider isolation:** By default the relay publishes and accepts only
-models not flagged by the Host as external HTTPS or dedicated. Its
+models affirmatively marked `yag_loopback_only=true` by the Host, and not
+marked as external HTTPS or dedicated. Legacy Hosts without this metadata are
+denied until explicit operator opt-in. Its
 `/v1/models` response lists only these explicitly allowed IDs, and chat
 requests for other model IDs are rejected with HTTP 403 before contacting
 the Host. The list is a snapshot taken when the relay starts, not an

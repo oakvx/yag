@@ -24,6 +24,8 @@ struct Model {
     yag_dedicated: bool,
     #[serde(default)]
     yag_remote_https: bool,
+    #[serde(default)]
+    yag_loopback_only: bool,
 }
 
 #[derive(Deserialize)]
@@ -335,7 +337,8 @@ async fn start_relay(url: String, api_key: String, allow_external: bool, state: 
     // unless the user explicitly opted into exposing them to localhost apps.
     let models = list_models(url, api_key.clone()).await?;
     let allowed = models.into_iter()
-        .filter(|model| allow_external || (!model.yag_remote_https && !model.yag_dedicated))
+        .filter(|model| allow_external ||
+            (model.yag_loopback_only && !model.yag_remote_https && !model.yag_dedicated))
         .map(|model| model.id)
         .collect::<Vec<_>>();
     if allowed.is_empty() {
@@ -405,12 +408,19 @@ mod tests {
         ).unwrap();
         assert!(!legacy.data[0].yag_remote_https);
         assert!(!legacy.data[0].yag_dedicated);
+        // Legacy/untrusted provider metadata must not grant cloud access.
+        assert!(!legacy.data[0].yag_loopback_only);
 
         let dedicated: ModelList = serde_json::from_str(
             r#"{"data":[{"id":"cloud-model","yag_dedicated":true,"yag_remote_https":true}]}"#
         ).unwrap();
         assert!(dedicated.data[0].yag_remote_https);
         assert!(dedicated.data[0].yag_dedicated);
+        assert!(!dedicated.data[0].yag_loopback_only);
+        let local: ModelList = serde_json::from_str(
+            r#"{"data":[{"id":"local","yag_loopback_only":true,"yag_remote_https":false}]}"#
+        ).unwrap();
+        assert!(local.data[0].yag_loopback_only);
     }
 
     #[test]
