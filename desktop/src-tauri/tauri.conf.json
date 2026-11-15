@@ -36,6 +36,17 @@
       "icons/icon.ico"
     ],
     "shortDescription": "Network-first AI model client",
-    "category": "DeveloperTool"
+    "category": "DeveloperTool",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "Italian",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "startMenuFolder": "YAG"
+      }
+    }
   }
 }
