@@ -159,6 +159,7 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
                 !strncmp(cfg->routes[r].url,"https://",8))
             || !yyjson_mut_obj_add_bool(d,entry,"yag_loopback_only",
                 endpoint_loopback(cfg->routes[r].url))
+            || !yyjson_mut_obj_add_bool(d,entry,"yag_dedicated",0)
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
     /* Publish enabled managed-provider model IDs without probing remote APIs
