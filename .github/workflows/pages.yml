@@ -35,6 +35,8 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
       - run: npm ci
+      - name: Guard XMB destination-column layout against invisible CSS masks
+        run: node scripts/xmb_css_guard.mjs
       - name: Build site
         env:
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
