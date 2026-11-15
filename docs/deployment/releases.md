@@ -26,6 +26,22 @@ packaging workflow. No GitHub prerelease is claimed until all builds,
 checksums and signed provenance pass. See
 [first release requirements](../operations/first-release.md).
 
+### Start an RC without an Actions dispatch API
+
+An alternative one-shot trigger is to create the exact branch
+`release-candidate/v0.1.0-rc.1` **from the latest reviewed main**.
+GitHub's `create` event runs the default-branch preparatory workflow.
+The workflow checks that the candidate branch still points to current
+`main`, verifies the latest exact-commit CI and security results, rejects
+existing tags, creates the immutable `v0.1.0-rc.1` tag, then explicitly
+dispatches release packaging. Never force-move a release candidate branch
+or reuse a tag. This path has the same prerelease checks as the manual
+`workflow_dispatch`; it does **not** approve stable publication.
+
+A source-branch creation is only an *attempt*. Check the resulting Actions
+logs and GitHub Releases page; a tag or published prerelease must never be
+claimed solely because the branch exists.
+
 ## Release candidates versus stable publication
 
 For the first public release, use a reviewed prerelease tag such as
