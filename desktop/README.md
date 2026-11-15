@@ -140,7 +140,9 @@ provide confidentiality against malware on the **same client OS** and
 should not be used to give untrusted local programs access to inference.
 
 **Paid-provider isolation:** By default the relay publishes and accepts only
-models not flagged by the Host as external HTTPS or dedicated. Its
+models affirmatively marked `yag_loopback_only=true` by the Host, and not
+marked as external HTTPS or dedicated. Legacy Hosts without this metadata are
+denied until explicit operator opt-in. Its
 `/v1/models` response lists only these explicitly allowed IDs, and chat
 requests for other model IDs are rejected with HTTP 403 before contacting
 the Host. The list is a snapshot taken when the relay starts, not an
