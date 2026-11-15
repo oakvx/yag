@@ -1,15 +1,5 @@
 @import "tailwindcss";
 
-/* Local /fonts files are registered ahead of this face by assets.ts when present.
-   The vendor's face is declared as weight 600; normalize it to the sole UI weight. */
-@font-face {
-  font-family: "SCE-PS3 Rodin LATIN";
-  src: local("SCE-PS3 Rodin LATIN"),
-    url("https://fonts.cdnfonts.com/s/65233/SCEPS3%20RODIN%20LATIN%20REGULAR.woff") format("woff");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
 @font-face {
   font-family: "XMB Noto Adjusted";
   src: local("Noto Sans");
@@ -26,7 +16,7 @@
   --font-serif: "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --font-sans: "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
-  --font-xmb: "SCE-PS3 Rodin LATIN", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-xmb: "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --color-ink: rgba(4, 17, 40, 0.72);
   --color-panel: rgba(12, 35, 61, 0.5);
   --color-raised: rgba(35, 61, 86, 0.5);
@@ -56,20 +46,24 @@
 /* THE CONSOLE MENU. Coordinates scale with the display, not with document flow. */
 .console-environment {
   --anchor-x: 28.8vw;
-  --category-y: 25.1vh;
-  --selected-y: 46.1vh;
+  --category-y: 27vh;
+  --selected-y: 47vh;
   --category-gap: 10.65vw;
   /* The top-right rail: the information icon and the clock share one fixed
      margin, so the corner reads identically on every screen. */
   --rail-right: 48px;
+  --status-top: clamp(24px, 8vh, 72px);
+  --status-width: clamp(340px, 33vw, 560px);
+  --status-height: 76px;
   /* The console's own proportions: a selected category mark at ~5.3% of the
      width, a destination mark at ~5.7%, and its label at ~2.1%. Both axes
      count, so a short window keeps the same relationships. */
-  --category-size: clamp(46px, min(5.3vw, 9vh), 132px);
-  --item-size: clamp(50px, min(5.7vw, 9.6vh), 132px);
-  --item-step-base: 14.1vh;
+  --category-size: clamp(50px, min(6vw, 10vh), 132px);
+  --item-size: clamp(56px, min(6.8vw, 11vh), 132px);
+  --item-step-base: 8.2vh;
+  --following-lead: 8vh;
   --label-gap: clamp(24px, 3.2vw, 80px);
-  --menu-font: clamp(18px, min(2.25vw, 3.9vh), 38px);
+  --menu-font: clamp(20px, min(2.05vw, 3.9vh), 36px);
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -77,13 +71,14 @@
   overflow: hidden;
   background: #000;
 }
-.console-wallpaper { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; transition: filter 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+.console-wallpaper-background { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(ellipse at 12% 10%, rgb(var(--wallpaper-light, 180 90 80) / 0.14), transparent 65%), linear-gradient(135deg, rgb(var(--wallpaper-top, 170 40 35)), rgb(var(--wallpaper-bottom, 100 15 22))); transition: filter 560ms ease; }
+.console-wallpaper { position: absolute; inset: 0; z-index: 12; width: 100%; height: 100%; pointer-events: none; transition: filter 560ms cubic-bezier(0.16, 1, 0.3, 1); }
+.console-wallpaper { -webkit-mask-image: linear-gradient(#000 0, #000 85%, transparent 98%); mask-image: linear-gradient(#000 0, #000 85%, transparent 98%); }
 .wallpaper-canvas { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 560ms cubic-bezier(0.16, 1, 0.3, 1); }
-/* Opening an application takes the waves out of focus, the way the console
-   softens its own backdrop behind a document. The canvases grow a little so
-   the blur never pulls the empty edge of the surface into the picture. */
-.console-environment[data-surface="app"] .console-wallpaper { filter: blur(clamp(16px, 1.9vw, 34px)) saturate(1.04) brightness(1.25); }
-.console-environment[data-surface="app"] .wallpaper-canvas { transform: scale(1.09); }
+/* System screens keep the shared silk field visible and in motion. */
+.console-environment[data-surface="app"][data-notices="closed"] .console-wallpaper { filter: blur(3px) brightness(0.92); }
+.console-environment[data-surface="app"][data-notices="closed"] .console-wallpaper-background { filter: brightness(0.94); }
+.console-environment[data-surface="app"][data-notices="closed"] .wallpaper-canvas { transform: none; }
 /* The menu owns the whole screen, so the fade belongs to it: the rows
    dissolve toward the footer, while the crossbar and every category stay in
    the fully opaque top. A zero-height <ul> would clip them instead — the
@@ -108,13 +103,15 @@
 .console-crossbar { position: absolute; top: var(--category-y); left: 0; width: 100%; height: calc(var(--category-size) * 1.35); transition: opacity 220ms ease; }
 .console-category-track { display: flex; width: max-content; transform: translate3d(calc(var(--anchor-x) - var(--category-gap) / 2 - var(--selected-category) * var(--category-gap)), 0, 0); transition: transform 420ms cubic-bezier(0.2, 0.75, 0.25, 1); }
 .console-category { position: relative; display: block; flex: 0 0 var(--category-gap); width: var(--category-gap); height: calc(var(--category-size) * 1.3); padding: 0; border: 0; background: transparent; color: #fff; outline-offset: 5px; }
-.console-category-art { position: absolute; left: 50%; top: 0; display: block; width: var(--category-size); height: var(--category-size); transform: translate(-50%, -50%) scale(0.75); opacity: 0.58; filter: drop-shadow(0 2px 2px #0005); transition: transform 330ms ease, opacity 300ms ease, filter 300ms ease; }
+.console-category-art { position: absolute; left: 50%; top: 0; display: block; width: var(--category-size); height: var(--category-size); transform: translate(-50%, -50%) scale(0.75); opacity: 0.5; transition: transform 330ms ease, opacity 300ms ease, filter 300ms ease; }
 .console-category-art svg { width: 100%; height: 100%; }
-.console-category.is-selected .console-category-art { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 3px 2px #0005) drop-shadow(0 0 6px #d6f0ff26); }
+.console-category.is-selected .console-category-art { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 0 5px #ffffff70); }
 .console-category-label { position: absolute; top: calc(var(--category-size) * 0.65); left: 50%; transform: translateX(-50%); font: 400 clamp(14px, min(1.72vw, 2.9vh), 32px)/1.25 var(--font-sans); white-space: nowrap; opacity: 0; text-shadow: 0 1px 3px #0008; transition: opacity 240ms; }
 .console-category.is-selected .console-category-label { opacity: 0.96; }
 
-.console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
+/* Reserve the crossbar's actual icon band, independently of the row step
+   fitted above the footer. The nearest previous row ends above that band. */
+.console-destinations { --previous-lift: max(0px, calc(var(--selected-y) - var(--category-y) + (var(--category-size) + var(--item-size)) / 2 + clamp(10px, 1.5vh, 24px) - var(--item-step))); position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
 /* The rows are absolutely positioned, so this <ul> has zero height: a
    mask-image on it would be measured against an empty box and clip the whole
    column (that was the regression). The fade lives on .console-menu, which
@@ -122,25 +119,28 @@
 .console-destinations ul { list-style: none; padding: 0; margin: 0; }
 /* Size and opacity ride on --item-scale, set per row from the distance to
    the selection: the hardware interpolates continuously, not in two sizes. */
-.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
+.console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step) - var(--item-lift, 0px) + var(--item-lead, 0px)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
 .console-destination-position.is-selected { z-index: 3; }
 .console-destination { position: relative; display: flex; align-items: center; gap: var(--label-gap); width: fit-content; max-width: 100%; height: 100%; text-decoration: none; color: #f5f8ff; }
-.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(calc(0.66 + 0.34 * var(--item-scale, 0.55))); filter: drop-shadow(0 2px 2px #0005); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
+.console-item-art { flex: 0 0 var(--item-size); width: var(--item-size); height: var(--item-size); transform: scale(calc(var(--item-scale, 0.6) * 0.58)); transition: transform 300ms ease, opacity 200ms ease, filter 300ms ease; }
 .console-item-art svg { display: block; width: 100%; height: 100%; }
-.console-destination-position.is-selected .console-item-art { transform: scale(1); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
-.console-item-label { font-size: max(calc(var(--menu-font) * var(--item-scale, 1)), 13px); font-weight: 400; line-height: 1.3; white-space: nowrap; text-shadow: 0 2px 3px #00112c88; transition: opacity 200ms ease; }
-.console-destination-position.is-selected .console-item-label { text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
+.console-destination-position.is-selected .console-item-art { transform: scale(1); filter: drop-shadow(0 0 4px #ffffffa0) drop-shadow(0 0 10px #ffffff35); }
+.console-item-label { font-size: max(calc(var(--menu-font) * var(--item-scale, 1)), 13px); font-weight: 400; line-height: 1.3; white-space: nowrap; text-shadow: none; transition: opacity 200ms ease; }
+.console-destination-position.is-selected .console-item-label { text-shadow: 0 0 2px #ffffffc0, 0 0 6px #ffffff80, 0 0 13px #ffffff45; }
+.console-item-subtitle { display: block; font-size: max(10px, calc(var(--menu-font) * var(--item-scale, 1) * 0.55)); line-height: 1.2; opacity: 0.45; white-space: nowrap; }
+.console-destination:hover .console-item-label { color: #fff; }
+.console-destination { color: #fff; }
+.console-category-label { text-shadow: none; }
+.console-notice-rail-icon { filter: drop-shadow(0 0 6px #ffffff70); }
+.xmb-list-icon { filter: none; }
+.xmb-list-row.is-selected .xmb-list-icon { filter: drop-shadow(0 0 4px #ffffff60); }
 .console-external { display: inline-block; margin-left: 12px; font-size: 0.65em; opacity: 0.7; }
-.console-selection-light { position: absolute; left: calc(var(--item-size) / 2 + var(--label-gap) - 50px); top: calc(var(--item-size) * -0.45 + var(--selection-offset, 0) * var(--item-step)); width: min(710px, 55vw); height: calc(var(--item-size) * 0.9); pointer-events: none; background: linear-gradient(90deg, transparent, #ebf9ff0c 12%, #effaff09 55%, transparent); transition: top 350ms ease, opacity 200ms ease; }
-.console-selection-light::before, .console-selection-light::after { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #ecfaff16 18%, #ecfaff07 60%, transparent); }
-.console-selection-light::before { top: 0; }
-.console-selection-light::after { bottom: 0; }
 /* The destination stands in a column: the label, with the description
    beneath it — smaller, the same white, and the same shadow as the menu's
    own text. No box, no veil: white on the darkest of the twelve monthly
    palettes still clears 4.5:1, and the shadow carries the crossings of a
    bright ribbon. The block stays on one line, capped at 380px. */
-.console-destination-body { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; max-width: 380px; }
+.console-destination-body { display: flex; flex-direction: column; justify-content: center; gap: 3px; min-width: 0; max-width: min(46vw, 640px); }
 .console-description { pointer-events: none; color: #fff; font-size: clamp(12px, min(1.08vw, 1.85vh), 21px); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #00112ce0, 0 0 7px #00112c99, 0 2px 12px #00112ccc; animation: consoleDescriptionIn 420ms 100ms both; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
 .from-left { animation: consoleItemsLeft 300ms ease both; }
@@ -155,6 +155,23 @@
 .console-clock { --clock-box: 0; position: absolute; z-index: 60; right: var(--rail-right); top: 60px; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; min-width: calc(300px * var(--clock-box)); min-height: calc(48px * var(--clock-box)); padding: calc(8px * var(--clock-box)) calc(1.2em * var(--clock-box)) calc(8px * var(--clock-box)) 0; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 26px); font-weight: 400; font-variant-numeric: tabular-nums; border: calc(1px * var(--clock-box)) solid #d5eff529; text-shadow: 0 1px 3px #0006; }
 .console-clock::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #ecffff05, transparent); box-shadow: inset 0 1px 2px #ecffff05, 0 1px 0 #d9f4ff06; opacity: var(--clock-box); }
 .console-clock svg { width: 0.95em; height: 0.95em; }
+
+.console-status { position: absolute; z-index: 63; top: var(--status-top); right: var(--rail-right); width: var(--status-width); height: var(--status-height); display: flex; flex-direction: column; padding: 4px 10px; border: 1px solid #ffffff66; border-radius: 0; background: transparent; color: #fff; font-family: var(--font-xmb); font-weight: 400; font-synthesis: none; }
+.console-status-row { display: flex; align-items: center; gap: 8px; min-height: 44px; flex: none; }
+.console-status-user { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.console-status-user svg { width: 22px; height: 22px; }
+.console-status .console-clock { position: static; display: block; flex: 1; min-width: 0; min-height: 0; padding: 0; border: 0; font-size: clamp(14px, 1.2vw, 20px); line-height: 1.2; text-align: right; white-space: nowrap; color: #fff; text-shadow: none; }
+.console-status .console-clock::after { display: none; }
+.console-status-ticker { min-width: 0; overflow: hidden; line-height: 22px; font-size: clamp(12px, 1.05vw, 18px); }
+.console-status-track { display: flex; gap: 32px; width: max-content; }
+.console-status-track > span { flex: none; white-space: nowrap; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"]) .console-status { opacity: 0; visibility: hidden; }
+.console-environment[data-boot="handoff"] .console-status { animation: bootChromeIn 1.4s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .console-status-track[data-scroll="true"] { display: block; width: 100%; animation: none; transform: none; }
+  .console-status-track > span:first-child { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .console-status-track > span[aria-hidden="true"] { display: none; }
+}
 /* The notification list: the hardware keeps a circular information button
    in the top right corner, and pressing it opens the pending items as a
    Settings-style list floating over the waves — no panel, no card. The
@@ -219,6 +236,25 @@
 .xmb-list-detail { max-width: min(46vw, 640px); font-size: 0.62em; line-height: 1.5; color: #cfe2f2; text-shadow: 0 1px 3px #000a; animation: consoleDescriptionIn 420ms 100ms both; }
 .console-notice-sha { font-family: var(--font-mono); color: #a8cbe2b8; }
 
+.console-commit { position: absolute; inset: max(100px, 16dvh) 8vw 16dvh; display: flex; flex-direction: column; min-height: 0; color: #eaf4fc; text-shadow: 0 1px 3px #0009; }
+.console-commit > .console-back { align-self: flex-start; flex: none; margin-bottom: 16px; }
+.console-commit-content { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 5px 12px 20px 5px; scrollbar-width: thin; }
+.console-commit h2 { margin: 0 0 20px; font-size: clamp(20px, 2.5vw, 34px); font-weight: 400; line-height: 1.35; overflow-wrap: anywhere; }
+.console-commit h3 { margin: 24px 0 12px; font-size: 17px; font-weight: 400; }
+.console-commit-meta { display: grid; gap: 8px; font-size: 13px; }
+.console-commit-meta > div { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 16px; }
+.console-commit-meta dt { color: #9fb9cf; }
+.console-commit-meta dd { margin: 0; overflow-wrap: anywhere; }
+.console-commit-message { margin-top: 20px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; }
+.console-commit-file { border-top: 1px solid #ccdeec26; font-size: 13px; }
+.console-commit-file summary { display: list-item; padding: 12px 4px; cursor: pointer; overflow-wrap: anywhere; }
+.console-commit-stats { display: inline-block; margin-left: 16px; color: #9fb9cf; white-space: nowrap; }
+.console-commit-file pre { max-height: 45dvh; overflow: auto; padding: 12px; background: #03132c66; font-family: var(--font-mono); font-size: 12px; line-height: 1.6; text-shadow: none; }
+.console-commit-file code { font-family: var(--font-mono); }
+.console-commit-source { display: inline-block; margin-top: 24px; font-size: 13px; text-decoration: underline; text-underline-offset: 4px; }
+.console-commit :focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 2px; }
+.console-commit h2:focus { outline: none; }
+
 /* Compact mode: the same rows in document flow, for the Settings screens.
    The cursor row stands a size larger, as on the hardware. */
 .xmb-list--compact { position: static; }
@@ -230,22 +266,12 @@
 
 /* The Settings screens: a lede, the console's list, a small note. Nothing
    else — no cards, no pills, no header panel. The wave shows through. */
-.settings-screen { display: flex; flex-direction: column; gap: 16px; }
-.settings-lede { margin: 0; max-width: 660px; font-family: var(--font-xmb); font-size: 16px; line-height: 1.55; color: #dbe9f5; text-shadow: 0 1px 2px #0008; }
-.settings-list { --xmb-list-font: 15.5px; padding: 12px 0; }
-.settings-note { margin: 0; font-family: var(--font-xmb); font-size: 12.5px; line-height: 1.6; color: #9fb9cf; text-shadow: 0 1px 2px #0008; }
-.settings-note a, .xmb-code-link { color: #c6e3f2; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #b8d9ee4d; }
-.settings-note a:hover, .xmb-code-link:hover { color: #fff; text-decoration-color: #b8d9ee; }
-.xmb-code-link { font-family: var(--font-mono); font-size: 11px; }
-.xmb-config-detail { display: grid; gap: 8px; justify-items: start; }
-.xmb-config-warn { color: #9fb9cf; font-size: 0.85em; }
-.theme-settings-list { --xmb-list-font: 16px; padding: 12px 0; }
 /* The list takes the screen: behind it the waves stand alone, the way the
    reference screen shows nothing but the list and its rail. The menu, the
    wordmark and the key hints sink into the background; the clock stays up
    top, as the hardware keeps its clock on that corner. */
-.console-environment[data-notices="open"] .console-menu { opacity: 0; pointer-events: none; }
-.console-environment[data-notices="open"] :is(.console-identity, .console-help) { opacity: 0.2; }
+.console-environment[data-notices="open"] :is(.console-menu, .console-application) { visibility: hidden; pointer-events: none; }
+.console-environment[data-notices="open"] :is(.console-identity[data-hidden="false"], .console-help) { opacity: 0.2; }
 .console-environment[data-notices="open"] .console-options { opacity: 0; visibility: hidden; pointer-events: none; }
 /* New-commit toasts: an icon and one line of text, the menu's own shadow,
    no box — the way the hardware announces things on the waves. They are
@@ -294,13 +320,13 @@
 .console-application { position: absolute; z-index: 30; inset: 0; display: flex; flex-direction: column; padding: 3.7vh 5.7vw 0; background: linear-gradient(180deg, rgba(3, 19, 44, 0.36), rgba(4, 20, 44, 0.14) 38%, rgba(3, 19, 44, 0.26)); animation: consoleAppIn 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 /* Application content wears the console's own face, one weight; monospace
    appears only where code does. */
-.console-application-content { font-family: "SCE-PS3 Rodin LATIN", "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif; font-synthesis: none; }
+.console-application-content { font-family: "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif; font-synthesis: none; }
 .console-application-content pre, .console-application-content code { font-family: var(--font-mono); }
 .console-application.is-leaving { animation: consoleAppOut 240ms ease both; pointer-events: none; }
 .console-application-header { display: flex; flex-shrink: 0; align-items: center; gap: 18px; height: clamp(74px, 10.5vh, 160px); padding-right: 28vw; margin-bottom: 1vh; color: #edf4fa; }
 .console-back { display: flex; align-items: center; gap: 9px; border: 0; margin-right: 20px; padding: 8px 0; background: transparent; color: #c7d9e6; font-size: 14px; }
 .console-back:hover { color: white; }
-.console-back > span { width: 26px; height: 26px; border: 1px solid #c7d9e66b; border-radius: 50%; font-size: 24px; font-weight: 300; line-height: 20px; }
+.console-back .controller-glyph { width: 26px; height: 26px; }
 .console-app-icon { width: 36px; height: 36px; flex-shrink: 0; }
 .console-app-category { margin: 0 0 3px; font-size: 11px; color: #8faabf; }
 .console-application-header h2 { margin: 0; font-size: 17px; font-weight: 400; }
@@ -314,9 +340,62 @@
 @keyframes consoleAppOut { to { opacity: 0; transform: scale(0.97) translateY(6px); } }
 @keyframes consoleContentIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 
+/* System screens share one row field, one text panel and the console controls. */
+.console-environment[data-surface="app"] { --status-top: clamp(24px, 3.7vh, 40px); --status-width: clamp(300px, 26vw, 420px); --status-height: 72px; }
+.console-environment[data-surface="app"] .console-status { border-color: #ffffffbf; }
+.console-environment[data-surface="app"] .console-status-ticker { line-height: 18px; font-size: clamp(11px, 0.9vw, 15px); }
+.console-application { padding-bottom: max(12px, env(safe-area-inset-bottom)); background: none; animation: xmbApplicationIn 320ms ease-out both; }
+.console-application.is-leaving { animation: xmbApplicationOut 240ms ease-out both; }
+.console-application-header { height: clamp(72px, 9vh, 100px); padding-right: calc(var(--status-width) + 12px); margin-bottom: 12px; gap: 16px; }
+.console-application-header h1 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 400; }
+.console-application-header, .console-app-hints { font-family: var(--font-xmb); font-synthesis: none; }
+.console-app-category { font-size: 12px; color: #ffffffcc; line-height: 1.4; }
+.console-app-icon { width: 44px; height: 44px; color: white; filter: drop-shadow(0 0 5px #ffffff35); }
+.console-app-body { position: relative; flex: 1; min-height: 0; min-width: 0; margin-left: 6.8vw; }
+.console-application-content { height: 100%; padding: 12px 24px 24px 0; overflow-x: hidden; overflow-wrap: anywhere; scrollbar-width: none; color: #fff; font-weight: 400; -webkit-mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 18px), transparent); mask-image: linear-gradient(transparent, #000 12px, #000 calc(100% - 18px), transparent); }
+.console-application-content::-webkit-scrollbar, .console-application-content ::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.console-application-content * { scrollbar-width: none; font-weight: 400; }
+.console-application-content :is(.font-semibold, .font-medium, .font-bold, b, strong) { font-weight: 400; }
+.console-application-content :is(.label, .tracking-wider, .tracking-widest, .uppercase) { text-transform: none; letter-spacing: normal; }
+.console-application-content :is(.text-muted, .text-faint, .text-amber) { color: #ffffffb8; }
+.console-application-content :is(h2, h3) { font-weight: 400; }
+.console-application-content .display { font-size: 20px; }
+.console-application-content .display em { color: inherit; }
+.console-application-content [role="button"]:focus { outline: 1.5px solid #fff; outline-offset: 4px; }
+.console-application-content pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.console-application-content :is(.grid, .flex) > * { min-width: 0; }
+.console-application-content pre .whitespace-pre { white-space: pre-wrap; }
+.console-app-content-enter { height: 100%; max-width: 1700px; animation: none; }
+.console-app-hints { display: flex; flex: none; align-self: flex-end; align-items: center; gap: 22px; min-height: 44px; margin-top: 8px; color: #fff; opacity: 0.8; transition: opacity 350ms ease; font-size: 14px; }
+.console-app-hints button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0; border: 0; background: none; font: inherit; }
+.console-app-hints:hover, .console-app-hints:has(:focus-visible) { opacity: 1; }
+.console-environment[data-hints-idle="true"] .console-app-hints { opacity: 0; pointer-events: none; }
+.console-environment[data-hints-idle="true"][data-input-mode="keyboard"] .console-app-hints:has(:focus-visible) { opacity: 1; pointer-events: auto; }
+@keyframes xmbApplicationIn { from { opacity: 0; transform: translate(20px, 12px); } to { opacity: 1; transform: none; } }
+@keyframes xmbApplicationOut { to { opacity: 0; transform: translate(20px, 12px); } }
+@media (max-width: 759px) {
+  .console-environment[data-surface="app"] { --status-top: max(12px, env(safe-area-inset-top)); --status-width: calc(100vw - var(--rail-right) * 2); --status-height: 76px; }
+  .console-application { padding-left: 5vw; padding-right: 5vw; padding-top: calc(var(--status-top) + var(--status-height) + 12px); }
+  .console-application-header { height: 68px; padding: 0; gap: 12px; margin-bottom: 8px; }
+  .console-application-header h1 { font-size: 21px; }
+  .console-app-category { font-size: 10px; }
+  .console-app-body, .console-app-body:has(.xmb-screen) { margin-left: 0; width: 100%; }
+  .console-application-content { padding-right: 14px; }
+  .console-application-content:has(.xmb-screen) { padding-right: 14px; }
+  .xmb-list--screen .xmb-list-link { font-size: 14px; gap: 10px; }
+  .xmb-list--screen .xmb-list-row.is-selected .xmb-list-link { font-size: 18px; }
+  .xmb-list--screen .xmb-list-top { gap: 8px; }
+  .xmb-list--screen :is(.xmb-list-value, .xmb-list-meta) { flex-basis: 46%; font-size: 0.78em; }
+  .console-app-hints { gap: 18px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-application, .console-application.is-leaving { animation: none; transform: none; }
+  .xmb-list--screen .xmb-list-row, .console-app-hints { transition: none; }
+}
+
 /* The XMB uses one regular font weight. Application content keeps its own fonts. */
 :is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-toggle, .console-notice-panel, .console-options) {
-  font-family: "SCE-PS3 Rodin LATIN", "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  font-family: "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   font-synthesis: none;
   font-style: normal;
   font-weight: 400;
@@ -343,10 +422,9 @@
 .boot-brand { position: absolute; left: 60%; top: 45.5%; width: 30%; text-align: center; opacity: 0; animation: bootBrand 6.2s linear both; }
 .boot-wordmark { width: min(100%, 520px); margin: 0 auto; }
 .boot-wordmark svg, .boot-wordmark img { display: block; width: 100%; height: auto; fill: #fff; }
-.boot-subtitle { margin-top: 1vh; color: #fff; font-size: clamp(10px, 0.83vw, 17px); letter-spacing: 0.32em !important; text-shadow: 0 0 13px #fff8; }
+.boot-subtitle { margin-top: 1vh; color: #fff; font-size: clamp(10px, 0.83vw, 17px); letter-spacing: 0.06em !important; text-shadow: 0 0 5px #fff3; }
 .boot-subtitle img { display: block; width: min(70%, 260px); height: auto; margin: 0 auto; }
-.boot-wordmark-text { display: block; color: #fff; font-size: clamp(58px, 7.4vw, 136px); line-height: 0.9; letter-spacing: 0.1em; text-align: center; font-synthesis: none; text-shadow: 0 0 18px #fff6, 0 0 42px #d9bdff55; }
-.boot-screen[data-paused="true"] .boot-brand { animation-play-state: paused; }
+.boot-wordmark-text { display: block; color: #fff; font-size: clamp(58px, 7.4vw, 136px); line-height: 0.9; letter-spacing: 0.1em; text-align: center; font-synthesis: none; text-shadow: 0 0 8px #fff4; }
 .boot-screen[data-skipping="true"] .boot-brand { animation: none; opacity: 0; transition: opacity 0.3s ease; }
 @keyframes bootBrand {
   0%, 25.8% { opacity: 0; transform: translateX(-6px); filter: drop-shadow(0 0 24px #fff); }
@@ -376,35 +454,20 @@
 
 /* Reusable technical tools remain inside the full-screen applications. */
 @layer components {
-  /* Page text wears the console's own face: Rodin, one weight, no decorative
+  /* Page text wears the console's own face: a neutral sans serif, one weight, no decorative
      uppercase. Monospace is reserved for code blocks. */
   .label { font-family: var(--font-xmb); font-size: 12px; line-height: 1.5; letter-spacing: 0.04em; color: #9fc0d8; }
   .display { font-family: var(--font-xmb); font-weight: 400; line-height: 1.25; letter-spacing: 0.01em; }
   h1 em, h2 em, .display em { font-style: normal; font-weight: 400; color: #c6e3f2; }
-  .schematic-grid { background-image: radial-gradient(#b3d6ed14 0.6px, transparent 0.8px); background-size: 28px 28px; }
-  .micro-grid { background-image: radial-gradient(#b3d6ed10 0.6px, transparent 0.8px); background-size: 14px 14px; }
-  .hatch-rust { background-image: repeating-linear-gradient(-45deg, #e4a09216 0 1px, transparent 1px 7px); }
-  .hatch-amber { background-image: repeating-linear-gradient(-45deg, #b3d6ed14 0 1px, transparent 1px 7px); }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem; border-radius: 3px; font-size: 12px; font-weight: 400; padding: 0.65rem 1.1rem; transition: background 180ms, color 180ms, border-color 180ms; }
-  .btn-primary { background: #dfe8ef; color: #172c40; border: 1px solid #f0f6fc; }
-  .btn-primary:hover { background: #fff; }
-  .btn-amber { background: #a4d1e812; color: #e6eff5; border: 1px solid #b8d9ee52; }
-  .btn-amber:hover { background: #a4d1e826; }
-  .btn-outline { background: transparent; color: #d4e4ee; border: 1px solid #bfd9e947; }
-  .btn-outline:hover { border-color: #dfefff; color: white; }
-  .btn-ghost { background: transparent; color: #a9c3d7; border: 1px solid transparent; }
-  .btn-ghost:hover { color: white; background: #d7e9f408; }
   .code-scroll { scrollbar-width: thin; scrollbar-color: #afcde63a transparent; }
   .code-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
   .code-scroll::-webkit-scrollbar-thumb { background: #afcde63a; }
-  .tok-com { color: #829aae; font-style: italic; }
-  .tok-str { color: #b7d6b7; }
-  .tok-kw { color: #abd4f1; }
-  .tok-type { color: #c5cbe8; }
-  .tok-num { color: #dfb995; }
-  .tok-fn { color: #eaf4ff; }
-  .reveal { opacity: 0; transform: translateY(10px); transition: opacity 500ms ease, transform 500ms ease; }
-  .reveal[data-visible="true"] { opacity: 1; transform: none; }
+  .tok-com { color: inherit; }
+  .tok-str { color: inherit; }
+  .tok-kw { color: inherit; font-weight: 400; }
+  .tok-type { color: inherit; font-weight: 400; }
+  .tok-num { color: inherit; }
+  .tok-fn { color: inherit; }
   .signal-flow { stroke-dasharray: 10 110; animation: signalDash 2.8s linear infinite; }
   .signal-flow-slow { stroke-dasharray: 8 132; animation: signalDash 4.2s linear infinite; }
   @keyframes signalDash { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
@@ -412,61 +475,17 @@
      cards: nothing carries a border, a box or a pill. Columns, rows, tiles
      and notes are laid straight on the blurred wave, in the console's own
      face, with a row cursor that brightens — the only feedback. */
-  .xmb-glass { background: transparent; border: 0; box-shadow: none; }
-  .xmb-surface { container-type: inline-size; container-name: xmbcol; }
-  .xmb-column-head { display: flex; align-items: center; gap: 12px; padding: 11px 16px; }
-  .xmb-column-head svg { width: 20px; height: 20px; flex: none; color: #cfe6f8; filter: drop-shadow(0 1px 2px #0007); }
-  .xmb-column-title { font-family: var(--font-xmb); font-size: 16px; font-weight: 400; letter-spacing: .015em; color: #eaf4fc; text-shadow: 0 1px 2px #0009; }
-  .xmb-column-note { margin-left: auto; font-family: var(--font-xmb); font-size: 12px; letter-spacing: .03em; color: #8fb6d6; text-shadow: 0 1px 2px #0009; }
-  .xmb-column-lede { padding: 13px 16px 0; font-family: var(--font-xmb); font-size: 17px; line-height: 1.35; letter-spacing: .012em; color: #eef5fb; text-shadow: 0 1px 2px #0006; }
-  .xmb-row { display: grid; grid-template-columns: 20px 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 16px; transition: background 160ms ease; }
-  .xmb-row:hover { background: linear-gradient(90deg, #a4d1e814 0%, #a4d1e805 45%, #a4d1e800 80%); }
-  .xmb-row-icon { width: 20px; height: 20px; color: #a8cbe6; filter: drop-shadow(0 1px 2px #0007); transition: color 160ms ease; }
-  .xmb-row:hover .xmb-row-icon { color: #eaf4fb; }
-  .xmb-row-key { font-family: var(--font-xmb); font-size: 14px; line-height: 1.5; letter-spacing: .02em; color: #b9d2e5; text-shadow: 0 1px 2px #0008; }
-  .xmb-row-value { font-family: var(--font-xmb); font-size: 14.5px; line-height: 1.55; color: #e8f1f9; text-shadow: 0 1px 2px #0008; }
-  .xmb-row-value a { color: #cfe6f8; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #b8d9ee4d; }
-  .xmb-row-value a:hover { color: #fff; text-decoration-color: #b8d9ee; }
-  .xmb-avatar { display: grid; place-items: center; width: 76px; height: 76px; flex: none; }
-  .xmb-avatar svg { width: 44px; height: 44px; color: #dbeeff; filter: drop-shadow(0 2px 3px #0007); }
-  .xmb-quote { border-left: 2px solid #b8d9ee4d; padding-left: 14px; font-family: var(--font-xmb); font-size: 14px; line-height: 1.7; color: #d5e6f4; text-shadow: 0 1px 2px #0008; }
-  .xmb-tile { display: flex; gap: 13px; padding: 13px 15px; transition: background 180ms ease; }
-  .xmb-tile:hover { background: #a4d1e80a; }
-  .xmb-tile svg { width: 22px; height: 22px; flex: none; color: #a8cbe6; filter: drop-shadow(0 1px 2px #0007); transition: color 180ms ease; }
-  .xmb-tile:hover svg { color: #eaf4fb; }
-  .xmb-tile-title { font-family: var(--font-xmb); font-size: 14.5px; letter-spacing: .02em; color: #edf4fa; text-shadow: 0 1px 2px #0008; }
-  .xmb-tile-sub { margin-top: 4px; font-family: var(--font-xmb); font-size: 12.5px; line-height: 1.55; color: #9fb9cf; text-shadow: 0 1px 2px #0008; }
-  .xmb-note { display: flex; gap: 11px; padding: 10px 16px; font-family: var(--font-xmb); font-size: 13px; line-height: 1.6; color: #b6cadd; text-shadow: 0 1px 2px #0008; }
-  .xmb-note::before { content: ""; width: 5px; height: 5px; margin-top: 7px; flex: none; background: #c6e3f2b3; transform: rotate(45deg); }
-  .xmb-masthead { position: relative; }
-  .xmb-masthead .display { font-family: var(--font-xmb); font-weight: 400; letter-spacing: .012em; }
-  .xmb-masthead li { border-radius: 0; }
 }
 
-/* Page-level split: one column of panels until the document is wide enough
-   to hold two, then the panels take their XMB column widths. */
-.xmb-page-grid { display: grid; gap: 16px; }
-.xmb-tile-grid { display: grid; gap: 8px; }
 
-@media (min-width: 1120px) {
-  .xmb-page-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  .xmb-span-4 { grid-column: span 4; }
-  .xmb-span-5 { grid-column: span 5; }
-  .xmb-span-7 { grid-column: span 7; }
-  .xmb-span-8 { grid-column: span 8; }
-}
 
 /* Two tiles per row once the column itself is wide enough to carry them. */
 @container xmbcol (min-width: 560px) {
-  .xmb-tile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* A column narrower than a label plus a value stacks its rows instead of
    squeezing the value into a sliver. */
 @container xmbcol (max-width: 460px) {
-  .xmb-row { grid-template-columns: 20px minmax(0, 1fr); gap: 3px 12px; }
-  .xmb-row-key { grid-column: 2; }
-  .xmb-row-value { grid-column: 2; }
 }
 
 @media (min-width: 2600px) {
@@ -480,7 +499,6 @@
   .console-destination-body { max-width: calc(100vw - var(--anchor-x) - var(--item-size) - var(--label-gap) - 10px); }
   .console-item-label { white-space: normal; }
   .console-description { font-size: 11.5px; }
-  .console-selection-light { width: 66vw; left: 24px; }
   /* The footer is one clear line: the wordmark and audio sit on the left,
      the command icons on the right, both on the same baseline. The menu's
      rows are capped above 84vh by their step, so nothing reaches this line
@@ -510,12 +528,6 @@
   .console-app-back-hint { min-height: 42px; height: 42px; }
   .boot-brand { left: 32%; top: 44%; width: 62%; }
   .console-audio-panel { left: -85px; width: min(242px, 82vw); }
-  .xmb-row { grid-template-columns: 20px minmax(0, 1fr); gap: 4px 12px; padding: 10px 13px; }
-  .xmb-row-key { grid-column: 2; }
-  .xmb-row-value { grid-column: 2; }
-  .xmb-column-head { padding: 10px 13px; }
-  .xmb-avatar { width: 62px; height: 62px; }
-  .xmb-avatar svg { width: 36px; height: 36px; }
 }
 @media (pointer: coarse) {
   .console-help { display: none; }
@@ -528,7 +540,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  .reveal { opacity: 1 !important; transform: none !important; }
   .console-menu[data-hidden="true"] { transition-delay: 0s; }
   .boot-brand { animation-name: bootBrandReduced !important; animation-duration: 2.2s !important; }
   .console-environment[data-boot="handoff"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application) { animation-duration: 0.55s !important; }
@@ -549,3 +560,280 @@
 .easter-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 14px; border-top: 1px solid #cfe9ff24; color: #88a5bb; font-size: 11px; }
 .easter-actions button { padding: 8px 13px; border: 1px solid #cfe9ff4d; background: #c6e3f21a; color: #fff; font-size: 12px; }
 .easter-actions button:hover { background: #c6e3f22e; }
+
+/* TROPHIES, DIALOGS, ACTIVITY. Same glass as the toasts and the options panel. */
+.trophies-list .xmb-list-sub { white-space: normal; overflow-wrap: anywhere; }
+
+/* Input affordances share the console's existing type, colour and glyphs. */
+.console-environment :is(button, a, summary, input) { touch-action: manipulation; }
+.console-menu, .console-notice-panel[data-detail="false"] { touch-action: pinch-zoom; }
+.console-options-dismiss { position: absolute; inset: 0; z-index: 60; border: 0; padding: 0; background: transparent; cursor: default; }
+.console-options { max-height: 70dvh; overflow-y: auto; overscroll-behavior: contain; }
+.console-option { min-height: 44px; }
+.console-search-toggle { position: absolute; z-index: 63; top: 6px; right: calc(var(--rail-right) + 50px); display: grid; place-items: center; width: 44px; height: 44px; padding: 8px; border: 0; background: transparent; color: #dcecf8c4; }
+.console-search-toggle svg { width: 24px; height: 24px; }
+.console-search-toggle:hover { color: #fff; }
+.console-status :is(.console-search-toggle, .console-notice-toggle) { position: relative; top: auto; right: auto; width: 44px; height: 44px; padding: 0; flex: none; color: #fff; }
+.console-status :is(.console-search-toggle, .console-notice-toggle) svg { width: 24px; height: 24px; }
+.console-status :is(button:disabled, button[inert]) { opacity: 0.35; }
+.console-application-header { padding-right: calc(var(--status-width) + 12px); }
+.console-toast-region { top: calc(var(--status-top) + var(--status-height) + 12px); }
+.console-help, .console-mobile-nav { opacity: 0.38; transition: opacity 350ms ease; }
+.console-help:hover, .console-help:has(:focus-visible), .console-mobile-nav:hover, .console-mobile-nav:has(:focus-visible) { opacity: 1; }
+.console-environment[data-hints-idle="true"] :is(.console-help, .console-mobile-nav) { opacity: 0; pointer-events: none; }
+.console-environment[data-hints-idle="true"][data-input-mode="keyboard"] :is(.console-help, .console-mobile-nav):has(:focus-visible) { opacity: 1; pointer-events: auto; }
+.console-notice-toggle { width: 44px; height: 44px; top: 6px; }
+.console-notice-toggle svg { width: 28px; height: 28px; }
+.console-notice-dot { top: 7px; right: 7px; width: 6px; height: 6px; }
+.xmb-list-link:focus-visible, .console-destination:focus-visible, .console-option:focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 4px; }
+.console-destination { outline-offset: 5px; }
+.console-audio-panel button, .xmb-list--compact .xmb-list-link { min-height: 44px; }
+.console-audio-panel input[type="range"] { min-height: 32px; }
+.console-mobile-nav { display: none; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"], [data-boot="handoff"]) :is(.console-search-toggle, .console-mobile-nav),
+.console-environment[data-notices="open"] :is(.console-search-toggle, .console-mobile-nav) { visibility: hidden; }
+.console-quick-jump { padding-top: min(12dvh, 90px); padding-bottom: env(safe-area-inset-bottom); }
+.console-quick-jump ul { max-height: min(50dvh, calc(100dvh - 160px)); overscroll-behavior: contain; }
+.console-quick-jump input { font-size: 16px; }
+.console-quick-jump li button, .console-quick-close { min-height: 44px; }
+.console-quick-result { background: transparent; opacity: .85; }
+.console-quick-result[data-highlighted="true"] { opacity: 1; text-shadow: 0 0 12px rgb(255 255 255 / .3); }
+.console-quick-close { flex: none; min-width: 44px; padding: 4px; border: 0; background: transparent; color: #dcecf8; font: inherit; font-size: 24px; }
+.console-mobile-nav button, .console-notice-controls button { display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 0; padding: 8px; background: transparent; color: #dcecf8; font: inherit; }
+.console-mobile-nav svg { width: 24px; height: 24px; }
+.console-mobile-nav button:disabled, .console-notice-controls button:disabled, .console-help button:disabled { opacity: 0.3; }
+.console-notice-controls { position: absolute; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; font-size: 14px; }
+.console-notice-back, .console-back, .console-app-back-hint { min-height: 44px; }
+.console-notice-back { min-width: 44px; }
+.console-help button { min-height: 32px; }
+.console-search-toggle:focus-visible, .console-mobile-nav button:focus-visible, .console-notice-controls button:focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 2px; }
+@media (max-width: 760px), (pointer: coarse) {
+  .console-environment { --status-top: max(12px, env(safe-area-inset-top)); --status-width: calc(100vw - var(--rail-right) * 2); }
+  .console-status { padding-inline: 8px; }
+  .console-status-row { gap: 4px; }
+  .console-status .console-clock { font-size: 13px; }
+  /* Only the nearest previous row fits between the crossbar and status on phones. */
+  .console-destination-position.is-above:not(.is-previous) { visibility: hidden; pointer-events: none; }
+  .console-application { padding-top: calc(var(--status-top) + var(--status-height) + 12px); }
+  .console-application-header { height: 72px; padding-top: 0; padding-right: 0; }
+  .console-mobile-nav { position: absolute; z-index: 20; display: flex; gap: 12px; left: 50%; transform: translateX(-50%); bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .console-help { display: flex; bottom: calc(12px + env(safe-area-inset-bottom)); gap: 4px; }
+  .console-help button { min-width: 44px; min-height: 44px; }
+  .console-help-label, .console-help-arrows { display: none; }
+  .console-identity { bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .console-sound, .console-wordmark { min-height: 44px; }
+  .console-sound { min-width: 44px; justify-content: center; }
+  .console-menu { -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 max(calc(var(--selected-y) + var(--item-size)), calc(100% - 200px)), transparent max(calc(var(--selected-y) + var(--item-size) + 24px), calc(100% - 148px))); mask-image: linear-gradient(to bottom, #000 0, #000 max(calc(var(--selected-y) + var(--item-size)), calc(100% - 200px)), transparent max(calc(var(--selected-y) + var(--item-size) + 24px), calc(100% - 148px))); }
+  .console-notice-list .xmb-list-top { gap: 8px; }
+  .console-notice-list .xmb-list-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .console-description { white-space: normal; overflow-wrap: anywhere; }
+  .console-back { min-width: 60px; }
+  .console-options { width: min(380px, calc(100vw - 32px)); }
+  .console-application { padding-bottom: env(safe-area-inset-bottom); }
+}
+.trophy-toast[data-leaving="true"] { animation: trophyOut 380ms ease both; }
+.trophy-toast-cup { flex: none; width: 34px; height: 34px; filter: drop-shadow(0 0 6px #ffffff30); }
+.trophy-toast-body { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+.trophy-toast-kicker { font-family: var(--font-xmb); font-size: 11px; letter-spacing: 0.04em; color: #b9d3e6; }
+.trophy-toast-title { overflow: hidden; font-family: var(--font-xmb); font-size: 15px; line-height: 1.25; color: #fff; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px #0008; }
+@keyframes trophyIn { from { opacity: 0; transform: translateY(-14px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes trophyOut { to { opacity: 0; transform: translateY(-8px); } }
+
+.console-dialog-backdrop { position: fixed; inset: 0; z-index: 115; display: grid; place-items: center; padding: 20px; background: radial-gradient(ellipse at 50% 45%, #02102a8c, #010715d6); backdrop-filter: blur(7px) brightness(0.8); animation: consoleFadeIn 240ms ease both; }
+.console-dialog { display: flex; max-width: min(560px, 90vw); flex-direction: column; align-items: center; gap: 14px; text-align: center; color: #f3f9ff; animation: consoleContentIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.console-dialog-title { margin: 0; font-family: var(--font-xmb); font-size: clamp(20px, 2.4vh, 30px); font-weight: 400; letter-spacing: 0.01em; text-shadow: 0 1px 4px #000a, 0 0 18px #cfe8ff22; }
+.console-dialog-message { margin: 0; font-family: var(--font-xmb); font-size: clamp(14px, 1.9vh, 20px); line-height: 1.5; color: #d3e4f4; text-shadow: 0 1px 3px #000a; }
+.console-dialog-choices { display: flex; gap: 36px; margin-top: 14px; }
+.console-dialog-choice { min-width: 84px; padding: 6px 4px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: #aac3d8; font-family: var(--font-xmb); font-size: clamp(16px, 2.2vh, 24px); opacity: 0.7; text-shadow: 0 1px 3px #000a; transition: opacity 160ms ease, color 160ms ease, transform 200ms ease, border-color 200ms ease; }
+.console-dialog-choice[data-selected="true"] { color: #fff; opacity: 1; transform: scale(1.12); border-bottom-color: #dcecff66; text-shadow: 0 1px 3px #000a, 0 0 14px #cfe8ff55; }
+
+.console-throbber { position: absolute; z-index: 70; right: var(--rail-right); bottom: calc(5.6vh + 44px); width: 26px; height: 26px; opacity: 0; pointer-events: none; transition: opacity 160ms ease 140ms; }
+.console-throbber[data-active="true"] { opacity: 0.85; }
+.console-throbber span { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; border-radius: 50%; background: #e8f4ff; transform: rotate(calc(var(--i) * 30deg)) translateY(-10px); animation: throbber 1s linear infinite; animation-delay: calc(var(--i) * -83ms); }
+@keyframes throbber { 0% { opacity: 1; } 100% { opacity: 0.12; } }
+@media (prefers-reduced-motion: reduce) {
+  .trophy-toast, .console-dialog-backdrop, .console-dialog { animation-duration: 1ms; }
+  .console-throbber span { animation: none; opacity: 0.6; }
+}
+@media (max-width: 759px) {
+  .console-application { padding: calc(var(--status-top) + var(--status-height) + 12px) 5vw max(12px, env(safe-area-inset-bottom)); }
+  .console-application-content table { min-width: 0; width: 100%; table-layout: fixed; }
+  .console-application-content :is(th, td) { padding-inline: 8px; overflow-wrap: anywhere; }
+}
+
+
+/* All application destinations use the same drill-down screen and text viewer. */
+.console-environment[data-surface="app"]::after { content: ""; position: absolute; inset: 0; z-index: 13; background: rgba(0, 0, 0, .64); pointer-events: none; }
+.console-environment[data-surface="app"] .console-toast-region { display: none; }
+.console-app-body:has(.xmb-screen) { width: min(59.375vw, 1140px); }
+.console-application-content:has(.xmb-screen) { overflow: hidden; padding: 0 24px 0 0; mask-image: none; -webkit-mask-image: none; }
+.console-app-body:has(.xmb-screen) > .xmb-scroll-indicators { display: none; }
+.console-application-header { flex-shrink: 0; height: auto; min-height: 72px; }
+.console-application-header > div { min-width: 0; }
+.console-application-header h1 { overflow-wrap: anywhere; color: white; }
+.xmb-screen { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; height: 100%; min-width: 0; color: white; }
+.xmb-screen[data-view="preview"] { grid-template-rows: minmax(160px, 1fr) minmax(120px, 42%) auto; }
+.xmb-screen-list-region { position: relative; min-height: 0; }
+.xmb-list--screen { position: relative; height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 0 8px 60px; scrollbar-width: none; }
+.xmb-list--screen[data-long="true"] { padding-top: max(0px, calc(var(--screen-list-half) - 33px)); padding-bottom: max(60px, calc(var(--screen-list-bottom) - 33px)); }
+.xmb-list--screen .xmb-list-row { position: relative; top: auto; left: auto; height: 48px; width: 100%; transform: none; transition: opacity 180ms ease; }
+.xmb-list--screen .xmb-list-row[data-anchor-selected="true"] { height: 66px; }
+.xmb-list--screen .xmb-list-link { align-items: center; height: 100%; min-height: 44px; padding: 3px 2px; color: #fff; font-size: 17px; line-height: 1.3; }
+.xmb-list--screen .xmb-list-row.is-selected .xmb-list-link { font-size: 23px; text-shadow: 0 0 2px #ffffffc0, 0 0 6px #ffffff80, 0 0 13px #ffffff45; }
+.xmb-list--screen .xmb-list-row.is-selected::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #ffffff66; pointer-events: none; }
+.xmb-list--screen .xmb-list-icon { width: 24px; height: 24px; margin: 0; filter: none; }
+.xmb-list--screen .xmb-list-title { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-shadow: inherit; }
+.xmb-list--screen .xmb-list-top { align-items: center; gap: 16px; }
+.xmb-list--screen .xmb-list-sub { display: none; }
+.xmb-list--screen :is(.xmb-list-value, .xmb-list-meta) { flex: 0 1 44%; width: auto; font-size: .8em; color: white; letter-spacing: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-shadow: none; }
+.xmb-list--screen .xmb-list-swatch { border-radius: 2px; box-shadow: none; width: 24px; height: 18px; }
+.xmb-text-screen { position: relative; min-height: 0; max-height: 100%; align-self: start; width: min(100%, 74ch); height: 100%; }
+.xmb-text-panel { min-width: 0; width: 100%; max-height: 100%; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 18px; border: 1px solid #ffffff2e; border-radius: 2px; background: rgba(2,10,24,.66); backdrop-filter: blur(6px); color: #fffffff2; font-size: 16px; line-height: 1.5; font-weight: 400; overflow-wrap: anywhere; scrollbar-width: none; text-shadow: none; scroll-padding-block: 60px; }
+.xmb-text-panel[data-scrollable="true"]::after { content: ""; display: block; height: 60px; }
+.xmb-text-panel > :first-child { margin-top: 0; }
+.xmb-text-panel > :last-child { margin-bottom: 0; }
+.xmb-text-panel :is(p, li) { max-width: 70ch; font-size: inherit; line-height: 1.5; font-weight: 400; }
+.xmb-text-panel p + p { margin-top: 12px; }
+.xmb-text-panel ul { padding-left: 20px; list-style: disc; }
+.xmb-text-panel ol { padding-left: 22px; list-style: decimal; }
+.xmb-text-panel li + li { margin-top: 6px; }
+.xmb-section-label { margin: 14px 0 8px; padding-bottom: 6px; border-bottom: 1px solid #ffffff33; font-size: 12px; font-weight: 400; color: #ffffffb3; }
+.xmb-info-line { min-width: 0; min-height: 42px; margin: 0; font-size: 14px; line-height: 21px; color: #ffffffd9; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.xmb-scroll-indicators { position: absolute; z-index: 4; top: 8px; bottom: 8px; right: 1px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; color: #ffffffbf; font-size: 10px; }
+.xmb-scroll-indicators span { opacity: 0; }
+.xmb-scroll-indicators span[data-visible="true"] { opacity: 1; }
+.xmb-action-row { display: flex; align-items: center; gap: 16px; width: 100%; min-width: 0; min-height: 44px; padding: 8px 0; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: none; color: #ffffffd9; text-align: left; font: inherit; text-decoration: none; }
+.xmb-action-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.xmb-action-value { flex: 0 1 46%; font-size: .85em; text-align: right; overflow-wrap: anywhere; }
+.xmb-action-row:is(:focus, :hover) { color: white; font-size: 1.05em; border-bottom-color: #ffffff80; text-shadow: 0 0 6px #ffffff80; }
+.xmb-action-row:disabled { opacity: .45; }
+.xmb-screen :is(button, a, input, [tabindex]):focus-visible { outline: 1px solid #ffffffbf; outline-offset: -1px; }
+.xmb-diagram { display: block; width: 100%; height: auto; margin-block: 12px; }
+.xmb-facts { margin: 12px 0; }
+.xmb-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; padding-block: 6px; }
+.xmb-facts dt { color: #ffffffbf; }
+.xmb-facts dd { margin: 0; }
+.xmb-field { display: grid; gap: 8px; }
+.xmb-field input { width: 100%; min-width: 0; padding: 10px 0; border: 0; border-bottom: 1px solid #ffffff80; background: transparent; color: white; font: inherit; }
+.xmb-code { min-width: 0; }
+.xmb-code pre { margin: 12px 0; font-size: 13px; line-height: 1.6; color: #fffffff2; }
+.xmb-code-line { display: flex; gap: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.xmb-code-line > :last-child { min-width: 0; }
+.xmb-code-line[data-emphasis="true"] { color: white; font-weight: 400; }
+.xmb-code-number { flex: 0 0 3ch; text-align: right; color: #ffffffbf; user-select: none; }
+.xmb-signal-stages { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 0 !important; list-style: none !important; font-size: 13px; }
+.xmb-signal-stages li { opacity: .85; }
+.xmb-signal-stages [aria-current="step"] { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
+.trophy-toast { position: absolute; z-index: 120; top: calc(var(--status-top) + var(--status-height) + 8px); right: var(--rail-right); display: flex; align-items: center; gap: 12px; max-width: min(420px, 82vw); padding: 10px 16px; color: white; background: rgba(2,10,24,.78); border: 1px solid #ffffff33; border-radius: 2px; box-shadow: none; backdrop-filter: blur(6px); animation: trophyIn 420ms ease both; }
+.trophy-toast-kicker { color: #b9d3e6; }
+.trophy-toast-cup { filter: none; }
+@media (max-width: 759px) {
+  .console-app-body:has(.xmb-screen) { width: 100%; margin-left: 0; }
+  .console-application-content:has(.xmb-screen) { padding-right: 0; }
+  .console-application-header { min-height: 68px; }
+  .xmb-list--screen .xmb-list-link { font-size: 15px; gap: 10px; }
+  .xmb-list--screen .xmb-list-row.is-selected .xmb-list-link { font-size: 20px; }
+  .xmb-list--screen .xmb-list-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .xmb-list--screen .xmb-list-top { gap: 8px; }
+  .xmb-text-panel { padding: 16px; font-size: 15px; }
+  .xmb-info-line { font-size: 12px; line-height: 18px; min-height: 36px; }
+  .xmb-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+@media (max-width: 600px) {
+  .console-environment, .console-environment[data-surface="app"] { --status-height: 52px; }
+  .console-status { height: 52px; padding-block: 3px; }
+  .console-status-ticker { display: none; }
+  .trophy-toast { top: auto; bottom: calc(68px + env(safe-area-inset-bottom)); left: 12px; right: 12px; max-width: none; }
+  .console-application:has(~ .trophy-toast) .console-app-body { padding-bottom: 72px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xmb-list--screen .xmb-list-row, .trophy-toast { animation: none; transition: none; }
+}
+
+.xmb-document .xmb-text-screen { width: 100%; }
+.xmb-document-introduction { margin-bottom: 24px; }
+.xmb-document-section { margin-top: 24px; }
+.xmb-document-topic { margin-top: 18px; }
+.xmb-document-topic h3 { margin: 0 0 8px; color: white; font-size: 17px; }
+.xmb-document-value { font-size: 14px; color: #ffffffbf; }
+.xmb-document-selection { position: relative; height: clamp(160px, 30vh, 320px); margin: 16px 0; }
+.xmb-document-selection .xmb-list--screen { padding: 0 8px 16px 0; }
+.xmb-document-selection .xmb-list-link { font-size: 15px; }
+.xmb-document-selection .xmb-list-row.is-selected .xmb-list-link { font-size: 19px; }
+
+/* Reading destinations: an open page with a clear introduction and an index. */
+.console-app-body:has(.xmb-document) { width: calc(100% - 6.8vw); max-width: 1480px; }
+.xmb-document .xmb-text-panel { padding: 20px 24px 64px 0; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; font-size: 17px; line-height: 1.65; scrollbar-width: thin; scrollbar-color: #ffffff55 transparent; }
+.console-application-content .xmb-document .xmb-text-panel::-webkit-scrollbar { display: block; width: 5px; }
+.xmb-document .xmb-text-panel::-webkit-scrollbar-thumb { background: #ffffff55; }
+.xmb-document .xmb-text-panel:focus-visible { outline: none; }
+.xmb-document .xmb-text-panel:focus-visible .xmb-document-introduction > .xmb-document-eyebrow { text-decoration: underline; text-underline-offset: 5px; }
+.xmb-document .xmb-text-panel :is(p,li) { line-height: 1.65; }
+.xmb-document-introduction { margin: 0 0 28px; }
+.xmb-document-eyebrow { margin: 0 0 10px; color: #ffffffc7; font-size: 13px !important; }
+.xmb-document-title { max-width: 36ch; margin: 0 0 18px; color: #fff; font-size: clamp(26px, 2.7vw, 42px); line-height: 1.2; letter-spacing: -.025em; }
+.xmb-document-introduction > p:not(.xmb-document-eyebrow):not(.xmb-document-meta) { max-width: 76ch; }
+.xmb-document-meta { max-width: none !important; margin-top: 18px; font-size: 13px !important; color: #ffffffcf; }
+.xmb-document-meta a { text-decoration: underline; text-underline-offset: 3px; }
+.xmb-document-contents { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 24px; padding: 8px 0 16px; margin-bottom: 32px; border-bottom: 1px solid #ffffff30; }
+.xmb-document-contents > span { color: #ffffffbf; font-size: 13px; }
+.xmb-document-contents button { min-height: 44px; padding: 4px 0; background: transparent; border: 0; color: white; font-size: 15px; text-align: left; cursor: pointer; }
+.xmb-document-contents button:hover { text-decoration: underline; text-underline-offset: 5px; }
+.xmb-document-section { margin-top: 40px; scroll-margin-top: 20px; }
+.xmb-document-section > .xmb-section-label { margin-bottom: 20px; font-size: 23px; line-height: 1.3; }
+.xmb-document-topic { max-width: 82ch; margin-top: 28px; }
+.xmb-document-topic h3 { font-size: 19px; line-height: 1.4; }
+.xmb-document-tool { display: grid; grid-template-columns: minmax(220px, 28%) minmax(0, 1fr); gap: 32px; align-items: start; }
+.xmb-document-selection { height: min(52vh, 520px); margin: 0; }
+.xmb-document-detail { min-width: 0; }
+.xmb-document-selection .xmb-list-row { opacity: 1 !important; height: auto; min-height: 56px; margin: 0 !important; }
+.xmb-document-selection .xmb-list-row[data-anchor-selected="true"] { height: auto; }
+.xmb-document-selection .xmb-list-link, .xmb-document-selection .xmb-list-row.is-selected .xmb-list-link { font-size: 16px; text-shadow: none; padding: 10px 8px; }
+.xmb-document-selection .xmb-list-row.is-selected { background: #ffffff0c; border-left: 2px solid #fff; }
+.xmb-document-selection .xmb-list-title, .xmb-document-selection .xmb-list-value { white-space: normal; overflow-wrap: anywhere; }
+.xmb-document-selection .xmb-list-top { display: block; }
+.xmb-document-selection .xmb-list-value { display: block; max-width: none; margin-top: 4px; color: #ffffffcf; font-size: 13px; }
+.xmb-document-selection .xmb-list-row.is-selected::after { display: none; }
+.xmb-code { margin: 20px 0; min-width: 0; }
+.xmb-code-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 12px; background: #08172b99; border: 1px solid #ffffff29; font-family: var(--font-mono); font-size: 12px; }
+.xmb-code-toolbar .xmb-action-row { flex: none; width: auto; margin: 0; font-family: inherit; font-size: 12px; }
+.xmb-code-toolbar .xmb-action-label { flex: none; white-space: nowrap; }
+.xmb-action-value:empty { display: none; }
+.xmb-document .xmb-action-row:is(:focus,:hover) { font-size: inherit; text-shadow: none; }
+.xmb-document .xmb-code-toolbar .xmb-action-row:is(:focus,:hover) { font-size: 12px; }
+.xmb-field select { width: min(100%, 360px); min-height: 44px; padding: 8px 10px; border: 1px solid #ffffff55; background: #102033; color: white; font: inherit; }
+.xmb-code pre { margin: 0; padding: 18px 12px; background: #041024b8; border: 1px solid #ffffff29; border-top: 0; font-size: 13px; line-height: 1.65; tab-size: 4; }
+.xmb-code .tok-kw { color: #b7ddff; }.xmb-code .tok-str { color: #b9e0cc; }.xmb-code .tok-num { color: #e5d1b0; }.xmb-code .tok-com { color: #b5c4d6; }
+.source-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 16px 28px; padding: 0 0 24px; margin-bottom: 12px; border-bottom: 1px solid #ffffff30; }
+.source-filters label { display: grid; gap: 6px; color: #ffffffd9; font-size: 13px; }
+.source-filters input, .source-filters select { width: 250px; max-width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid #ffffff55; border-radius: 0; background: #08172b99; color: white; font: inherit; font-size: 16px; }
+.source-filters input::placeholder { color: #ffffffb8; }.source-filters option { background: #102033; }
+.source-filters p, .source-filters > a { margin: 0; min-height: 44px; align-content: center; font-size: 13px !important; }
+.source-filters > a { margin-left: auto; }
+.source-workspace { display: grid; grid-template-columns: minmax(200px, 23%) minmax(0, 1fr) minmax(220px, 25%); gap: 28px; align-items: start; }
+.source-file-list { max-height: 65vh; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.source-file-list button { display: grid; gap: 5px; width: 100%; min-height: 80px; padding: 12px 14px; background: none; border: 0; border-left: 2px solid transparent; text-align: left; color: white; cursor: pointer; }
+.source-file-list button[aria-pressed="true"] { border-left-color: white; background: #ffffff12; }
+.source-file-list button:hover { background: #ffffff0a; }
+.source-file-category { font-size: 12px; color: #ffffffc7; }.source-file-name { font-size: 16px; line-height: 1.4; }.source-file-path { font-size: 12px; line-height: 1.5; color: #ffffffd9; overflow-wrap: anywhere; }
+.source-detail, .source-notes { min-width: 0; padding-top: 12px; scroll-margin-top: 20px; }
+.source-detail h3 { margin: 0 0 12px; font-size: 25px; line-height: 1.3; }
+.source-notes { font-size: 15px; }.source-notes h3 { margin: 0 0 14px; font-size: 17px; }.source-notes h3:not(:first-child) { margin-top: 28px; }
+.source-notes li + li { margin-top: 14px; }.source-read-selection { display: none; }
+@media (max-width: 1399px) {
+  .source-workspace { grid-template-columns: 230px minmax(0,1fr); }
+  .source-file-list { grid-row: span 2; }.source-notes { grid-column: 2; }
+}
+@media (max-width: 759px) {
+  .console-app-body:has(.xmb-document) { width: 100%; margin-left: 0; }
+  .xmb-document .xmb-text-panel { padding: 4px 12px 60px 0; font-size: 16px; }
+  .xmb-document-title { font-size: 28px; }.xmb-document-section { margin-top: 32px; }
+  .xmb-document-contents { gap: 0 20px; margin-bottom: 24px; }
+  .xmb-document-tool { grid-template-columns: 1fr; gap: 20px; }
+  .xmb-document-selection { height: 240px; }
+  .source-filters { gap: 14px; }.source-filters label, .source-filters input, .source-filters select { width: 100%; }
+  .source-workspace { grid-template-columns: minmax(0,1fr); gap: 18px; }
+  .source-file-list { grid-row: auto; max-height: 240px; }.source-notes { grid-column: auto; }
+  .source-read-selection { display: block; min-height: 44px; border: 0; border-bottom: 1px solid #ffffff55; padding: 8px 0; background: transparent; color: white; text-align: left; font: inherit; }
+  .xmb-code pre { font-size: 12px; padding: 14px 8px; }.xmb-code-toolbar { gap: 8px; padding-inline: 8px; }
+}

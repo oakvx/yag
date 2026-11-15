@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/utils/cn";
 import { blip } from "./audio";
 import { ConsoleIcon } from "./ConsoleIcons";
@@ -14,6 +14,7 @@ export interface XmbListEntry {
   swatch?: readonly [string, string];
   /** Main line, cut with an ellipsis at the list's edge. */
   title: string;
+  description?: string;
   /** Small second line inside the title (a merge's source branch, for instance). */
   sub?: string | null;
   /** Fixed right column, tabular, one line. */
@@ -26,6 +27,8 @@ export interface XmbListEntry {
   fresh?: boolean;
   /** When set, the entry is a link that opens in a new tab. */
   href?: string;
+  to?: string;
+  opensScreen?: boolean;
   ariaLabel?: string;
 }
 
@@ -43,6 +46,9 @@ export interface XmbListProps {
   focusOnMount?: boolean;
   /** Page-sized rows: a smaller step and font than the full-screen board. */
   compact?: boolean;
+  screen?: boolean;
+  flow?: boolean;
+  viewportRef?: RefObject<HTMLUListElement | null>;
   className?: string;
 }
 
@@ -64,9 +70,14 @@ export function XmbList({
   onHighlight,
   focusOnMount = false,
   compact = false,
+  screen = false,
+  flow = false,
+  viewportRef,
   className,
 }: XmbListProps) {
   const rowRefs = useRef<Array<HTMLAnchorElement | HTMLButtonElement | null>>([]);
+  const listRef = useRef<HTMLUListElement>(null);
+  const centerRef = useRef<(() => void) | null>(null);
   const [hover, setHover] = useState<{ anchor: number; index: number } | null>(null);
   const highlighted = hover?.index ?? selected;
 
@@ -82,6 +93,44 @@ export function XmbList({
   activateRef.current = onActivate;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  useLayoutEffect(() => {
+    if (!screen) return;
+    const list = listRef.current;
+    const row = rowRefs.current[selected]?.parentElement;
+    if (!list || !row) return;
+    const center = () => {
+      if (flow) {
+        list.dataset.long = "false";
+        if (row.offsetTop < list.scrollTop) list.scrollTop = row.offsetTop;
+        else if (row.offsetTop + row.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = row.offsetTop + row.offsetHeight - list.clientHeight;
+        return;
+      }
+      const contentHeight = [...list.children].reduce((height, child) => {
+        const style = getComputedStyle(child);
+        return height + (child as HTMLElement).offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+      }, 0);
+      const long = contentHeight + 60 > list.clientHeight;
+      list.dataset.long = String(long);
+      if (!long) {
+        list.style.setProperty("--screen-list-half", "0px");
+        list.style.setProperty("--screen-list-bottom", "60px");
+        list.scrollTop = 0;
+        return;
+      }
+      const alignment = list.clientHeight / 2;
+      list.style.setProperty("--screen-list-half", `${alignment}px`);
+      list.style.setProperty("--screen-list-bottom", `${list.clientHeight - alignment}px`);
+      list.scrollTo({ top: row.offsetTop + row.offsetHeight / 2 - alignment, behavior: "instant" });
+    };
+    centerRef.current = center;
+    center();
+    let active = true;
+    void document.fonts.ready.then(() => { if (active) center(); });
+    document.fonts.addEventListener("loadingdone", center);
+    const resize = new ResizeObserver(center);
+    resize.observe(list);
+    return () => { active = false; centerRef.current = null; resize.disconnect(); document.fonts.removeEventListener("loadingdone", center); };
+  }, [selected, screen, flow, entries.length]);
 
   useEffect(() => {
     if (!focusOnMount) return;
@@ -95,7 +144,9 @@ export function XmbList({
       selectRef.current?.(clamped);
       blip("move");
     }
-    rowRefs.current[clamped]?.focus({ preventScroll: true });
+    rowRefs.current[clamped]?.focus({ preventScroll: screen || !compact });
+    // Home/End and a boundary step also recover a list scrolled with the wheel.
+    if (screen && clamped === selected) centerRef.current?.();
   };
 
   const glyph = (entry: XmbListEntry) => {
@@ -134,13 +185,15 @@ export function XmbList({
     }
     if ((e.key === "Enter" || e.key === " ") && activateRef.current) {
       e.preventDefault();
-      activateRef.current(highlighted);
+      if (entries[highlighted]?.href) rowRefs.current[highlighted]?.click();
+      else activateRef.current(highlighted);
     }
   };
 
   return (
     <ul
-      className={cn("xmb-list", compact && "xmb-list--compact", className)}
+      ref={(node) => { listRef.current = node; if (viewportRef) viewportRef.current = node; }}
+      className={cn("xmb-list", compact && "xmb-list--compact", screen && "xmb-list--screen", className)}
       role="listbox"
       aria-label={ariaLabel}
       aria-activedescendant={entries[highlighted] ? `xmb-row-${entries[highlighted].key}` : undefined}
@@ -160,7 +213,7 @@ export function XmbList({
         // edges. Compact mode (pages): the cursor row stands a size larger
         // and the rest hold at a calm, even brightness.
         const scale = compact || distance === 0 ? 1 : Math.max(0.66, 0.85 - distance * 0.06);
-        const opacity = compact
+        const opacity = screen ? (distance === 0 ? 1 : distance <= 2 ? 0.85 : Math.max(0.45, 0.85 - (distance - 2) * 0.1)) : compact
           ? (distance === 0 ? 1 : 0.75)
           : (distance === 0 ? 1 : Math.max(0.18, 0.8 - distance * 0.16));
         return (
@@ -169,6 +222,9 @@ export function XmbList({
             id={`xmb-row-${entry.key}`}
             role="option"
             aria-selected={on}
+            data-anchor-selected={index === selected}
+            data-kind={entry.href ? "external" : entry.to ? "navigation" : entry.opensScreen ? "screen" : "action"}
+            data-route={entry.to}
             className={cn("xmb-list-row", on && "is-selected")}
             style={{ "--row-offset": offset, "--item-scale": scale, opacity } as CSSProperties}
           >
@@ -176,13 +232,16 @@ export function XmbList({
               <a
                 ref={(node) => { rowRefs.current[index] = node; }}
                 className="xmb-list-link"
+                data-info={entry.description ?? entry.sub ?? entry.title}
                 href={entry.href}
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label={entry.ariaLabel}
                 tabIndex={on ? 0 : -1}
-                onMouseEnter={() => {
-                  setHover((h) => (h ? h : { anchor: selected, index }));
+                onPointerDown={(event) => { if (!compact && event.pointerType === "mouse" && event.button === 0) event.preventDefault(); }}
+                onPointerEnter={(event) => {
+                  if (event.pointerType !== "mouse") return;
+                  setHover((h) => ({ anchor: h?.anchor ?? selected, index }));
                   blip("move");
                 }}
                 onFocus={() => { setHover(null); selectRef.current?.(index); }}
@@ -201,24 +260,28 @@ export function XmbList({
                       <span className="xmb-list-meta">{entry.meta}</span>
                     ) : null}
                   </span>
-                  {on && entry.detail != null && (
+                  {!screen && on && entry.detail != null && (
                     <span className="xmb-list-detail">{entry.detail}</span>
                   )}
                 </span>
+                {screen && <span aria-hidden="true">↗</span>}
               </a>
             ) : (
               <button
                 ref={(node) => { rowRefs.current[index] = node; }}
                 type="button"
                 className="xmb-list-link"
+                data-info={entry.description ?? entry.sub ?? entry.title}
                 aria-label={entry.ariaLabel}
                 tabIndex={on ? 0 : -1}
                 onClick={() => {
                   selectRef.current?.(index);
                   activateRef.current?.(index);
                 }}
-                onMouseEnter={() => {
-                  setHover((h) => (h ? h : { anchor: selected, index }));
+                onPointerDown={(event) => { if (!compact && event.pointerType === "mouse" && event.button === 0) event.preventDefault(); }}
+                onPointerEnter={(event) => {
+                  if (event.pointerType !== "mouse") return;
+                  setHover((h) => ({ anchor: h?.anchor ?? selected, index }));
                   blip("move");
                 }}
                 onFocus={() => { setHover(null); selectRef.current?.(index); }}
@@ -237,10 +300,11 @@ export function XmbList({
                       <span className="xmb-list-meta">{entry.meta}</span>
                     ) : null}
                   </span>
-                  {on && entry.detail != null && (
+                  {!screen && on && entry.detail != null && (
                     <span className="xmb-list-detail">{entry.detail}</span>
                   )}
                 </span>
+                {screen && (entry.to || entry.opensScreen) && <span aria-hidden="true">›</span>}
               </button>
             )}
           </li>

@@ -13,13 +13,22 @@
  * repository) the existing file is left untouched rather than emptied.
  */
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "..");
 const target = resolve(root, "src/data/commits.generated.ts");
+// Keep project news aligned with the source revision reviewed by the site.
+function historyRef() {
+  const explicit = process.argv.find(arg => arg.startsWith("--ref="))?.slice(6);
+  if (explicit) return explicit;
+  try {
+    return readFileSync(resolve(root, "src/data/project-snapshot.generated.ts"), "utf8")
+      .match(/"revision":\s*"([a-f0-9]{40})"/)?.[1] ?? "HEAD";
+  } catch { return "HEAD"; }
+}
 
 /** How many commits the notification column can hold. */
 const LIMIT = 14;
@@ -41,7 +50,7 @@ function kindOf(subject) {
 
 function readHistory() {
   try {
-    const raw = execFileSync("git", ["log", `-${LIMIT}`, `--pretty=format:${FIELDS}`], {
+    const raw = execFileSync("git", ["log", `-${LIMIT}`, `--pretty=format:${FIELDS}`, historyRef()], {
       cwd: root,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -52,12 +61,36 @@ function readHistory() {
       .filter((line) => line.length > 0)
       .map((line) => {
         const [sha, short, author, date, subject] = line.split(SEP);
-        return { sha, short, author, date, subject, kind: kindOf(subject) };
+        return { sha, short, author, date, subject, kind: kindOf(subject), ...readDetail(sha) };
       })
       .filter((commit) => commit.sha && commit.subject);
   } catch {
     return [];
   }
+}
+
+function git(args) {
+  return execFileSync("git", args, {
+    cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
+function readDetail(sha) {
+  const body = git(["show", "-s", "--format=%b", sha]).trim();
+  const stats = git(["show", "--format=", "--first-parent", "--no-renames", "--numstat", "-z", sha]);
+  let remaining = 128 * 1024;
+  const files = stats.split("\0").filter(Boolean).map((record) => {
+    const [, added, deleted, path] = /^(\d+|-)\t(\d+|-)\t([\s\S]+)$/.exec(record) ?? [];
+    if (!path) throw new Error("Unexpected git numstat record");
+    const binary = added === "-";
+    const raw = binary ? "" : git(["show", "--format=", "--first-parent", "--no-renames", "--no-ext-diff", "--no-textconv", "--unified=3", sha, "--", path]);
+    const limit = Math.min(16 * 1024, remaining);
+    const patch = raw.slice(0, limit);
+    remaining -= patch.length;
+    return { path, added: binary ? null : Number(added), deleted: binary ? null : Number(deleted), binary, patch, truncated: patch.length < raw.length };
+  });
+  return { body, files };
 }
 
 function render(commits) {
@@ -71,6 +104,8 @@ function render(commits) {
         `    author: ${JSON.stringify(c.author)},`,
         `    date: ${JSON.stringify(c.date)},`,
         `    kind: ${JSON.stringify(c.kind)},`,
+        `    body: ${JSON.stringify(c.body)},`,
+        `    files: ${JSON.stringify(c.files)},`,
         "  },",
       ].join("\n"),
     )
@@ -93,6 +128,17 @@ export interface CommitNotice {
   date: string;
   /** Conventional-commit kind, or "merge" for Git's own merge subjects. */
   kind: string;
+  body?: string;
+  files?: CommitFile[];
+}
+
+export interface CommitFile {
+  path: string;
+  added: number | null;
+  deleted: number | null;
+  binary: boolean;
+  patch: string;
+  truncated: boolean;
 }
 
 export const COMMIT_NOTICES: CommitNotice[] = [

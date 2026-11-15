@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/utils/cn";
+import { XmbRow } from "./XmbRow";
 
 const KEYWORDS = new Set([
   "static",
@@ -91,38 +92,26 @@ function highlightCodeLine(line: string, lineIdx: number): ReactNode[] {
   return nodes;
 }
 
-export function CopySnippetButton({ text, label = "Copy" }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
+export function CopySnippetRow({ text }: { text: string }) {
+  const [status, setStatus] = useState("Copy excerpt");
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  const copy = async () => {
+    let copied = false;
+    try { await navigator.clipboard.writeText(text); copied = true; }
+    catch {
+      const focused = document.activeElement;
+      const area = document.createElement("textarea");
+      area.value = text; area.style.position = "fixed"; area.style.opacity = "0";
+      document.body.appendChild(area); area.select();
+      try { copied = document.execCommand("copy"); } catch { copied = false; }
+      finally { area.remove(); if (focused instanceof HTMLElement) focused.focus({ preventScroll: true }); }
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setStatus(copied ? "Copied" : "Copy unavailable");
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setStatus("Copy excerpt"), 1800);
   };
-
-  return (
-    <button
-      type="button"
-      onClick={onCopy}
-      className="inline-flex items-center gap-1.5 border border-line px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted transition-colors hover:border-amber hover:text-paper cursor-pointer"
-    >
-      <span aria-hidden="true" className={copied ? "text-moss" : "text-amber"}>
-        {copied ? "✓" : "⧉"}
-      </span>
-      {copied ? "Copied" : label}
-    </button>
-  );
+  return <XmbRow ariaLabel={status} onClick={() => { void copy(); }} hint="Copy this excerpt to the clipboard."><span role="status">{status}</span></XmbRow>;
 }
 
 interface CodeBlockProps {
@@ -130,89 +119,24 @@ interface CodeBlockProps {
   lang?: "c" | "python" | "cmake" | "bash" | "json";
   path?: string;
   href?: string;
-  badge?: string;
   highlights?: number[];
   showLineNumbers?: boolean;
+  startLine?: number;
   caption?: ReactNode;
   className?: string;
 }
 
-export function CodeBlock({
-  code,
-  lang = "c",
-  path,
-  href,
-  badge,
-  highlights = [],
-  showLineNumbers = true,
-  caption,
-  className,
-}: CodeBlockProps) {
+export function CodeBlock({ code, lang = "c", path, href, highlights = [], showLineNumbers = true, startLine = 1, caption, className }: CodeBlockProps) {
   const lines = code.replace(/\n$/, "").split("\n");
-
-  return (
-    <div className={cn("border border-line bg-[rgba(3,12,34,0.62)]", className)}>
-      {(path || badge) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel/80 px-3.5 py-2">
-          <div className="flex min-w-0 items-center gap-2.5 font-mono text-[10.5px]">
-            <span className="border border-line px-1.5 py-0.5 text-[9.5px] uppercase tracking-[0.14em] text-amber">
-              {lang}
-            </span>
-            {path &&
-              (href ? (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="truncate text-paper/90 transition-colors hover:text-amber"
-                >
-                  {path} <span aria-hidden="true" className="text-faint">↗</span>
-                </a>
-              ) : (
-                <span className="truncate text-paper/90">{path}</span>
-              ))}
-            {badge && <span className="hidden text-[10px] text-faint @lg:inline">· {badge}</span>}
-          </div>
-          <CopySnippetButton text={code} />
-        </div>
-      )}
-
-      <pre className="code-scroll overflow-x-auto py-3 font-mono text-[11.5px] leading-[1.74] text-[#dcebff] @lg:text-[12px]">
-        <code>
-          {lines.map((line, idx) => {
-            const lineNum = idx + 1;
-            const isHighlighted = highlights.includes(lineNum);
-            return (
-              <span
-                key={idx}
-                className={cn(
-                  "flex whitespace-pre px-3.5 transition-colors",
-                  isHighlighted ? "border-l-2 border-amber bg-amber/[0.07]" : "border-l-2 border-transparent",
-                )}
-              >
-                {showLineNumbers && (
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "mr-4 inline-block w-6 shrink-0 select-none text-right",
-                      isHighlighted ? "text-amber" : "text-[#4f6a90]",
-                    )}
-                  >
-                    {lineNum}
-                  </span>
-                )}
-                <span>{line.length > 0 ? highlightCodeLine(line, idx) : " "}</span>
-              </span>
-            );
-          })}
-        </code>
-      </pre>
-
-      {caption && (
-        <div className="border-t border-line bg-panel/40 px-3.5 py-2.5 font-mono text-[11px] leading-relaxed text-faint">
-          {caption}
-        </div>
-      )}
-    </div>
-  );
+  return <div className={cn("xmb-code", className)}>
+    <div className="xmb-code-toolbar"><span>{path ?? lang}</span><CopySnippetRow text={code} /></div>
+    <pre aria-label={path ? `Source: ${path}` : `${lang} excerpt`}><code>{lines.map((line, index) =>
+      <span key={index} className="xmb-code-line" data-emphasis={highlights.includes(index + 1)}>
+        {showLineNumbers && <span className="xmb-code-number" aria-hidden="true">{index + startLine}</span>}
+        <span>{line ? highlightCodeLine(line, index) : " "}</span>
+      </span>
+    )}</code></pre>
+    {href && <XmbRow href={href} value={path} hint="Open the original source on GitHub.">View original source</XmbRow>}
+    {caption && <p>{caption}</p>}
+  </div>;
 }

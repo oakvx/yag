@@ -1,0 +1,102 @@
+- generic [ref=f64e3]:
+  - time [ref=f64e5]: 15/11 2:17
+  - button "Notifications, all read" [ref=f64e9] [cursor=pointer]
+  - status
+  - region "Trophies" [ref=f64e14]:
+    - generic [ref=f64e15]:
+      - button "Back to XMB menu" [ref=f64e16] [cursor=pointer]: Back
+      - generic [ref=f64e22]:
+        - paragraph [ref=f64e23]: Users
+        - heading "Trophies" [level=2] [ref=f64e24]
+    - main [active] [ref=f64e25]:
+      - generic [ref=f64e27]:
+        - paragraph [ref=f64e28]: 6 of 11 trophies unlocked (55%). Earned by using the console; kept only in this browser.
+        - listbox "Trophies" [ref=f64e29]:
+          - option [selected] [ref=f64e30]:
+            - button "Cold Start, unlocked" [ref=f64e31] [cursor=pointer]:
+              - generic [ref=f64e36]:
+                - generic [ref=f64e37]:
+                  - text: Cold Start
+                  - generic [ref=f64e38]: Start the console and reach the menu.
+                - generic [ref=f64e39]: Bronze · 15/11
+          - option [ref=f64e40]:
+            - button "First Contact, unlocked" [ref=f64e41] [cursor=pointer]:
+              - generic [ref=f64e46]:
+                - generic [ref=f64e47]:
+                  - text: First Contact
+                  - generic [ref=f64e48]: Open any application from the menu.
+                - generic [ref=f64e49]: Bronze · 15/11
+          - option [ref=f64e50]:
+            - button "Third Button, unlocked" [ref=f64e51] [cursor=pointer]:
+              - generic [ref=f64e56]:
+                - generic [ref=f64e57]:
+                  - text: Third Button
+                  - generic [ref=f64e58]: Open the options panel on a destination.
+                - generic [ref=f64e59]: Bronze · 15/11
+          - option [ref=f64e60]:
+            - button "Courier, locked" [ref=f64e61] [cursor=pointer]:
+              - generic [ref=f64e66]:
+                - generic [ref=f64e67]:
+                  - text: Courier
+                  - generic [ref=f64e68]: Copy the link to a destination.
+                - generic [ref=f64e69]: Bronze · Locked
+          - option [ref=f64e70]:
+            - button "Stay Informed, unlocked" [ref=f64e71] [cursor=pointer]:
+              - generic [ref=f64e76]:
+                - generic [ref=f64e77]:
+                  - text: Stay Informed
+                  - generic [ref=f64e78]: Open the information board.
+                - generic [ref=f64e79]: Bronze · 15/11
+          - option [ref=f64e80]:
+            - button "Teleport, locked" [ref=f64e81] [cursor=pointer]:
+              - generic [ref=f64e86]:
+                - generic [ref=f64e87]:
+                  - text: Teleport
+                  - generic [ref=f64e88]: Search the destinations with Quick Jump (/ or Ctrl+K).
+                - generic [ref=f64e89]: Bronze · Locked
+          - option [ref=f64e90]:
+            - button "Atmosphere, unlocked" [ref=f64e91] [cursor=pointer]:
+              - generic [ref=f64e96]:
+                - generic [ref=f64e97]:
+                  - text: Atmosphere
+                  - generic [ref=f64e98]: Confirm a wallpaper atmosphere in Theme Settings.
+                - generic [ref=f64e99]: Silver · 15/11
+          - option [ref=f64e100]:
+            - button "Hands On, locked" [ref=f64e101] [cursor=pointer]:
+              - generic [ref=f64e106]:
+                - generic [ref=f64e107]:
+                  - text: Hands On
+                  - generic [ref=f64e108]: Move through the console with a game controller.
+                - generic [ref=f64e109]: Silver · Locked
+          - option [ref=f64e110]:
+            - button "Cartographer, unlocked" [ref=f64e111] [cursor=pointer]:
+              - generic [ref=f64e116]:
+                - generic [ref=f64e117]:
+                  - text: Cartographer
+                  - generic [ref=f64e118]: Visit every documentation page.
+                - generic [ref=f64e119]: Gold · 15/11
+          - option [ref=f64e120]:
+            - button "Hidden trophy, locked" [ref=f64e121] [cursor=pointer]:
+              - generic [ref=f64e126]:
+                - generic [ref=f64e127]:
+                  - text: Hidden trophy
+                  - generic [ref=f64e128]: Keep exploring.
+                - generic [ref=f64e129]: Gold · Locked
+          - option [ref=f64e130]:
+            - button "Complete Set, locked" [ref=f64e131] [cursor=pointer]:
+              - generic [ref=f64e136]:
+                - generic [ref=f64e137]:
+                  - text: Complete Set
+                  - generic [ref=f64e138]: Unlock every other trophy.
+                - generic [ref=f64e139]: Platinum · Locked
+      - generic [ref=f64e140]: YAG is experimental software. Repository references are authoritative.
+    - button "Back to menu Esc" [ref=f64e141] [cursor=pointer]:
+      - text: Back to menu
+      - generic [ref=f64e145]: Esc
+  - generic:
+    - button "YAG / Yet Another Gateway": YAG
+    - generic:
+      - generic:
+        - button "Audio settings. Press and hold to replay the boot sequence."
+  - paragraph [ref=f64e146]: Trophies application. Escape returns to the menu.
+  - button "Search all destinations" [ref=f64e147] [cursor=pointer]

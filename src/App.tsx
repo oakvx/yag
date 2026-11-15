@@ -13,6 +13,7 @@ import { StatusPage } from "./pages/StatusPage";
 import { ConfigurationPage, OperationsPage, SystemInfoPage } from "./pages/SystemUtilities";
 import { ProfilePage } from "./pages/ProfilePage";
 import { ThemeSettingsPage } from "./pages/ThemeSettings";
+import { TrophiesPage } from "./pages/TrophiesPage";
 import { RouterProvider, useRouter } from "./router/RouterContext";
 import type { RoutePath } from "./router/routes";
 
@@ -37,6 +38,7 @@ function ActiveRouteView() {
     "/project": ProjectPage,
     "/profile": ProfilePage,
     "/theme": ThemeSettingsPage,
+    "/trophies": TrophiesPage,
   };
 
   const Component = views[path] ?? HomePage;

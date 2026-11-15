@@ -1,0 +1,2 @@
+[     215ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[     589ms] [WARNING] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page.  @ http://127.0.0.1:5173/src/xmb/audio.ts?t=1794705222846:107

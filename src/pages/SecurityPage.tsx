@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
+import { XmbRow } from "@/components/XmbRow";
+import { XmbScreen, XmbSectionLabel } from "@/components/XmbScreen";
 import { REPO_LINKS } from "@/data/repository";
-import { RouteLink } from "@/router/RouterContext";
-import { cn } from "@/utils/cn";
 
 interface TrustStratum {
   id: string;
@@ -109,7 +107,7 @@ const STRATA: TrustStratum[] = [
 const ABSENT_CONTROLS = [
   { name: "Native TLS Server", detail: "Plain HTTP listener only. Terminate TLS at a trusted reverse proxy (e.g. Caddy/Nginx)." },
   { name: "CORS Configuration", detail: "No Access-Control-Allow-Origin headers or preflight policy engine." },
-  { name: "Audit Logging & Request History", detail: "Zero persistent logs of who asked what or when; counters are in-memory only." },
+  { name: "Inference History & Identity Audit", detail: "No persistent inference history or tamper-evident identity audit. The optional private administrative event trail records fixed labels and HTTP outcomes, excluding bodies and identities." },
   { name: "Live Key Revocation (Static Keys)", detail: "Rotating YAG_API_KEY or YAG_EXTRA_API_KEYS requires restarting the gateway." },
   { name: "Encrypted Secret Vault", detail: "Secrets are read from standard OS environment variables." },
   { name: "Unauthenticated Socket Rate Limiter", detail: "Rate limits apply per authenticated key; use firewall rules at the network edge." },
@@ -117,149 +115,22 @@ const ABSENT_CONTROLS = [
 ];
 
 export function SecurityPage() {
-  const [selectedId, setSelectedId] = useState<string>(STRATA[2].id);
-  const active = STRATA.find((s) => s.id === selectedId) ?? STRATA[2];
-
-  return (
-    <div>
-      <PageMasthead
-        path="/security"
-        eyebrow="Chapter 07 · Trust Boundaries & Threat Model"
-        title={
-          <>
-            A foundation, <em className="text-rust">not a fortress.</em>
-          </>
-        }
-        lede="YAG's README opens with a warning before listing a single feature. Explore the six trust strata below to see exactly where credentials live, what the C17 listener enforces, and which production security controls do not exist."
-        aside={
-          <div className="p-4 font-xmb text-[11px]">
-            <div className="text-rust font-semibold">
-              ⚠ Do Not Deploy on Untrusted Networks
-            </div>
-            <p className="mt-2 leading-relaxed text-paper/90">
-              Wi-Fi membership is not authentication. Plain HTTP exposes your keys and traffic. Terminate TLS at a
-              trusted reverse proxy and firewall the host.
-            </p>
-          </div>
-        }
-      />
-
-      {/* INTERACTIVE 6-STRATUM TRUST CROSS-SECTION */}
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="grid @3xl:grid-cols-12">
-            {/* Left Stack: 6 Spatial Trust Layers */}
-            <div className="@3xl:col-span-5">
-              <div className="px-4 py-2.5 font-xmb text-[11.5px] text-faint">
-                Trust Cross-Section (Outer Edge → Upstream)
-              </div>
-              <ol className="">
-                {STRATA.map((st) => {
-                  const selected = st.id === selectedId;
-                  return (
-                    <li key={st.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(st.id)}
-                        className={cn(
-                          "w-full px-4 py-3.5 text-left transition-colors cursor-pointer",
-                          selected
-                            ? "border-l-2 border-l-amber bg-amber/[0.1]"
-                            : "hover:bg-paper/[0.03]",
-                        )}
-                      >
-                        <div className="flex items-center justify-between font-xmb text-[11.5px]">
-                          <span className={selected ? "text-amber" : "text-faint"}>{st.layer}</span>
-                          <span className="text-faint">{st.zone}</span>
-                        </div>
-                        <div className="mt-1 text-[14px] font-medium text-paper">{st.title}</div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-
-            {/* Right Inspector: Enforced Controls vs Residual Risk */}
-            <div className="p-5 @lg:p-7 @3xl:col-span-7 flex flex-col justify-between" aria-live="polite">
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2 font-xmb text-[12px]">
-                  <span className="text-amber">
-                    {active.layer} · {active.zone}
-                  </span>
-                  <StatusBadge tone="implemented">Enforced Boundary</StatusBadge>
-                </div>
-
-                <h2 className="display mt-3 text-2xl text-paper @lg:text-3xl">{active.title}</h2>
-
-                <div className="mt-4 px-3.5 py-2.5 font-xmb text-[11px]">
-                  <span className="text-faint">CREDENTIAL EXPOSURE AT THIS LAYER: </span>
-                  <span className="text-paper">{active.credentialHeld}</span>
-                </div>
-
-                <div className="mt-5">
-                  <p className="label text-moss">What YAG Enforces Here</p>
-                  <ul className="mt-2.5 space-y-2">
-                    {active.enforced.map((item) => (
-                      <li key={item} className="flex items-baseline gap-2.5 text-[13.5px] leading-relaxed text-paper/90">
-                        <span aria-hidden="true" className="font-xmb text-moss">✓</span>
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="mt-6 pt-4">
-                  <p className="label text-rust">Residual Risk & Operator Responsibility</p>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{active.residualRisk}</p>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 font-xmb text-[11px]">
-                <a
-                  href={REPO_LINKS.security}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-amber hover:underline"
-                >
-                  Read README Threat Model ↗
-                </a>
-                <RouteLink to="/source?file=server-auth" className="text-muted hover:text-paper">
-                  Inspect server.c Auth Source →
-                </RouteLink>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {/* EXPLICIT DISCLOSURE: WHAT DOES NOT EXIST */}
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="label text-rust">Explicit Non-Existence Ledger</p>
-              <h2 className="display mt-2 text-2xl text-paper @lg:text-3xl">
-                Security controls that are not implemented.
-              </h2>
-            </div>
-            <span className="font-xmb text-[11px] text-faint">Plan around their absence before exposing a port</span>
-          </div>
-
-          <div className="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-3">
-            {ABSENT_CONTROLS.map((item) => (
-              <div key={item.name} className="p-5">
-                <div className="flex items-center justify-between font-xmb text-[11.5px] text-rust">
-                  <span>NOT IMPLEMENTED</span>
-                  <span aria-hidden="true">×</span>
-                </div>
-                <h3 className="mt-2 text-[15px] font-medium text-paper">{item.name}</h3>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{item.detail}</p>
-              </div>
-            ))}
-          </div>
-        </Container>
-      </section>
-    </div>
-  );
+  return <XmbScreen document={<p>YAG is an inspectable foundation, not a fortress. Credentials remain on the host, while authentication, scopes and request limits establish explicit boundaries. The explanations below separate what the gateway enforces from what an operator must provide.</p>} subtitle="Trust boundaries, credential exposure and operator responsibilities." initialSelected={2} sections={[
+    { id: "boundaries", label: "Trust cross-section", entries: STRATA.map((stratum) => ({
+      key: stratum.id, title: stratum.title, sub: stratum.zone, value: "Enforced boundary",
+      description: stratum.credentialHeld,
+      panel: <><XmbSectionLabel>Credentials at this layer</XmbSectionLabel><p>{stratum.credentialHeld}</p>
+        <XmbSectionLabel>What YAG enforces</XmbSectionLabel><ul>{stratum.enforced.map((text) => <li key={text}>{text}</li>)}</ul>
+        <XmbSectionLabel>Residual risk</XmbSectionLabel><p>{stratum.residualRisk}</p>
+        <XmbRow href={REPO_LINKS.security}>Repository threat model</XmbRow></>,
+    })) },
+    { id: "managed", label: "Managed clients and private administration", entries: [
+      { key: "managed-keys", title: "Managed keys can be revoked at runtime", description: "With a private client store, the primary administrator can issue, disable and revoke managed credentials without restarting. Static environment keys still require restart-based rotation. The total extra-key capacity remains bounded." },
+      { key: "admin-access", title: "Administrative endpoints stay local", description: "The primary key is required for /api/admin/*, and the LAN Caddy proxy blocks those routes. Provider credentials are host-side aliases; raw upstream secrets are not accepted from the browser." },
+      { key: "audit", title: "Optional administrative event trail", panel: <><p>YAG_ADMIN_AUDIT_FILE enables a validated private JSONL file with fixed route/method labels, time and HTTP status. It omits prompt bodies, credentials, IP addresses and client identities.</p><p>This is not tamper-evident auditing or a history of inference requests.</p><XmbRow to="/source?file=admin-audit">Read the audit implementation</XmbRow></> },
+    ] },
+    { id: "absent", label: "Absent controls", entries: ABSENT_CONTROLS.map((item) => ({
+      key: item.name, title: item.name, value: "Not implemented", description: item.detail, panel: <p>{item.detail}</p>,
+    })), panel: <p>Wi-Fi membership is not authentication. Plain HTTP exposes keys and traffic. Terminate TLS at a trusted reverse proxy and firewall the host.</p> },
+  ]} />;
 }

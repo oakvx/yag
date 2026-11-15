@@ -3,6 +3,7 @@ import { getBootFrame, type BootClock, type WaveFrame } from "./bootState";
 import { hourlyBrightness, monthlyPalette } from "./palette";
 import { drawWave2D } from "./wave2d";
 import { WAVE_FRAGMENT, WAVE_VERTEX } from "./waveShader";
+import { BOOT_MATERIAL, WAVE_DUST, WAVE_LAYERS } from "./waveProfile";
 
 export function emitWave(category: number | null, pulse = 0) {
   window.dispatchEvent(new CustomEvent("yag:wave", { detail: { category, pulse } }));
@@ -14,7 +15,6 @@ const MAX_PIXELS = 8_300_000;
 interface GpuRenderer {
   gl: WebGLRenderingContext;
   program: WebGLProgram;
-  background: WebGLBuffer;
   ribbons: WebGLBuffer;
   dust: WebGLBuffer;
   ribbonCount: number;
@@ -26,7 +26,7 @@ interface GpuRenderer {
 function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   try {
   const gl = canvas.getContext("webgl", {
-    alpha: false, antialias: false, depth: false, stencil: false,
+    alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false,
     preserveDrawingBuffer: false, powerPreference: "default",
   });
   if (!gl) return null;
@@ -55,13 +55,10 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   gl.deleteShader(fragmentShader);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { gl.deleteProgram(program); return null; }
 
-  const background = gl.createBuffer();
   const ribbons = gl.createBuffer();
   const dust = gl.createBuffer();
-  if (!background || !ribbons || !dust) { gl.deleteProgram(program); return null; }
+  if (!ribbons || !dust) { gl.deleteProgram(program); return null; }
   gl.useProgram(program);
-  gl.bindBuffer(gl.ARRAY_BUFFER, background);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   const position = gl.getAttribLocation(program, "aPosition");
   gl.enableVertexAttribArray(position);
 
@@ -78,19 +75,17 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   gl.bufferData(gl.ARRAY_BUFFER, ribbonVertices, gl.STATIC_DRAW);
 
   // Deterministic dust: stable across context restoration and renderer resets.
-  let seed = 7173;
-  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  const dustCount = 290;
+  const dustCount = WAVE_DUST.length;
   const points = new Float32Array(dustCount * 2);
-  for (let i = 0; i < points.length; i++) points[i] = random();
+  for (let i = 0; i < dustCount; i++) points.set([WAVE_DUST[i].x, WAVE_DUST[i].y], i * 2);
   gl.bindBuffer(gl.ARRAY_BUFFER, dust);
   gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
 
   const uniforms: GpuRenderer["uniforms"] = {};
-  for (const name of ["uResolution", "uTime", "uProgress", "uBoot", "uBrightness", "uExposure", "uSwell", "uSwellPosition", "uPalette[0]", "uPass", "uLayer"]) {
+  for (const name of ["uResolution", "uTime", "uBoot", "uExposure", "uSwell", "uSwellPosition", "uPalette[0]", "uPass", "uLayer"]) {
     uniforms[name] = gl.getUniformLocation(program, name);
   }
-  return { gl, program, background, ribbons, dust, ribbonCount: columns * 2, dustCount, position, uniforms };
+  return { gl, program, ribbons, dust, ribbonCount: columns * 2, dustCount, position, uniforms };
   } catch {
     // Some browsers throw instead of returning null when WebGL is disabled.
     return null;
@@ -112,12 +107,12 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
   dimmed?: boolean;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const backgroundRef = useRef<HTMLDivElement>(null);
   const gpuRef = useRef<HTMLCanvasElement>(null);
   const fallbackRef = useRef<HTMLCanvasElement>(null);
   const dimmedRef = useRef(dimmed);
   dimmedRef.current = dimmed;
-  // The render loop sleeps while the wallpaper is held; nudge it when the
-  // console comes back from an application.
+  // A surface change also requests a frame when reduced motion is enabled.
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("yag:focus"));
   }, [dimmed]);
@@ -126,7 +121,8 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
     const wrapper = wrapperRef.current;
     const canvas = gpuRef.current;
     const fallback = fallbackRef.current;
-    if (!wrapper || !canvas || !fallback) return;
+    const backdrop = backgroundRef.current;
+    if (!wrapper || !canvas || !fallback || !backdrop) return;
 
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reduced = motion.matches;
@@ -149,7 +145,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
     let targetBrightness = brightness;
 
     const showFallback = () => {
-      fallbackContext ??= fallback.getContext("2d", { alpha: false });
+      fallbackContext ??= fallback.getContext("2d", { alpha: true });
       wrapper.dataset.renderer = "2d";
       canvas.style.visibility = "hidden";
       fallback.style.visibility = "visible";
@@ -185,43 +181,48 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
     };
 
     const paint = (frame: WaveFrame) => {
+      const color = (offset: number) => [0, 1, 2].map((i) => {
+        const wash = frame.boot * BOOT_MATERIAL.paletteWash;
+        const pigment = frame.palette[offset + i] * (1 - wash) + frame.palette[6 + i] * wash;
+        const exposure = 1 + (BOOT_MATERIAL.backdropExposure - 1) * frame.boot;
+        const warmth = 1 + (BOOT_MATERIAL.warmth[i] - 1) * frame.boot;
+        return Math.round(Math.min(1, Math.max(0, pigment * frame.brightness * exposure * warmth)) * 255);
+      }).join(" ");
+      backdrop.style.setProperty("--wallpaper-top", color(0));
+      backdrop.style.setProperty("--wallpaper-bottom", color(3));
+      backdrop.style.setProperty("--wallpaper-light", color(9));
+      backdrop.style.opacity = String(frame.exposure);
       if (!renderer || renderer.gl.isContextLost()) {
         if (!fallbackContext) showFallback();
         if (fallbackContext) drawWave2D(fallbackContext, width, height, frame);
         return;
       }
       const { gl, uniforms, program } = renderer;
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.useProgram(program);
       gl.uniform2f(uniforms.uResolution, width, height);
       gl.uniform1f(uniforms.uTime, frame.time);
-      gl.uniform1f(uniforms.uProgress, frame.progress);
       gl.uniform1f(uniforms.uBoot, frame.boot);
-      gl.uniform1f(uniforms.uBrightness, frame.brightness);
       gl.uniform1f(uniforms.uExposure, frame.exposure);
       gl.uniform1f(uniforms.uSwell, frame.swell);
       gl.uniform1f(uniforms.uSwellPosition, frame.swellPosition);
       gl.uniform3fv(uniforms["uPalette[0]"], frame.palette);
-      gl.disable(gl.BLEND);
-      gl.uniform1i(uniforms.uPass, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, renderer.background);
-      gl.vertexAttribPointer(renderer.position, 2, gl.FLOAT, false, 0, 0);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       if (frame.exposure <= 0.001) return;
 
       gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.uniform1i(uniforms.uPass, 1);
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.ribbons);
       gl.vertexAttribPointer(renderer.position, 2, gl.FLOAT, false, 0, 0);
-      const layers = frame.boot > 0.999 ? 1 : 3;
-      for (let layer = 0; layer < layers; layer++) {
+      for (let layer = 0; layer < WAVE_LAYERS.length; layer++) {
         gl.uniform1f(uniforms.uLayer, layer);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, renderer.ribbonCount);
       }
       gl.uniform1i(uniforms.uPass, 2);
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.dust);
       gl.vertexAttribPointer(renderer.position, 2, gl.FLOAT, false, 0, 0);
-      gl.drawArrays(gl.POINTS, 0, renderer.dustCount);
+      gl.drawArrays(gl.POINTS, 0, window.innerWidth < 760 ? Math.min(220, renderer.dustCount) : renderer.dustCount);
       gl.disable(gl.BLEND);
     };
 
@@ -231,10 +232,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
       const interval = last ? (now - last) / 1000 : 0;
       const dt = Math.min(interval, 0.05);
       last = now;
-      // Behind an application the waves are held still: the blurred backdrop
-      // is a still image, and the shader can rest.
-      const held = dimmedRef.current;
-      if (!reduced && !held) time += dt;
+      if (!reduced) time += dt;
       // Lower internal resolution on sustained slow frames; the CSS size stays unchanged.
       if (renderer && !reduced && interval > 0) {
         observedFrames++;
@@ -273,8 +271,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
         fallbackLastDraw = now;
       }
       const bootRunning = clock.current.stage === "playing" || clock.current.stage === "handoff";
-      const idle = held && !paletteMoving && !bootRunning;
-      if (!document.hidden && !idle && (bootRunning || (!reduced && clock.current.stage === "home") || paletteMoving)) {
+      if (!document.hidden && (bootRunning || (!reduced && clock.current.stage === "home") || paletteMoving)) {
         raf = requestAnimationFrame(loop);
       }
     };
@@ -351,7 +348,6 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
       canvas.removeEventListener("webglcontextlost", lost);
       canvas.removeEventListener("webglcontextrestored", restored);
       if (renderer && !renderer.gl.isContextLost()) {
-        renderer.gl.deleteBuffer(renderer.background);
         renderer.gl.deleteBuffer(renderer.ribbons);
         renderer.gl.deleteBuffer(renderer.dust);
         renderer.gl.deleteProgram(renderer.program);
@@ -360,9 +356,12 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
   }, [clock]);
 
   return (
+    <>
+    <div ref={backgroundRef} className="console-wallpaper-background" aria-hidden="true" />
     <div ref={wrapperRef} className="console-wallpaper" aria-hidden="true">
       <canvas ref={gpuRef} className="wallpaper-canvas" />
       <canvas ref={fallbackRef} className="wallpaper-canvas" style={{ visibility: "hidden" }} />
     </div>
+    </>
   );
 });

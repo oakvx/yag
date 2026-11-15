@@ -1,16 +1,20 @@
-import { useState } from "react";
-import { XmbList, type XmbListEntry } from "@/xmb/XmbList";
-import { announceThemeChange, selectedTheme, setSelectedTheme, THEME_NAMES, themeHex } from "@/xmb/palette";
+import { useEffect, useState } from "react";
+import type { XmbListEntry } from "@/xmb/XmbList";
+import { XmbScreen } from "@/components/XmbScreen";
+import {
+  announceThemeChange, previewTheme, selectedTheme, setSelectedTheme, THEME_NAMES, themeHex,
+} from "@/xmb/palette";
+import { unlockTrophy } from "@/xmb/trophies";
 
 /**
  * Theme Settings: the console's wallpaper atmosphere.
  *
  * The list is the console's own list: the original monthly rotation, then
  * the twelve atmospheres of palette.ts in month order, each with its own
- * swatch. Selecting an entry fixes it for the whole console — the wallpaper
- * blends to it at once and the choice is stored in this browser, the same
- * way the audio preference is. Choosing "Originale" returns to the automatic
- * monthly rotation.
+ * swatch. Moving the highlight previews an atmosphere on the wallpaper at
+ * once; confirming it fixes it for the whole console and stores the choice
+ * in this browser. Leaving the screen without confirming puts the previous
+ * atmosphere back. Choosing "Original" returns to the monthly rotation.
  */
 export function ThemeSettingsPage() {
   const [cursor, setCursor] = useState(() => {
@@ -19,56 +23,51 @@ export function ThemeSettingsPage() {
   });
   const [applied, setApplied] = useState<number | null>(() => selectedTheme());
 
+  // The preview ends with the screen: whatever was confirmed comes back.
+  useEffect(() => () => {
+    previewTheme(undefined);
+    announceThemeChange();
+  }, []);
+
   const month = new Date().getMonth();
   const entries: XmbListEntry[] = [
     {
       key: "original",
       swatch: [themeHex(month)[0], themeHex(month)[1]],
-      title: "Originale",
-      sub: "Rotazione mensile automatica",
-      meta: applied === null ? "Attiva" : null,
-      detail:
-        "Il wallpaper segue i dodici mesi dell'anno. Questa è l'atmosfera del mese in corso.",
-      ariaLabel: "Originale, rotazione mensile automatica",
+      title: "Original",
+      sub: "Automatic monthly rotation",
+      meta: applied === null ? "Active" : null,
+      detail: "The wallpaper follows the twelve months of the year. This is the atmosphere of the current month.",
+      ariaLabel: "Original, automatic monthly rotation",
     },
     ...THEME_NAMES.map((name, i) => ({
       key: `theme-${i}`,
       swatch: [themeHex(i)[0], themeHex(i)[1]] as [string, string],
       title: name,
-      sub: `Atmosfera ${i + 1} di 12`,
-      meta: applied === i ? "Attiva" : null,
-      detail: "Fissa questa atmosfera per tutti i mesi. La scelta resta salvata in questo browser.",
-      ariaLabel: `Atmosfera ${name}`,
+      sub: `Atmosphere ${i + 1} of 12`,
+      meta: applied === i ? "Active" : null,
+      detail: "Fix this atmosphere for every month. The choice is stored in this browser.",
+      ariaLabel: `Atmosphere ${name}`,
     })),
   ];
+
+  const preview = (index: number) => {
+    setCursor(index);
+    previewTheme(index === 0 ? null : index - 1);
+    announceThemeChange();
+  };
 
   const apply = (index: number) => {
     const target = index === 0 ? null : index - 1;
     setSelectedTheme(target);
     setApplied(target);
+    previewTheme(undefined);
     announceThemeChange();
+    unlockTrophy("atmosphere");
   };
 
-  return (
-    <div className="settings-screen" data-testid="theme-settings">
-      <p className="settings-lede">
-        L'atmosfera del wallpaper della console: dodici atmosfere, o la rotazione mensile
-        originale. La scelta viene salvata solo in questo browser, come le preferenze audio.
-      </p>
-      <XmbList
-        entries={entries}
-        selected={cursor}
-        onSelect={setCursor}
-        onHighlight={setCursor}
-        onActivate={apply}
-        compact
-        focusOnMount
-        className="theme-settings-list settings-list"
-        ariaLabel="Atmosfere del wallpaper"
-      />
-      <p className="settings-note">
-        Il wallpaper si mescola all'atmosfera scelta nell'istante in cui la si conferma.
-      </p>
-    </div>
-  );
+  return <XmbScreen subtitle="Twelve atmospheres or the original monthly rotation. Highlight to preview; select to keep."
+    testId="theme-settings" selected={cursor} onSelect={preview} onHighlight={(index) => {
+      previewTheme(index === 0 ? null : index - 1); announceThemeChange();
+    }} onActivate={apply} sections={[{ id: "atmospheres", label: "Wallpaper atmospheres", entries }]} />;
 }

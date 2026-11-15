@@ -1,0 +1,51 @@
+- generic [ref=e3]:
+  - time [ref=e7]: 15/11 2:02
+  - button "Notifications, 1 unread" [ref=e11] [cursor=pointer]
+  - status
+  - main "YAG cross media menu" [ref=e16]:
+    - heading "YAG Cross Media Menu" [level=1] [ref=e17]
+    - navigation "Categories" [ref=e18]:
+      - toolbar "Categories" [ref=e19]:
+        - button "Home" [ref=e20] [cursor=pointer]
+        - button "Network" [ref=e25] [cursor=pointer]
+        - button "Applications" [ref=e30] [cursor=pointer]
+        - button "System" [ref=e35] [cursor=pointer]
+        - button "Settings" [active] [pressed] [ref=e40] [cursor=pointer]
+        - button "Users" [ref=e45] [cursor=pointer]
+    - navigation "Settings destinations" [ref=e94]:
+      - list:
+        - listitem [ref=e95]:
+          - link "Deployment Build the binary and connect your upstream." [ref=e96] [cursor=pointer]:
+            - /url: /deploy
+            - generic [ref=e100]:
+              - generic [ref=e101]: Deployment
+              - generic: Build the binary and connect your upstream.
+        - listitem [ref=e102]:
+          - link "Configuration" [ref=e103] [cursor=pointer]:
+            - /url: /deploy?view=configuration
+        - listitem [ref=e109]:
+          - link "Operations" [ref=e110] [cursor=pointer]:
+            - /url: /deploy?view=operations
+        - listitem [ref=e116]:
+          - link "Quickstart" [ref=e117] [cursor=pointer]:
+            - /url: /deploy?view=quickstart
+        - listitem [ref=e123]:
+          - link "Theme Settings" [ref=e124] [cursor=pointer]:
+            - /url: /theme
+  - generic [ref=e65]:
+    - button "YAG / Yet Another Gateway" [ref=e66] [cursor=pointer]: YAG
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - text: Yet Another Gateway
+        - generic [ref=e69]: Experimental
+      - button "Audio settings. Press and hold to replay the boot sequence." [ref=e71] [cursor=pointer]:
+        - generic [ref=e75]: Audio
+  - generic [ref=e76]:
+    - generic [aria-hidden] [ref=e77]: ↔ ↕
+    - generic [ref=e78]: Navigate
+    - button "Options, triangle button" [ref=e79] [cursor=pointer]:
+      - generic [ref=e83]: Options
+    - button "Select" [ref=e84] [cursor=pointer]
+    - button "Back" [ref=e89] [cursor=pointer]
+  - paragraph [ref=e4]: "Settings: Deployment. Build the binary and connect your upstream. A guided, copyable runbook from the repository documentation."
+  - button "Search all destinations" [ref=e5] [cursor=pointer]

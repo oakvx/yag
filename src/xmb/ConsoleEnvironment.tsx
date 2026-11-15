@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useRouter } from "@/router/RouterContext";
 import { cn } from "@/utils/cn";
 import { CATEGORIES, itemTarget, locate, type XmbItem } from "./categories";
@@ -10,56 +10,45 @@ import { AudioControls } from "./AudioControls";
 import { useBrandFont } from "./brandFont";
 import { BootScreen, useBootSequence } from "./BootScreen";
 import { EasterEgg, useEasterEgg } from "./EasterEgg";
-import { CommitNotifications, NOTICE_COUNT, noticeHref } from "./CommitNotifications";
+import { CommitNotifications, type NoticeControls } from "./CommitNotifications";
 import { useGamepad } from "./useGamepad";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { TrophyToast } from "./TrophyToast";
+import { recordVisit, unlockTrophy } from "./trophies";
+import { useDpadNavigation, type DpadDirection } from "./useDpadNavigation";
+import { XmbStatusBar } from "./XmbStatusBar";
+import { useIdleChrome } from "./useIdleChrome";
+import { ScrollEdges } from "@/components/XmbScreen";
+import { ApplicationHints, sendApplicationInput } from "./ApplicationControls";
 
 /* Pointer sensitivity: one deliberate input = one step, as with the PS3 D-pad. */
 /** px the pointer must travel over the same category/item before hover selects it. */
 const HOVER_TRAVEL = 14;
 /** ms that must pass since the last selection change (≈ slide animation) before hover selects. */
 const HOVER_SETTLE = 230;
-/** px of accumulated wheel/trackpad delta needed for one step. */
-const WHEEL_STEP = 70;
-/** ms after a wheel step during which further events (inertia) are ignored. */
-const WHEEL_COOLDOWN = 260;
-/** ms without wheel events after which the accumulator is cleared. */
-const WHEEL_IDLE_RESET = 160;
-/** px per line for wheel events reported with deltaMode = DOM_DELTA_LINE. */
-const WHEEL_LINE_PX = 33;
 
-function ControllerGlyph({ kind }: { kind: "select" | "back" }) {
+function DirectionGlyph({ direction }: { direction: DpadDirection }) {
+  const rotation = { left: 0, up: 90, right: 180, down: 270 }[direction];
+  return <svg viewBox="0 0 24 24" aria-hidden="true" fill="none"><path d="m14.5 6-6 6 6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" transform={`rotate(${rotation} 12 12)`} /></svg>;
+}
+
+function ControllerGlyph({ kind }: { kind: "select" | "back" | "options" | "circle" }) {
   return (
     <svg viewBox="0 0 24 24" className="controller-glyph" aria-hidden="true" fill="none">
       <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.2" />
       {kind === "select" ? (
         <path d="M8.8 8.8l6.4 6.4m0-6.4-6.4 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      ) : kind === "circle" ? (
+        <circle cx="12" cy="12" r="4.3" stroke="currentColor" strokeWidth="1.3" />
+      ) : kind === "back" ? (
+        <path d="m14.6 7.6-4.8 4.4 4.8 4.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       ) : (
-        <circle cx="12" cy="12" r="4.1" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M12 8.4l3.7 6.4H8.3z" fill="currentColor" stroke="currentColor" strokeWidth="0.7" strokeLinejoin="round" />
       )}
     </svg>
   );
 }
 
-function ConsoleClock() {
-  const [date, setDate] = useState(() => new Date());
-  useEffect(() => {
-    const timer = window.setInterval(() => setDate(new Date()), 15000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const hour = date.getHours();
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return (
-    <div className="console-clock">
-      <time dateTime={date.toISOString()}>{day}/{month} {hour}:{min}</time>
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M12 6v6l4 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    </div>
-  );
-}
 
 export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const {
@@ -67,16 +56,47 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     navigate, paletteOpen, setPaletteOpen, route,
   } = useRouter();
   const [direction, setDirection] = useState<"right" | "left">("right");
+  const [screenTitle, setScreenTitle] = useState("");
+  useLayoutEffect(() => {
+    const title = (event: Event) => setScreenTitle((event as CustomEvent<string>).detail);
+    window.addEventListener("yag:screen-title", title);
+    return () => window.removeEventListener("yag:screen-title", title);
+  }, []);
   const boot = useBootSequence();
-  const [hoverAnchor, setHoverAnchor] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [easterOpen, setEasterOpen] = useState(false);
-  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [noticesOpen, setNoticesOpenState] = useState(false);
+  const noticeReturnFocus = useRef<HTMLElement | null>(null);
+  const setNoticesOpen = useCallback((open: boolean) => {
+    if (open && document.activeElement instanceof HTMLElement && !document.activeElement.closest("#console-notices")) {
+      noticeReturnFocus.current = document.activeElement;
+    }
+    setNoticesOpenState(open);
+  }, []);
   /** The information board's cursor, owned here so the gamepad can travel it. */
   const [noticeCursor, setNoticeCursor] = useState(0);
+  const noticeControls = useRef<NoticeControls>(null);
   /** The △ options panel on the selected destination. */
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [optionIndex, setOptionIndex] = useState(0);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  /** The confirmation dialog shown before leaving for an external site. */
+  const [dialog, setDialog] = useState<{ title: string; message: string; run: () => void } | null>(null);
+  const [dialogChoice, setDialogChoice] = useState<0 | 1>(0);
+  const dialogRef = useRef(dialog);
+  const dialogChoiceRef = useRef(dialogChoice);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
+  dialogRef.current = dialog;
+  dialogChoiceRef.current = dialogChoice;
+  useEffect(() => {
+    if (dialog !== null) return;
+    const opener = dialogReturnFocus.current;
+    if (!opener) return;
+    const target = opener.isConnected && !opener.closest("[inert]") ? opener
+      : surface === "app" ? appRef.current : itemRefs.current[cursorRef.current.item];
+    target?.focus({ preventScroll: true });
+    dialogReturnFocus.current = null;
+  }, [dialog, surface]);
   const brandFont = useBrandFont();
   const wordmarkTaps = useRef(0);
   const memory = useRef(CATEGORIES.map(() => 0));
@@ -86,10 +106,8 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<HTMLElement>(null);
   const focusAfterMove = useRef(false);
-  const wheel = useRef({ x: 0, y: 0, last: 0, lockedUntil: 0, lastMag: 0 });
   const lastChange = useRef(0);
   const hoverIntent = useRef({ key: "", travel: 0, timer: 0 });
-  const touch = useRef({ x: 0, y: 0, swipeAt: 0 });
   cursorRef.current = menuCursor;
   memory.current[menuCursor.cat] = menuCursor.item;
 
@@ -102,28 +120,43 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const isLaunching = journey === "launch" && phase === "cover";
   const isReturning = journey === "return" && phase === "reveal" && !isApp;
   const bootReady = boot.stage === "home";
+  const chrome = useIdleChrome(bootReady && !noticesOpen && !paletteOpen && !optionsOpen && !dialog && !easterOpen);
   const openEaster = useCallback(() => {
     if (!bootReady) return;
+    unlockTrophy("service");
     setEasterOpen(true);
     emitWave(menuCursor.cat, 0.9);
     blip("trophy");
   }, [bootReady, menuCursor.cat]);
   useEasterEgg(openEaster);
+  // Trophies earned by simply being here.
+  useEffect(() => { if (bootReady) unlockTrophy("boot"); }, [bootReady]);
+  useEffect(() => {
+    if (!bootReady || !isApp) return;
+    unlockTrophy("opener");
+    recordVisit(path);
+  }, [bootReady, isApp, path]);
+  useEffect(() => { if (noticesOpen) unlockTrophy("board"); }, [noticesOpen]);
+  useEffect(() => { if (paletteOpen && bootReady) unlockTrophy("jump"); }, [paletteOpen, bootReady]);
   const fileOrigin = useRef(menuCursor);
   const fileWasApp = useRef(isApp);
-  // The board is reached one step past the last category, as on the console;
-  // closing it hands the keyboard back to that category.
-  const noticesBackRef = useRef(false);
+  // The board temporarily owns the screen, whether opened from the menu or
+  // a document. Restore its opener without changing the route or scroll.
+  const noticesWereOpen = useRef(false);
   const handleNoticesBack = useCallback(() => {
-    noticesBackRef.current = true;
     setNoticesOpen(false);
-  }, []);
+  }, [setNoticesOpen]);
   useEffect(() => {
-    if (!noticesOpen && noticesBackRef.current) {
-      noticesBackRef.current = false;
-      categoryRefs.current[CATEGORIES.length - 1]?.focus({ preventScroll: true });
+    const wasOpen = noticesWereOpen.current;
+    noticesWereOpen.current = noticesOpen;
+    if (!noticesOpen && wasOpen) {
+      const opener = noticeReturnFocus.current;
+      const target = opener?.isConnected && !opener.closest("[inert]")
+        ? opener : isApp ? appRef.current : categoryRefs.current[CATEGORIES.length - 1];
+      target?.focus({ preventScroll: true });
+      noticeReturnFocus.current = null;
     }
-  }, [noticesOpen]);
+  }, [noticesOpen, isApp]);
 
   useEffect(() => { emitWave(menuCursor.cat, 0.22); }, [menuCursor.cat]);
   useEffect(() => { xmbAudio.setInApp(isApp); }, [isApp]);
@@ -140,7 +173,6 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     const current = cursorRef.current;
     const cat = Math.max(0, Math.min(CATEGORIES.length - 1, index));
     if (cat === current.cat) return;
-    setHoverAnchor(null);
     setDirection(cat > current.cat ? "right" : "left");
     const next = { cat, item: memory.current[cat] ?? 0 };
     cursorRef.current = next;
@@ -184,12 +216,27 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     }, wait);
   };
 
+  const askExternal = useCallback((href: string, label: string) => {
+    dialogReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialogChoice(0);
+    setDialog({
+      title: "Leave YAG?",
+      message: `${label} will open in a new browser tab.`,
+      run: () => { window.open(href, "_blank", "noopener,noreferrer"); },
+    });
+  }, []);
+  const resolveDialog = useCallback((confirm: boolean) => {
+    const current = dialogRef.current;
+    setDialog(null);
+    blip(confirm ? "select" : "back");
+    if (confirm) current?.run();
+  }, []);
   const activate = useCallback((item: XmbItem) => {
     blip("select");
     const target = itemTarget(item);
     if (target) navigate(target);
-    else if (item.href) window.open(item.href, "_blank", "noopener,noreferrer");
-  }, [navigate]);
+    else if (item.href) askExternal(item.href, item.sub);
+  }, [askExternal, navigate]);
 
   const back = useCallback(() => { blip("back"); returnToMenu(); }, [returnToMenu]);
 
@@ -225,6 +272,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         ok = false;
       }
     }
+    if (ok) unlockTrophy("courier");
     setCopyState(ok ? "done" : "failed");
     window.clearTimeout(copyTimer.current);
     copyTimer.current = window.setTimeout(() => setCopyState("idle"), 2000);
@@ -233,9 +281,23 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     setOptionsOpen((open) => {
       setOptionIndex(0);
       blip(open ? "back" : "select");
+      if (!open) unlockTrophy("options");
       return !open;
     });
   }, []);
+
+  const closeOptions = useCallback(() => {
+    setOptionsOpen(false);
+    setOptionIndex(0);
+    blip("back");
+  }, []);
+  const optionsWereOpen = useRef(false);
+  useEffect(() => {
+    if (optionsWereOpen.current && !optionsOpen && !isApp && !noticesOpen && !dialog) {
+      itemRefs.current[cursorRef.current.item]?.focus({ preventScroll: true });
+    }
+    optionsWereOpen.current = optionsOpen;
+  }, [optionsOpen, isApp, noticesOpen, dialog]);
 
   useEffect(() => {
     if (!optionsOpen) return;
@@ -248,56 +310,58 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!optionsOpen) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (dialog || !["Escape", "Backspace", "t", "T"].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
       e.preventDefault();
       e.stopPropagation();
-      setOptionsOpen(false);
-      setOptionIndex(0);
-      blip("back");
+      closeOptions();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [optionsOpen]);
+  }, [optionsOpen, closeOptions, dialog]);
 
-  // The panel follows the destination: moving the cross takes it with it.
+  // Navigating into a page dismisses the destination's options.
   useEffect(() => {
     setOptionsOpen(false);
     setOptionIndex(0);
-  }, [menuCursor]);
+  }, [surface, path]);
 
   const optionActions = [
     {
       id: "open",
-      label: "Apri",
+      label: "Open",
       icon: "monitor" as const,
       run: () => {
         blip("select");
         const target = itemTarget(selected);
         if (target) navigate(target);
-        else if (selected.href) window.open(selected.href, "_blank", "noopener,noreferrer");
+        else if (selected.href) askExternal(selected.href, selected.sub);
       },
     },
     {
       id: "tab",
-      label: "Apri in una nuova scheda",
+      label: "Open in a new tab",
       icon: "link" as const,
-      run: () => window.open(selected.href ?? shareUrl(selected), "_blank", "noopener,noreferrer"),
+      run: () => {
+        if (selected.href) askExternal(selected.href, selected.sub);
+        else window.open(shareUrl(selected), "_blank", "noopener,noreferrer");
+      },
     },
     {
       id: "copy",
-      label: "Copia link",
+      label: "Copy link",
       icon: "download" as const,
       run: () => { void copyLink(selected); },
     },
     {
       id: "info",
-      label: "Informazioni",
+      label: "Information",
       icon: "information" as const,
       run: () => { /* the row itself shows the destination's description */ },
     },
   ];
 
   const onOptionsKey = (e: KeyboardEvent<HTMLUListElement>) => {
+    e.stopPropagation();
     const move = (delta: number) => {
       e.preventDefault();
       const next = Math.max(0, Math.min(optionActions.length - 1, optionIndex + delta));
@@ -307,6 +371,14 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     };
     if (e.key === "ArrowDown") move(1);
     else if (e.key === "ArrowUp") move(-1);
+    else if (e.key === "Home" || e.key === "End") move(e.key === "Home" ? -optionActions.length : optionActions.length);
+    else if (e.key === "Tab") {
+      e.preventDefault();
+      const next = (optionIndex + (e.shiftKey ? -1 : 1) + optionActions.length) % optionActions.length;
+      setOptionIndex(next);
+      optionRefs.current[next]?.focus({ preventScroll: true });
+    }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); closeOptions(); }
     else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       const action = optionActions[optionIndex];
@@ -317,18 +389,44 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     }
   };
 
+  const stepMenu = (axis: DpadDirection) => {
+    resetHover();
+    const c = cursorRef.current;
+    if (axis === "up" || axis === "down") selectItem(c.item + (axis === "down" ? 1 : -1));
+    else if (axis === "right" && c.cat === CATEGORIES.length - 1) { setNoticesOpen(true); blip("category"); }
+    else selectCategory(c.cat + (axis === "right" ? 1 : -1));
+  };
+  const gestures = useDpadNavigation(bootReady && !isApp && !noticesOpen && !optionsOpen && !paletteOpen && !dialog && phase !== "cover", stepMenu);
+
   // The controller: the same verbs as the keyboard, one input = one step.
   useGamepad({
+    onInput: chrome.wake,
     enabled: () => bootReady && !paletteOpen && !easterOpen,
-    onStep: (axis) => {
-      if (phase === "cover") return;
-      if (noticesOpen) {
-        if (axis === "up") setNoticeCursor((value) => Math.max(0, value - 1));
-        else if (axis === "down") setNoticeCursor((value) => Math.min(NOTICE_COUNT - 1, value + 1));
-        else if (axis === "left") handleNoticesBack();
+    onStep: (axis, source) => {
+      unlockTrophy("handson");
+      if (dialogRef.current) {
+        if (axis === "left" || axis === "right") { setDialogChoice((c) => (c === 0 ? 1 : 0)); blip("move"); }
         return;
       }
-      if (isApp) return;
+      if (phase === "cover") return;
+      if (noticesOpen) {
+        noticeControls.current?.step(axis);
+        return;
+      }
+      if (optionsOpen) {
+        if (axis === "left") closeOptions();
+        else if (axis === "up" || axis === "down") {
+          const next = Math.max(0, Math.min(optionActions.length - 1, optionIndex + (axis === "down" ? 1 : -1)));
+          setOptionIndex(next);
+          optionRefs.current[next]?.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (isApp) {
+        sendApplicationInput(appRef.current, source === "shoulder" ? axis === "left" ? "PageUp" : "PageDown"
+          : axis === "up" ? "ArrowUp" : axis === "down" ? "ArrowDown" : axis === "left" ? "ArrowLeft" : "ArrowRight");
+        return;
+      }
       const c = cursorRef.current;
       if (axis === "up") selectItem(c.item - 1);
       else if (axis === "down") selectItem(c.item + 1);
@@ -344,23 +442,33 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       } else if (axis === "left") selectCategory(c.cat - 1);
     },
     onSelect: () => {
+      unlockTrophy("handson");
+      if (dialogRef.current) { resolveDialog(dialogChoiceRef.current === 0); return; }
       if (phase === "cover") return;
       if (noticesOpen) {
-        window.open(noticeHref(noticeCursor), "_blank", "noopener,noreferrer");
+        noticeControls.current?.activate(noticeCursor);
         return;
       }
-      if (isApp) return;
+      if (optionsOpen) {
+        const action = optionActions[optionIndex];
+        if (action.id !== "info") { setOptionsOpen(false); action.run(); }
+        return;
+      }
+      if (isApp) { sendApplicationInput(appRef.current, "Enter"); return; }
       const c = cursorRef.current;
       activate(CATEGORIES[c.cat].items[c.item]);
     },
     onBack: () => {
+      if (dialogRef.current) { resolveDialog(false); return; }
+      if (optionsOpen) { closeOptions(); return; }
       if (noticesOpen) {
-        handleNoticesBack();
+        noticeControls.current?.back();
         return;
       }
-      if (isApp) back();
+      if (isApp && sendApplicationInput(appRef.current, "Escape") !== false) back();
     },
     onOptions: () => {
+      if (dialogRef.current) return;
       if (noticesOpen || isApp || phase === "cover") return;
       toggleOptions();
     },
@@ -376,7 +484,6 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!bootReady) return;
     if (surface === "menu") {
-      setHoverAnchor(null);
       const timer = window.setTimeout(() => menuRef.current?.focus({ preventScroll: true }), 30);
       return () => window.clearTimeout(timer);
     }
@@ -386,14 +493,16 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
-      if (!bootReady || paletteOpen || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || !bootReady || paletteOpen || dialogRef.current || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       const editing = el && (el.matches("input, textarea, select") || el.isContentEditable);
       if (editing && e.key !== "Escape") return;
+      if (noticesOpen || optionsOpen || easterOpen) return;
       if (isApp) {
         if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); back(); }
         return;
       }
+      if (e.defaultPrevented) return;
       if (phase === "cover") return;
       if (el?.closest("[data-console-action]") && (e.key === "Enter" || e.key === " ")) return;
       if (el?.closest("[data-console-action]") && e.key.startsWith("Arrow")) menuRef.current?.focus();
@@ -410,7 +519,6 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         case "ArrowRight":
         case "ArrowLeft": {
           e.preventDefault();
-          setHoverAnchor(null);
           const step = e.key === "ArrowRight" ? 1 : -1;
           if (step > 0 && c.cat === CATEGORIES.length - 1 && !noticesOpen) {
             // One step past the last category is the information board, as on the console.
@@ -422,16 +530,26 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           }
           focusAfterMove.current = el?.hasAttribute("data-console-item") ?? false;
           selectCategory(c.cat + step);
+          if (el?.hasAttribute("data-console-category")) categoryRefs.current[cursorRef.current.cat]?.focus({ preventScroll: true });
           break;
         }
         case "ArrowDown":
         case "ArrowUp":
           e.preventDefault();
-          setHoverAnchor(null);
           focusAfterMove.current = el?.hasAttribute("data-console-item") ?? false;
           selectItem(c.item + (e.key === "ArrowDown" ? 1 : -1));
+          itemRefs.current[cursorRef.current.item]?.focus({ preventScroll: true });
+          break;
+        case "Home":
+        case "End":
+          e.preventDefault();
+          resetHover();
+          focusAfterMove.current = el?.hasAttribute("data-console-item") ?? false;
+          selectItem(e.key === "Home" ? 0 : CATEGORIES[c.cat].items.length - 1);
+          itemRefs.current[cursorRef.current.item]?.focus({ preventScroll: true });
           break;
         case "Enter":
+        case " ":
           e.preventDefault();
           activate(CATEGORIES[c.cat].items[c.item]);
           break;
@@ -444,11 +562,11 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [activate, back, bootReady, isApp, noticesOpen, paletteOpen, phase, resetHover, selectCategory, selectItem, toggleOptions]);
+  }, [activate, back, bootReady, isApp, noticesOpen, optionsOpen, easterOpen, paletteOpen, phase, resetHover, selectCategory, selectItem, toggleOptions]);
 
   const onItemClick = (e: MouseEvent<HTMLAnchorElement>, item: XmbItem) => {
-    if (performance.now() - touch.current.swipeAt < 350) { e.preventDefault(); return; }
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0 || item.href) return;
+    if (gestures.suppressClick()) { e.preventDefault(); return; }
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
     activate(item);
   };
@@ -459,15 +577,14 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     quickstart: "Quickstart", contributing: "Contributing",
   };
   const appTitle = viewNames[query.view] ?? route.label;
-  const listAnchor = hoverAnchor ?? menuCursor.item;
-  const selectionDelta = menuCursor.item - listAnchor;
-  const selectionOffset = selectionDelta < 0 ? selectionDelta - 1.35 : selectionDelta;
+  const listAnchor = menuCursor.item;
 
   return (
-    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"}>
-      <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
-      <ConsoleClock />
-      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} cursor={noticeCursor} onCursorChange={setNoticeCursor} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
+    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"} data-hints-idle={chrome.idle} data-input-mode={chrome.keyboardMode ? "keyboard" : "pointer"}>
+      <RibbonWallpaper clock={boot.clock} dimmed={isApp && !noticesOpen} />
+      <XmbStatusBar unreadCount={unreadCount} noticesOpen={noticesOpen} infoDisabled={paletteOpen || optionsOpen || dialog !== null || !bootReady} searchDisabled={noticesOpen || optionsOpen || paletteOpen || !bootReady || dialog !== null}
+        onInfo={() => { blip(noticesOpen ? "back" : "select"); setNoticesOpen(!noticesOpen); }} onSearch={() => setPaletteOpen(true)} />
+      <CommitNotifications ref={noticeControls} onUnreadCountChange={setUnreadCount} active={!isApp} open={noticesOpen} booted={bootReady} cursor={noticeCursor} onCursorChange={setNoticeCursor} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
       {/* The menu itself is the home screen. No application is mounted underneath. */}
@@ -479,49 +596,14 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         data-returning={isReturning}
         aria-label="YAG cross media menu"
         role="main"
-        aria-hidden={isApp || !bootReady || undefined}
-        inert={isApp || paletteOpen || !bootReady || noticesOpen || optionsOpen}
+        aria-hidden={isApp || noticesOpen || !bootReady || undefined}
+        inert={isApp || paletteOpen || !bootReady || noticesOpen || optionsOpen || dialog !== null}
         tabIndex={-1}
-        onWheel={(e) => {
-          if (isApp) return;
-          const now = performance.now();
-          const w = wheel.current;
-          if (now - w.last > WHEEL_IDLE_RESET) { w.x = 0; w.y = 0; }
-          w.last = now;
-          const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? window.innerHeight : 1;
-          const mag = Math.max(Math.abs(e.deltaX), Math.abs(e.deltaY)) * unit;
-          if (now < w.lockedUntil) {
-            // Decaying deltas are the inertia tail of the gesture that just stepped: keep ignoring them.
-            // Equal-sized wheel notches are not decaying, so they still step once per cooldown.
-            if (mag < w.lastMag * 0.98 || mag < 4) w.lockedUntil = now + WHEEL_COOLDOWN;
-            w.lastMag = mag;
-            return;
-          }
-          w.lastMag = mag;
-          w.x += e.deltaX * unit;
-          w.y += e.deltaY * unit;
-          const horizontal = Math.abs(w.x) > Math.abs(w.y);
-          const amount = horizontal ? w.x : w.y;
-          if (Math.abs(amount) < WHEEL_STEP) return;
-          w.x = 0; w.y = 0; w.lockedUntil = now + WHEEL_COOLDOWN;
-          setHoverAnchor(null);
-          resetHover();
-          const c = cursorRef.current;
-          if (horizontal) selectCategory(c.cat + Math.sign(amount));
-          else selectItem(c.item + Math.sign(amount));
-        }}
-        onTouchStart={(e) => {
-          touch.current.x = e.touches[0].clientX;
-          touch.current.y = e.touches[0].clientY;
-        }}
-        onTouchEnd={(e) => {
-          const dx = e.changedTouches[0].clientX - touch.current.x;
-          const dy = e.changedTouches[0].clientY - touch.current.y;
-          if (Math.max(Math.abs(dx), Math.abs(dy)) < 44) return;
-          touch.current.swipeAt = performance.now();
-          if (Math.abs(dx) > Math.abs(dy)) selectCategory(menuCursor.cat - Math.sign(dx));
-          else selectItem(menuCursor.item - Math.sign(dy));
-        }}
+        onWheel={gestures.onWheel}
+        onTouchStart={gestures.onTouchStart}
+        onTouchEnd={gestures.onTouchEnd}
+        onTouchCancel={gestures.onTouchCancel}
+        onClickCapture={(event) => { if (gestures.suppressClick()) { event.preventDefault(); event.stopPropagation(); } }}
       >
         <h1 className="sr-only">YAG Cross Media Menu</h1>
 
@@ -539,6 +621,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                   aria-pressed={on}
                   aria-label={cat.label}
                   tabIndex={on ? 0 : -1}
+                  onPointerDown={(e) => { if (e.pointerType === "mouse" && e.button === 0) e.preventDefault(); }}
                   onMouseMove={(e) => hoverMove(e, `cat-${i}`, () => selectCategory(i))}
                   onFocus={() => selectCategory(i)}
                   onClick={() => selectCategory(i)}
@@ -556,32 +639,30 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           aria-label={`${category.label} destinations`}
           className={cn("console-destinations", direction === "right" ? "from-right" : "from-left")}
           style={{
-            "--selection-offset": selectionOffset,
-            // The list may never reach the footer: a category with many
-            // entries earns a smaller step, fitted above it.
-            "--item-step": `min(var(--item-step-base), calc((84dvh - var(--selected-y)) / ${Math.max(category.items.length - 1, 1)}))`,
+            // The first following entry has the console's larger breathing
+            // space; the remaining rows share a smaller, footer-fitted step.
+            "--item-step": `min(var(--item-step-base), max(44px, calc((84dvh - var(--selected-y) - var(--following-lead)) / ${Math.max(category.items.length - 1, 1)})))`,
           } as CSSProperties}
-          onMouseLeave={() => { setHoverAnchor(null); resetHover(); }}
+          onMouseLeave={resetHover}
         >
-          <div className="console-selection-light" aria-hidden="true" />
           <ul>
             {category.items.map((item, i) => {
               const delta = i - listAnchor;
-              // Previous entries move above the crossbar; selection remains at the intersection.
-              const offset = delta < 0 ? delta - 1.35 : delta;
+              // Previous entries clear the crossbar using its actual geometry;
+              // the footer-fitted row step must not determine that clearance.
               const on = i === menuCursor.item;
               // Size and brightness interpolate with the distance from the
               // selection, the way the hardware's list does: the selected
               // label stands at full size, the entries around it step down
               // and dim, the ones above the crossbar a little more.
               const distance = Math.abs(i - menuCursor.item);
-              const scale = distance === 0 ? 1 : Math.max(0.46, 0.92 * Math.exp(-0.33 * distance));
-              const opacity = (distance === 0 ? 1 : Math.max(0.42, 0.8 * Math.exp(-0.3 * distance))) * (delta < 0 ? 0.85 : 1);
+              const scale = distance === 0 ? 1 : Math.max(0.6, 0.8 - distance * 0.035);
+              const opacity = distance === 0 ? 1 : Math.max(0.5, 0.65 - distance * 0.025);
               return (
                 <li
                   key={item.id}
-                  className={cn("console-destination-position", on && "is-selected", delta < 0 && "is-above")}
-                  style={{ "--item-offset": offset, "--item-scale": scale, opacity } as CSSProperties}
+                  className={cn("console-destination-position", on && "is-selected", delta < 0 && "is-above", delta === -1 && "is-previous")}
+                  style={{ "--item-offset": delta, "--item-lift": delta < 0 ? "var(--previous-lift)" : "0px", "--item-lead": delta > 0 ? "var(--following-lead)" : "0px", "--item-scale": scale, opacity } as CSSProperties}
                 >
                   <a
                     ref={(node) => { itemRefs.current[i] = node; }}
@@ -592,16 +673,17 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                     aria-current={on ? "true" : undefined}
                     data-console-item={item.id}
                     tabIndex={on ? 0 : -1}
-                    onMouseMove={(e) => hoverMove(e, `${category.id}-${i}`, () => {
-                      // Keep mouse targets stationary; the highlight travels to the hovered row.
-                      setHoverAnchor((anchor) => anchor ?? cursorRef.current.item);
-                      selectItem(i);
-                    })}
+                    onPointerDown={(e) => { if (e.pointerType === "mouse" && e.button === 0) e.preventDefault(); }}
                     onFocus={() => selectItem(i)}
-                    onClick={(e) => onItemClick(e, item)}
+                    onClick={(e) => {
+                      if (gestures.suppressClick()) { e.preventDefault(); return; }
+                      selectItem(i);
+                      onItemClick(e, item);
+                    }}
                     onContextMenu={(e) => {
                       // Right-click on the destination: the △ panel.
                       e.preventDefault();
+                      selectItem(i);
                       toggleOptions();
                     }}
                   >
@@ -610,6 +692,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                         description beneath it, smaller and without a box. */}
                     <span className="console-destination-body">
                       <span className="console-item-label">{item.label}{item.href && <span className="console-external">↗</span>}</span>
+                      <span className="console-item-subtitle">{item.code}</span>
                       {on && <span className="console-description">{item.sub}</span>}
                     </span>
                   </a>
@@ -623,11 +706,16 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       {/* The △ options panel: a small list anchored at the right edge, on
           the selected destination only. */}
       {!isApp && (
+        <>
+        {optionsOpen && <button type="button" className="console-options-dismiss" aria-label="Close options" onClick={closeOptions} tabIndex={-1} />}
         <div
+          role="dialog"
+          aria-modal={optionsOpen || undefined}
+          aria-label={`Options for ${selected.label}`}
           className="console-options"
           data-open={optionsOpen}
           aria-hidden={!optionsOpen || undefined}
-          inert={!optionsOpen}
+          inert={!optionsOpen || dialog !== null}
         >
           <ul aria-label={`Options, ${selected.label}`} onKeyDown={onOptionsKey}>
             {optionActions.map((action, i) => (
@@ -649,7 +737,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                   <span className="console-option-icon" aria-hidden="true"><ConsoleIcon name={action.icon} /></span>
                   <span className="console-option-label">
                     {action.id === "copy" && copyState !== "idle"
-                      ? (copyState === "done" ? "Copiato" : "Copia non riuscita")
+                      ? (copyState === "done" ? "Copied" : "Copy failed")
                       : action.label}
                   </span>
                 </button>
@@ -660,6 +748,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
             <p className="console-options-detail">{selected.detail}</p>
           )}
         </div>
+        </>
       )}
 
       {isApp && (
@@ -667,30 +756,33 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           className={cn("console-application", phase === "cover" && "is-leaving")}
           data-testid="console-application"
           aria-label={appTitle}
-          aria-hidden={!bootReady || undefined}
-          inert={paletteOpen || !bootReady}
+          aria-hidden={noticesOpen || !bootReady || undefined}
+          inert={noticesOpen || paletteOpen || !bootReady || dialog !== null}
+          onClickCapture={(event) => {
+            const link = (event.target as Element).closest<HTMLAnchorElement>("a[target='_blank']");
+            if (!link) return;
+            event.preventDefault(); event.stopPropagation();
+            askExternal(link.href, link.textContent?.replace("↗", "").trim() || "This link");
+          }}
         >
           <header className="console-application-header">
-            <button type="button" onClick={back} className="console-back" aria-label="Back to XMB menu">
-              <span aria-hidden="true">‹</span> Back
-            </button>
             <ConsoleIcon name={appItem.icon} className="console-app-icon" />
             <div>
-              <p className="console-app-category">{appCategory.label}</p>
-              <h2>{appTitle}</h2>
+              <p className="console-app-category">{appCategory.label} › {appTitle}</p>
+              <h1>{screenTitle || appTitle}</h1>
             </div>
           </header>
-          <main ref={appRef} id="main-content" tabIndex={-1} className="console-application-content code-scroll @container">
-            <div key={path} className="console-app-content-enter">{children}</div>
-            <div className="console-app-colophon">YAG is experimental software. Repository references are authoritative.</div>
-          </main>
-          <button type="button" className="console-app-back-hint" onClick={back}>
-            <ControllerGlyph kind="back" /> Back to menu <kbd>Esc</kbd>
-          </button>
+          <div className="console-app-body">
+            <main ref={appRef} id="main-content" tabIndex={-1} className="console-application-content @container">
+              <div key={path} className="console-app-content-enter">{children}</div>
+            </main>
+            <ScrollEdges targetRef={appRef} />
+          </div>
+          <ApplicationHints rootRef={appRef} onBack={() => { if (sendApplicationInput(appRef.current, "Escape") !== false) back(); }} backGlyph={<ControllerGlyph kind="circle" />} selectGlyph={<ControllerGlyph kind="select" />} navigateGlyph={<span aria-hidden="true">↕</span>} />
         </section>
       )}
 
-      <div className="console-identity" data-hidden={isApp} inert={isApp || paletteOpen || !bootReady}>
+      <div className="console-identity" data-hidden={isApp} inert={isApp || noticesOpen || paletteOpen || !bootReady || dialog !== null}>
         <button
           type="button"
           className="console-wordmark"
@@ -712,18 +804,23 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       </div>
 
       {!isApp && (
-        <div className="console-help" data-console-action inert={paletteOpen || !bootReady || noticesOpen}>
+        <>
+        <nav className="console-mobile-nav" aria-label="Menu navigation" data-console-action inert={paletteOpen || !bootReady || noticesOpen || optionsOpen || dialog !== null}>
+          <button type="button" aria-label="Previous category" disabled={menuCursor.cat === 0} onClick={() => stepMenu("left")}><DirectionGlyph direction="left" /></button>
+          <button type="button" aria-label="Previous destination" disabled={menuCursor.item === 0} onClick={() => stepMenu("up")}><DirectionGlyph direction="up" /></button>
+          <button type="button" aria-label="Next destination" disabled={menuCursor.item === category.items.length - 1} onClick={() => stepMenu("down")}><DirectionGlyph direction="down" /></button>
+          <button type="button" aria-label={menuCursor.cat === CATEGORIES.length - 1 ? "Open notifications" : "Next category"} onClick={() => stepMenu("right")}><DirectionGlyph direction="right" /></button>
+        </nav>
+        <div className="console-help" data-console-action inert={paletteOpen || !bootReady || noticesOpen || dialog !== null}>
           <span className="console-help-arrows" aria-hidden="true">↔ ↕</span><span className="console-help-label">Navigate</span>
           <button type="button" onClick={toggleOptions} aria-label="Options, triangle button">
-            <svg viewBox="0 0 24 24" className="controller-glyph" aria-hidden="true" fill="none">
-              <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.2" />
-              <path d="M12 8.4l3.7 6.4H8.3z" fill="currentColor" />
-            </svg>
+            <ControllerGlyph kind="options" />
             <span className="console-help-label">Options</span>
           </button>
-          <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /><span className="console-help-label">Select</span></button>
-          <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /><span className="console-help-label">Back</span></button>
+          <button type="button" aria-label="Open selected destination" disabled={optionsOpen} onClick={() => activate(selected)}><ControllerGlyph kind="select" /><span className="console-help-label">Select</span></button>
+          <button type="button" aria-label="Back to categories" disabled={optionsOpen} onClick={() => categoryRefs.current[menuCursor.cat]?.focus({ preventScroll: true })}><ControllerGlyph kind="back" /><span className="console-help-label">Back</span></button>
         </div>
+        </>
       )}
 
       <p className="sr-only" aria-live="polite">
@@ -732,8 +829,20 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           : `${category.label}: ${selected.label}. ${selected.sub} ${selected.detail}`}
       </p>
       {paletteOpen && bootReady && <QuickJump />}
+      <ConfirmDialog
+        open={dialog !== null}
+        title={dialog?.title ?? ""}
+        message={dialog?.message ?? ""}
+        choice={dialogChoice}
+        onChoice={setDialogChoice}
+        onConfirm={() => resolveDialog(true)}
+        onCancel={() => resolveDialog(false)}
+      />
+      <TrophyToast enabled={bootReady} />
+      <div className="console-throbber" data-active={phase !== "idle" && bootReady} aria-hidden="true">
+        {Array.from({ length: 12 }, (_, i) => <span key={i} style={{ "--i": i } as CSSProperties} />)}
+      </div>
       <EasterEgg open={easterOpen} onClose={() => setEasterOpen(false)} />
-      <button className="sr-only focus:not-sr-only" type="button" inert={paletteOpen || !bootReady} onClick={() => setPaletteOpen(true)}>Search all destinations</button>
     </div>
   );
 }

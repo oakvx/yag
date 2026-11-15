@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SOURCE_EXCERPTS } from "@/data/repository";
 import { useRouter } from "@/router/RouterContext";
-import { cn } from "@/utils/cn";
 import { CATEGORIES, itemTarget } from "./categories";
 import { blip } from "./audio";
 
@@ -21,6 +20,10 @@ export function QuickJump() {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const results = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    results.current?.querySelector<HTMLElement>(`[data-highlighted="true"]`)?.scrollIntoView({ block: "nearest" });
+  }, [sel]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -70,9 +73,15 @@ export function QuickJump() {
       role="dialog"
       aria-modal="true"
       aria-label="Jump to a destination"
-      className="xmb-fade-in fixed inset-0 z-[100] flex items-start justify-center bg-[rgba(2,8,28,0.7)] px-4 pt-[14vh]"
+      className="console-quick-jump xmb-fade-in fixed inset-0 z-[100] flex items-start justify-center bg-[rgba(2,8,28,0.7)] px-4 pt-[14vh]"
       onClick={() => setPaletteOpen(false)}
       onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          setPaletteOpen(false);
+          return;
+        }
         if (e.key !== "Tab") return;
         const all = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('input, button:not([disabled]), a[href]'));
         const first = all[0];
@@ -81,7 +90,7 @@ export function QuickJump() {
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }}
     >
-      <div className="xmb-glass w-full max-w-xl overflow-hidden rounded-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="xmb-glass w-full max-w-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
           <span className="font-mono text-[11px] text-amber">jump&gt;</span>
           <input
@@ -101,7 +110,13 @@ export function QuickJump() {
               } else if (e.key === "Enter") {
                 e.preventDefault();
                 go(list[sel]);
+              } else if (e.key === "Home" && e.ctrlKey) {
+                e.preventDefault(); setSel(0);
+              } else if (e.key === "End" && e.ctrlKey) {
+                e.preventDefault(); setSel(Math.max(0, list.length - 1));
               } else if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
                 setPaletteOpen(false);
               }
             }}
@@ -109,22 +124,20 @@ export function QuickJump() {
             aria-label="Search destinations"
             className="min-w-0 flex-1 bg-transparent font-mono text-[13px] text-paper placeholder:text-faint focus:outline-none"
           />
-          <kbd className="rounded border border-white/15 px-1.5 py-0.5 font-mono text-[10px] text-faint">esc</kbd>
+          <button type="button" className="console-quick-close" aria-label="Close search" onClick={() => setPaletteOpen(false)}>×</button>
         </div>
-        <ul className="code-scroll max-h-[50vh] overflow-y-auto">
+        <ul ref={results} className="code-scroll max-h-[50vh] overflow-y-auto" aria-label="Search results">
           {list.length === 0 && <li className="px-4 py-6 font-mono text-[12px] text-faint">Nothing matches.</li>}
           {list.map((e, i) => (
             <li key={e.id}>
               <button
                 type="button"
+                data-highlighted={i === sel}
                 onMouseEnter={() => setSel(i)}
                 onClick={() => go(e)}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                  i === sel ? "bg-amber/[0.14]" : "hover:bg-white/[0.04]",
-                )}
+                className="console-quick-result flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/15 font-mono text-[10px] text-muted">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-[10px] text-muted">
                   {e.code}
                 </span>
                 <span className="min-w-0 flex-1">

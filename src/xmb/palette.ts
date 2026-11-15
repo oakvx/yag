@@ -4,45 +4,59 @@ const rgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(5, 7), 16) / 255,
 ];
 
-/** Twelve restrained, blue-led monthly atmospheres: top, bottom, silk, and ambient light. */
+/** Twelve atmospheres, one per month: top, bottom, silk, and ambient light. */
 const MONTHS = [
-  ["#315b95", "#071338", "#b6d8fa", "#3d82c9"],
-  ["#3d5f94", "#0b153c", "#c5dcf7", "#567dc1"],
-  ["#376d91", "#0b1b40", "#c4e5ed", "#5495b5"],
-  ["#327d91", "#08233e", "#bee8ec", "#4ba8ba"],
-  ["#327e91", "#06233c", "#c7e9df", "#53aba7"],
-  ["#2a789e", "#071f3d", "#bce5f1", "#46a3c8"],
-  ["#2d79a2", "#071d43", "#bfdef6", "#459bca"],
-  ["#355f9c", "#091840", "#c4d6f5", "#527dc4"],
-  ["#465e91", "#111939", "#d0d5ed", "#7378b6"],
-  ["#3e557c", "#111a37", "#d0d9e9", "#7283a8"],
-  ["#356d90", "#0a1b3c", "#c4e1ee", "#548dab"],
-  ["#3f6793", "#0b1838", "#e0ebf5", "#779ec1"],
+  ["#408fee", "#0a1738", "#e4efff", "#8fb6e6"],
+  ["#8843ed", "#170d3a", "#eadfff", "#9a7ad6"],
+  ["#1ee7b0", "#07302f", "#ddfff3", "#57c7a6"],
+  ["#ef3999", "#2a1030", "#ffe4f1", "#e08ab6"],
+  ["#79ec24", "#12300f", "#efffdb", "#94cf5a"],
+  ["#1dc2e7", "#052a44", "#dff8ff", "#3cc0e0"],
+  ["#f4ac32", "#3a1608", "#fff0d1", "#f2b24a"],
+  ["#ef6543", "#35101a", "#ffe9df", "#f08c70"],
+  ["#ef9142", "#2a1208", "#ffe9db", "#d08a58"],
+  ["#ed322b", "#a41422", "#ffe1d9", "#fa6c59"],
+  ["#3a76ed", "#0e1426", "#e6edff", "#7b8fb5"],
+  ["#e93d6b", "#240814", "#ffe1e9", "#d84a72"],
 ] as const;
 
 /** The twelve atmospheres by name, in month order, as the theme list reads them. */
 export const THEME_NAMES = [
-  "Zaffiro", "Indaco", "Azzurro", "Laguna", "Marea", "Oceano",
-  "Cielo", "Sera", "Nebbia", "Penombra", "Acqua", "Alba",
+  "Ice", "Violet", "Mint", "Blossom", "Meadow", "Lagoon",
+  "Amber", "Coral", "Copper", "Ember", "Slate", "Crimson",
 ] as const;
 
 /** localStorage key; the shape version is embedded so old states are ignored. */
 export const THEME_STORAGE_KEY = "yag-xmb-theme-v1";
+/** Ember is the initial console appearance; Original still follows the month. */
+const INITIAL_THEME = 9;
 
 function readStoredTheme(): number | null {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    if (raw === null || raw === "original") return null;
+    if (raw === null) return INITIAL_THEME;
+    if (raw === "original") return null;
     const month = Number(raw);
-    return Number.isInteger(month) && month >= 0 && month < 12 ? month : null;
+    return Number.isInteger(month) && month >= 0 && month < 12 ? month : INITIAL_THEME;
   } catch {
-    return null;
+    return INITIAL_THEME;
   }
 }
 
 /** The operator's fixed atmosphere, or null for the original monthly rotation. */
 export function selectedTheme(): number | null {
   return readStoredTheme();
+}
+
+/**
+ * A theme being previewed while its entry is highlighted, before it is
+ * confirmed: undefined = none, null = the original rotation, a number = a month.
+ * Never stored; the Theme Settings screen clears it when it closes.
+ */
+let previewed: number | null | undefined;
+
+export function previewTheme(month: number | null | undefined): void {
+  previewed = month;
 }
 
 /** Fix one atmosphere by month index, or restore the original rotation with null. */
@@ -65,7 +79,7 @@ export function themeHex(month: number): readonly [string, string, string, strin
 }
 
 export function monthlyPalette(date = new Date()): Float32Array {
-  const month = readStoredTheme() ?? date.getMonth();
+  const month = (previewed !== undefined ? previewed : readStoredTheme()) ?? date.getMonth();
   return new Float32Array(MONTHS[month].flatMap(rgb));
 }
 

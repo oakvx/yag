@@ -1,0 +1,89 @@
+- generic [ref=e3]:
+  - time [ref=e7]: 15/11 1:59
+  - button "Close notifications" [expanded] [ref=e271] [cursor=pointer]
+  - status
+  - complementary "Commit notifications" [ref=e272]:
+    - 'region "release: enable reviewed one-click YAG prerelease via GitHub Actions (#48)" [ref=e452]':
+      - button "Back to notifications" [ref=e453] [cursor=pointer]
+      - generic "Commit details" [ref=e457]:
+        - 'heading "release: enable reviewed one-click YAG prerelease via GitHub Actions (#48)" [active] [level=2] [ref=e458]'
+        - generic [ref=e459]:
+          - generic [ref=e460]:
+            - term [ref=e461]: Author
+            - definition [ref=e462]: Gabriele Lucia
+          - generic [ref=e463]:
+            - term [ref=e464]: Date
+            - definition [ref=e465]:
+              - time [ref=e466]: 15/11/2026, 01:45:10
+          - generic [ref=e467]:
+            - term [ref=e468]: Commit
+            - definition [ref=e469]: 5c5f914495e1a861bad1d8a6c208087ea9ce84ca
+          - generic [ref=e470]:
+            - term [ref=e471]: Type
+            - definition [ref=e472]: other
+        - paragraph [ref=e473]: Add manually dispatched RC tag creation with immutable safe SemVer, latest exact-main CI/security checks and explicit tagged packaging dispatch. Support signed/checked prerelease publishing on tag workflow_dispatch while keeping normal main packaging artifact-only. Full CI, CodeQL/security and all platform release packaging passed.
+        - heading "Changed files (8)" [level=3] [ref=e474]
+        - group [ref=e475]:
+          - generic ".github/workflows/ci.yml +2 / −0" [ref=e476] [cursor=pointer]:
+            - text: .github/workflows/ci.yml
+            - generic [ref=e477]: +2 / −0
+        - group [ref=e478]:
+          - generic ".github/workflows/prepare-rc.yml +90 / −0" [ref=e479] [cursor=pointer]:
+            - text: .github/workflows/prepare-rc.yml
+            - generic [ref=e480]: +90 / −0
+        - group [ref=e481]:
+          - generic ".github/workflows/release.yml +5 / −5" [ref=e482] [cursor=pointer]:
+            - text: .github/workflows/release.yml
+            - generic [ref=e483]: +5 / −5
+        - group [ref=e484]:
+          - generic "docs/deployment/releases.md +11 / −0" [ref=e485] [cursor=pointer]:
+            - text: docs/deployment/releases.md
+            - generic [ref=e486]: +11 / −0
+        - group [ref=e487]:
+          - generic "docs/operations/first-release.md +15 / −6" [ref=e488] [cursor=pointer]:
+            - text: docs/operations/first-release.md
+            - generic [ref=e489]: +15 / −6
+        - group [ref=e490]:
+          - generic "docs/operations/github-actions.md +8 / −0" [ref=e491] [cursor=pointer]:
+            - text: docs/operations/github-actions.md
+            - generic [ref=e492]: +8 / −0
+        - group [ref=e493]:
+          - generic "scripts/release_candidate.py +67 / −0" [ref=e494] [cursor=pointer]:
+            - text: scripts/release_candidate.py
+            - generic [ref=e495]: +67 / −0
+        - group [ref=e496]:
+          - generic "tests/release_candidate_test.py +87 / −0" [ref=e497] [cursor=pointer]:
+            - text: tests/release_candidate_test.py
+            - generic [ref=e498]: +87 / −0
+        - link "View on GitHub (new tab)" [ref=e499] [cursor=pointer]:
+          - /url: https://github.com/oakvx/yag/commit/5c5f914495e1a861bad1d8a6c208087ea9ce84ca
+  - main "YAG cross media menu":
+    - heading "YAG Cross Media Menu" [level=1]
+    - navigation "Categories":
+      - toolbar "Categories":
+        - button "Home" [pressed]
+        - button "Network"
+        - button "Applications"
+        - button "System"
+        - button "Settings"
+        - button "Users"
+    - navigation "Home destinations":
+      - list:
+        - listitem:
+          - link "Gateway Overview One local endpoint. Your inference servers.":
+            - /url: /?app=overview
+            - generic:
+              - generic: Gateway Overview
+              - generic: One local endpoint. Your inference servers.
+        - listitem:
+          - link "System Information":
+            - /url: /?view=system
+  - generic [ref=e242]:
+    - button "YAG / Yet Another Gateway" [ref=e243] [cursor=pointer]: YAG
+    - button "Audio settings. Press and hold to replay the boot sequence." [ref=e248] [cursor=pointer]
+  - generic [ref=e253]:
+    - button "Options, triangle button" [ref=e256] [cursor=pointer]
+    - button [ref=e500] [cursor=pointer]
+    - button [ref=e501] [cursor=pointer]
+  - paragraph [ref=e4]: "Home: Gateway Overview. One local endpoint. Your inference servers. Explore YAG, an experimental self-hosted inference gateway."
+  - button "Search all destinations" [ref=e5] [cursor=pointer]

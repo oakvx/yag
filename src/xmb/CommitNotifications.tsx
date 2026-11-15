@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { COMMIT_NOTICES, type CommitNotice } from "@/data/commits.generated";
 import { REPO_LINKS } from "@/data/repository";
 import { ConsoleIcon } from "./ConsoleIcons";
 import { blip } from "./audio";
 import { XmbList, type XmbListEntry } from "./XmbList";
 import type { ItemIcon } from "./categories";
+import { CommitDetail } from "./CommitDetail";
+import { useDpadNavigation } from "./useDpadNavigation";
 
 /**
  * The console's Information Board.
@@ -145,12 +147,13 @@ const VIEWS: NoticeView[] = [...COMMIT_NOTICES.map(viewFor), {
 
 const VIEW_BY_SHA: Map<string, NoticeView> = new Map(COMMIT_NOTICES.map((commit, i) => [commit.sha, VIEWS[i]]));
 
-/** The URL of a board entry, for the gamepad's ✕: open in a new tab. */
-export function noticeHref(index: number): string {
-  return VIEWS[Math.max(0, Math.min(VIEWS.length - 1, index))].href;
-}
-
 export const NOTICE_COUNT = VIEWS.length;
+
+export interface NoticeControls {
+  activate(index: number): void;
+  back(): void;
+  step(axis: "up" | "down" | "left" | "right"): void;
+}
 
 /** First visit: everything is read except the newest commit — the one that
     produced this build, the only one the console announces on arrival. */
@@ -198,6 +201,8 @@ export function CommitNotifications({
   onCursorChange,
   onOpenChange,
   onBack,
+  ref,
+  onUnreadCountChange,
 }: {
   /** The menu is on screen; a section that opens takes the board with it. */
   active: boolean;
@@ -213,6 +218,8 @@ export function CommitNotifications({
   onOpenChange: (open: boolean) => void;
   /** Close the board and hand the keyboard back to the last category. */
   onBack: () => void;
+  ref?: Ref<NoticeControls>;
+  onUnreadCountChange: (count: number) => void;
 }) {
   const wasActive = useRef(active);
   const boot = useRef<{ unread: Set<string>; pending: NoticeView[] } | null>(null);
@@ -221,6 +228,51 @@ export function CommitNotifications({
   const [queue, setQueue] = useState<NoticeView[]>([]);
   const [toast, setToast] = useState<ToastState | null>(null);
   const now = new Date();
+  const [detail, setDetail] = useState<CommitNotice | null>(null);
+  const detailScroll = useRef<HTMLDivElement>(null);
+  const gestures = useDpadNavigation(open && !detail, (axis) => {
+    if (axis === "left") { back(); return; }
+    if (axis !== "up" && axis !== "down") return;
+    onCursorChange(Math.max(0, Math.min(NOTICE_COUNT - 1, cursor + (axis === "down" ? 1 : -1))));
+    blip("move");
+  });
+  useEffect(() => { if (!open) setDetail(null); }, [open]);
+
+  const back = () => {
+    blip("back");
+    if (detail) setDetail(null);
+    else onBack();
+  };
+  const activate = (index: number) => {
+    const view = VIEWS[index];
+    if (!view) return;
+    if (view.history) { window.open(view.href, "_blank", "noopener,noreferrer"); return; }
+    const commit = COMMIT_NOTICES.find((item) => item.sha === view.sha);
+    if (!commit) return;
+    onCursorChange(index);
+    markReadRef.current(view);
+    blip("select");
+    setDetail(commit);
+  };
+  useImperativeHandle(ref, () => ({
+    activate: (index) => {
+      if (detail) {
+        const focused = document.activeElement;
+        if (focused instanceof HTMLElement && focused.closest(".console-commit")) focused.click();
+      } else activate(index);
+    },
+    back,
+    step: (axis) => {
+      if (axis === "left") { back(); return; }
+      if (axis !== "up" && axis !== "down") return;
+      if (detail) {
+        const targets = Array.from(detailScroll.current?.querySelectorAll<HTMLElement>("summary, a") ?? []);
+        const at = targets.indexOf(document.activeElement as HTMLElement);
+        const next = targets[Math.max(0, Math.min(targets.length - 1, at + (axis === "down" ? 1 : -1)))];
+        next?.focus();
+      } else onCursorChange(Math.max(0, Math.min(NOTICE_COUNT - 1, cursor + (axis === "down" ? 1 : -1))));
+    },
+  }));
 
   // Opening a section takes the board with it; it can be summoned again.
   useEffect(() => {
@@ -268,6 +320,9 @@ export function CommitNotifications({
   };
   const markReadRef = useRef(markRead);
   markReadRef.current = markRead;
+  useEffect(() => {
+    if (open && VIEWS[cursor]) markReadRef.current(VIEWS[cursor]);
+  }, [open, cursor]);
 
   // Back while the board is open: Esc, Backspace or the left arrow plays the
   // same slide backwards and hands the keyboard to the last category,
@@ -275,21 +330,19 @@ export function CommitNotifications({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") || e.key === "/") {
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape" || e.key === "Backspace" || e.key === "ArrowLeft") {
         e.preventDefault();
-        blip("back");
-        onBack();
+        e.stopPropagation();
+        back();
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, onBack]);
-
-  const toggle = () => {
-    blip(open ? "back" : "select");
-    onOpenChange(!open);
-  };
+  }, [open, onBack, detail]);
 
   const close = () => {
     blip("back");
@@ -318,33 +371,16 @@ export function CommitNotifications({
         </>
       ),
     fresh: !view.history && unread.has(view.sha),
-    href: view.href,
     ariaLabel: view.history
       ? "Full history on GitHub, opens in a new tab."
       : `${view.title}. ${view.author}, ${view.short}, ${stamp(view.date, now)}.${!view.history && unread.has(view.sha) ? " Unread." : ""}`,
   }));
 
   const unreadCount = unread.size;
+  useEffect(() => { onUnreadCountChange(unreadCount); }, [unreadCount, onUnreadCountChange]);
 
   return (
     <>
-      <button
-        type="button"
-        className="console-notice-toggle"
-        data-console-action
-        data-open={open}
-        aria-expanded={open}
-        aria-controls="console-notices"
-        aria-label={open ? "Close notifications" : unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications, all read"}
-        onClick={toggle}
-      >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="12" cy="12" r="9.1" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M12 10.6v5.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          <circle cx="12" cy="7.4" r="1.05" fill="currentColor" />
-        </svg>
-        <span className="console-notice-dot" data-on={unreadCount > 0} aria-hidden="true" />
-      </button>
 
       {/* New-commit toasts: queued, one at a time, never focusable. */}
       <div className="console-toast-region" aria-live="polite" role="status">
@@ -367,14 +403,21 @@ export function CommitNotifications({
         aria-hidden={!open}
         aria-live="polite"
         inert={!open}
+        data-detail={!!detail}
+        onWheel={gestures.onWheel}
+        onTouchStart={gestures.onTouchStart}
+        onTouchEnd={gestures.onTouchEnd}
+        onTouchCancel={gestures.onTouchCancel}
+        onClickCapture={(event) => { if (gestures.suppressClick()) { event.preventDefault(); event.stopPropagation(); } }}
       >
         {/* The section mark: the large icon sits level with the selected
             entry, with the back chevron beside it, as on the hardware. */}
+        {detail ? <CommitDetail commit={detail} onBack={back} scrollRef={detailScroll} /> : <>
         <div className="console-notice-rail">
           <button
             type="button"
             className="console-notice-back"
-            aria-label="Back to menu"
+            aria-label="Close notifications"
             tabIndex={open ? 0 : -1}
             onClick={close}
           >
@@ -389,15 +432,18 @@ export function CommitNotifications({
           entries={entries}
           selected={cursor}
           onSelect={onCursorChange}
-          onActivate={(index) => {
-            // ✕ on the hardware opens the commit; here it opens in a new tab.
-            window.open(VIEWS[index].href, "_blank", "noopener,noreferrer");
-          }}
+          onActivate={activate}
           onHighlight={(index) => { if (open) markReadRef.current(VIEWS[index]); }}
           focusOnMount={open}
           className="console-notice-list"
           ariaLabel="Commit notifications"
         />
+        <div className="console-notice-controls" aria-label="Notification navigation">
+          <button type="button" aria-label="Previous notification" disabled={cursor === 0} onClick={() => onCursorChange(Math.max(0, cursor - 1))}>↑</button>
+          <button type="button" aria-label="Open selected notification" onClick={() => activate(cursor)}>Open</button>
+          <button type="button" aria-label="Next notification" disabled={cursor === VIEWS.length - 1} onClick={() => onCursorChange(Math.min(VIEWS.length - 1, cursor + 1))}>↓</button>
+        </div>
+        </>}
       </aside>
     </>
   );

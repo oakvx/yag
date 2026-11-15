@@ -1,34 +1,23 @@
-YAG optional media slots (all files remain external to dist/index.html)
+YAG optional original media
 
-BOOT WORDMARK (font has priority when present; SVG is the fallback)
-  public/brand/boot-logo.svg           exact white vector wordmark
-  public/brand/boot-subtitle.svg       optional subtitle artwork
-  public/fonts/PS4-Logo.otf            font used to typeset "YAG"
-  public/fonts/YAG-Boot-Display.woff2  display font used to typeset "YAG"
-  public/fonts/YAG-Boot-Display.ttf    TrueType alternative
+The interface uses a neutral sans-serif stack and project-drawn glyphs.
+Boot, navigation, trophy and ambient sounds use original procedural synthesis.
+Optional replacements must be original or appropriately licensed for deployment.
 
-XMB TYPEFACE
-  public/fonts/SCE-PS3-Rodin-LATIN.woff2
-  public/fonts/SCE-PS3-Rodin-LATIN.ttf
+Wordmark:
+  public/brand/boot-logo.svg
+  public/brand/boot-subtitle.svg
+  public/fonts/YAG-Boot-Display.woff2
+  public/fonts/YAG-Boot-Display.ttf
 
-XMB ICONS (optional; the built-in vector set is used when a slot is empty)
-  public/icons/xmb/home.svg          category and item glyphs, named after the
-  public/icons/xmb/gateway.svg        icon key (home, explore, protocols,
-                                     engineering, operations, project, gateway,
-                                     information, connections, topology, trace,
-                                     protocol, routing, source, shield, status,
-                                     download, configuration, monitor,
-                                     quickstart, user, link, contribute, profile)
+Audio:
+  public/audio/yag-boot.mp3
+  public/audio/yag-home.mp3 (or .ogg)
+  public/audio/yag-cursor.mp3
+  public/audio/yag-select.mp3
+  public/audio/yag-cancel.mp3
+  public/audio/yag-trophy.mp3
 
-AUDIO (all optional; missing files are skipped without console errors)
-  public/audio/start.mp3         boot chime / startup tone
-  public/audio/cursor.mp3        cursor navigation tick
-  public/audio/select.mp3        selection
-  public/audio/cancel.mp3        back / cancel
-  public/audio/trophy.mp3        easter egg
-
-Use only media you have the rights to deploy. The referenced PlayStation 3
-system sounds and PS4 logo typeface are copyrighted third-party assets; this
-repository intentionally ships neither. The XMB icon artwork shipped in
-src/xmb/xmbIcons.ts comes from an MIT-licensed community pack and is credited
-in third_party/xmb-icons.
+Legacy proprietary font and sample filenames are neither loaded by the app nor
+copied into production builds. Existing user files are left intact on disk.
+The built-in icon set is credited in third_party/xmb-icons.

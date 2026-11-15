@@ -9,13 +9,13 @@ export const AUDIO_STORAGE_KEY = STORAGE_KEY;
 
 const DEFAULTS: AudioPreferences = { music: true, effects: true, master: 0.6 };
 const SLOTS: Record<"boot" | "home" | SoundEffect, string[]> = {
-  boot: ["audio/start.mp3"],
-  home: ["xmb-home.mp3", "xmb-home.ogg"],
-  move: ["audio/cursor.mp3"],
-  select: ["audio/select.mp3"],
-  back: ["audio/cancel.mp3"],
-  category: ["audio/cursor.mp3"],
-  trophy: ["audio/trophy.mp3"],
+  boot: ["audio/yag-boot.mp3"],
+  home: ["audio/yag-home.mp3", "audio/yag-home.ogg"],
+  move: ["audio/yag-cursor.mp3"],
+  select: ["audio/yag-select.mp3"],
+  back: ["audio/yag-cancel.mp3"],
+  category: ["audio/yag-cursor.mp3"],
+  trophy: ["audio/yag-trophy.mp3"],
 };
 
 function readPreferences(): AudioPreferences {
@@ -61,6 +61,8 @@ class XmbAudio {
   private media: Partial<Record<"boot" | "home", HTMLAudioElement>> = {};
   private mediaLevel: Record<"boot" | "home", number> = { boot: 0, home: 0 };
   private mediaFrames: Partial<Record<"boot" | "home", number>> = {};
+  /** The procedural home pad, used while no home track is supplied in public/. */
+  private synthHome: { stop: () => void } | null = null;
 
   getPreferences = () => this.preferences;
   subscribe = (listener: () => void) => {
@@ -135,7 +137,128 @@ class XmbAudio {
 
   blip(kind: SoundEffect) {
     if (!this.preferences.effects || !this.unlocked || document.hidden) return;
-    this.playFileEffect(kind);
+    // A supplied file wins; without one the console voices itself.
+    if (hasOptionalAsset(SLOTS[kind][0])) this.playFileEffect(kind);
+    else this.synthEffect(kind);
+  }
+
+  /** Short, soft, glassy tones: original synthesis, no samples. */
+  private synthEffect(kind: SoundEffect) {
+    const ctx = this.context;
+    const out = this.effects;
+    if (!ctx || !out || ctx.state === "closed") return;
+    const t0 = ctx.currentTime;
+    const tone = (freq: number, at: number, dur: number, peak: number, type: OscillatorType = "sine", glideTo?: number) => {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, t0 + at);
+      if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + at + dur);
+      env.gain.setValueAtTime(0.0001, t0 + at);
+      env.gain.linearRampToValueAtTime(peak, t0 + at + 0.004);
+      env.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur);
+      osc.connect(env);
+      env.connect(out);
+      osc.start(t0 + at);
+      osc.stop(t0 + at + dur + 0.02);
+      osc.onended = () => { osc.disconnect(); env.disconnect(); };
+    };
+    switch (kind) {
+      case "move":
+        tone(1480, 0, 0.09, 0.13, "sine", 1320);
+        tone(2960, 0, 0.05, 0.03);
+        break;
+      case "category":
+        tone(988, 0, 0.13, 0.11, "sine", 1100);
+        tone(1480, 0.05, 0.2, 0.07);
+        break;
+      case "select":
+        tone(659, 0, 0.16, 0.14);
+        tone(988, 0.07, 0.22, 0.12);
+        tone(1318, 0.12, 0.32, 0.08);
+        break;
+      case "back":
+        tone(988, 0, 0.12, 0.12, "sine", 740);
+        tone(659, 0.07, 0.22, 0.1);
+        break;
+      case "trophy":
+        [784, 988, 1175, 1568].forEach((freq, i) => tone(freq, i * 0.09, 0.5, 0.1, "triangle"));
+        tone(3136, 0.27, 0.6, 0.03);
+        break;
+    }
+  }
+
+  /** A slow, warm pad under the menu: five sines, a low-pass, a drifting level. */
+  private startSynthHome(fade: number) {
+    const ctx = this.context;
+    const out = this.homeGain;
+    if (!ctx || !out || this.synthHome) return;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900;
+    const level = ctx.createGain();
+    level.gain.value = 0.55;
+    filter.connect(level);
+    level.connect(out);
+    const lfo = ctx.createOscillator();
+    const lfoDepth = ctx.createGain();
+    lfo.frequency.value = 0.07;
+    lfoDepth.gain.value = 0.18;
+    lfo.connect(lfoDepth);
+    lfoDepth.connect(level.gain);
+    lfo.start();
+    const voices = [146.83, 220, 293.66, 369.99, 440].map((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      osc.detune.value = (i - 2) * 4;
+      gain.gain.value = 0.07 - i * 0.008;
+      osc.connect(gain);
+      gain.connect(filter);
+      osc.start();
+      return { osc, gain };
+    });
+    this.synthHome = {
+      stop: () => {
+        const at = ctx.currentTime + 0.1;
+        for (const { osc, gain } of voices) { try { osc.stop(at); } catch { /* already stopped */ } gain.disconnect(); }
+        try { lfo.stop(at); } catch { /* already stopped */ }
+        lfoDepth.disconnect();
+        filter.disconnect();
+        level.disconnect();
+      },
+    };
+    ramp(out, 1, fade, ctx);
+  }
+
+  private stopSynthHome() {
+    this.synthHome?.stop();
+    this.synthHome = null;
+  }
+
+  /** A rising shimmer that settles on a chord while the wave forms. */
+  private synthBoot() {
+    const ctx = this.context;
+    const out = this.bootGain;
+    if (!ctx || !out) return;
+    const t0 = ctx.currentTime;
+    ramp(out, 1, 0.25, ctx);
+    [[293.66, 0.07], [440, 0.05], [587.33, 0.04], [739.99, 0.03]].forEach(([freq, peak], i) => {
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq * 0.5, t0);
+      osc.frequency.exponentialRampToValueAtTime(freq, t0 + 2.4);
+      env.gain.setValueAtTime(0.0001, t0 + i * 0.25);
+      env.gain.linearRampToValueAtTime(peak, t0 + 1.8 + i * 0.25);
+      env.gain.linearRampToValueAtTime(0.0001, t0 + 5.2);
+      osc.connect(env);
+      env.connect(out);
+      osc.start(t0);
+      osc.stop(t0 + 5.3);
+      osc.onended = () => { osc.disconnect(); env.disconnect(); };
+    });
   }
 
   startBoot() {
@@ -145,17 +268,22 @@ class XmbAudio {
     this.bootSource?.stop();
     this.homeSource?.stop();
     this.bootSource = this.homeSource = null;
+    this.stopSynthHome();
     this.stopFileMusic();
     this.bootStartedAt = this.context?.currentTime ?? 0;
     ramp(this.homeGain, 0, 0.02, this.context);
     if (window.location.protocol === "file:") {
-      if (this.preferences.music) this.playFileMusic("boot", 0.25);
+      if (this.preferences.music) {
+        if (hasOptionalAsset(SLOTS.boot[0])) this.playFileMusic("boot", 0.25);
+        else this.synthBoot();
+      }
       return;
     }
     void this.load("home");
     void this.load("boot").then((buffer) => {
       if (this.phase !== "boot" || generation !== this.bootGeneration) return;
-      if (!buffer || !this.context || !this.bootGain) return;
+      if (!this.context || !this.bootGain) return;
+      if (!buffer) { this.synthBoot(); return; }
       const offset = Math.max(0, this.context.currentTime - this.bootStartedAt);
       if (offset >= buffer.duration) return;
       const source = this.context.createBufferSource();
@@ -183,13 +311,15 @@ class XmbAudio {
   private ensureHome(fade = 0.8) {
     if (this.phase !== "home" || !this.unlocked) return;
     if (window.location.protocol === "file:") {
+      if (!SLOTS.home.some(hasOptionalAsset)) { this.startSynthHome(fade); return; }
       if (!this.media.home) this.playFileMusic("home", fade);
       else this.fadeMedia("home", 1, fade);
       return;
     }
-    if (this.homeSource) { ramp(this.homeGain, 1, fade, this.context); return; }
+    if (this.homeSource || this.synthHome) { ramp(this.homeGain, 1, fade, this.context); return; }
     void this.load("home").then((buffer) => {
-      if (this.phase !== "home" || this.homeSource || !buffer || !this.context || !this.homeGain) return;
+      if (this.phase !== "home" || this.homeSource || this.synthHome || !this.context || !this.homeGain) return;
+      if (!buffer) { this.startSynthHome(fade); return; }
       const source = this.context.createBufferSource();
       source.buffer = buffer;
       source.loop = true;

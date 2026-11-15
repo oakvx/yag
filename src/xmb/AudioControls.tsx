@@ -7,6 +7,12 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const timer = useRef(0);
   const held = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) panel.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -14,7 +20,7 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); }
+      if (event.key === "Escape" || event.key === "Backspace") { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus({ preventScroll: true }); }
     };
     window.addEventListener("pointerdown", dismiss);
     window.addEventListener("keydown", key, true);
@@ -32,6 +38,7 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
   return (
     <div ref={root} className="console-audio" data-console-action>
       <button
+        ref={trigger}
         type="button"
         className="console-sound"
         aria-expanded={open}
@@ -58,7 +65,18 @@ export function AudioControls({ onReplay }: { onReplay: () => void }) {
         <span>Audio</span>
       </button>
       {open && (
-        <div id="console-audio-panel" className="console-audio-panel" role="dialog" aria-label="Audio settings">
+        <div ref={panel} id="console-audio-panel" className="console-audio-panel" role="dialog" aria-label="Audio settings" onKeyDown={(event) => {
+          event.stopPropagation();
+          const targets = Array.from(panel.current?.querySelectorAll<HTMLElement>("button, input") ?? []);
+          const at = targets.indexOf(document.activeElement as HTMLElement);
+          if (event.key === "Tab") {
+            event.preventDefault();
+            targets[(at + (event.shiftKey ? -1 : 1) + targets.length) % targets.length]?.focus();
+          } else if (!(event.target instanceof HTMLInputElement) && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+            event.preventDefault();
+            targets[(at + (event.key === "ArrowDown" ? 1 : -1) + targets.length) % targets.length]?.focus();
+          }
+        }}>
           <p className="console-audio-title">Audio settings</p>
           <button type="button" aria-pressed={prefs.music} onClick={() => xmbAudio.setPreferences({ music: !prefs.music })}>
             Music <span>{prefs.music ? "On" : "Off"}</span>

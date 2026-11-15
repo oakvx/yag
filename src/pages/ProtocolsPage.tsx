@@ -1,9 +1,7 @@
-import { useState } from "react";
+import { XmbScreen, XmbSectionLabel } from "@/components/XmbScreen";
+import { XmbRow } from "@/components/XmbRow";
 import { CodeBlock } from "@/components/CodeBlock";
-import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
 import { BLOB_URL } from "@/data/repository";
-import { RouteLink } from "@/router/RouterContext";
-import { cn } from "@/utils/cn";
 
 type WireCaseId = "chat-pass" | "resp-tools" | "resp-reject" | "anth-tools" | "anth-reject";
 
@@ -327,178 +325,7 @@ Content-Type: application/json
   },
 ];
 
-const ACTION_COLOR: Record<FieldRule["action"], string> = {
-  PASSTHROUGH: "text-moss bg-moss/10",
-  TRANSLATED: "text-amber bg-amber/10",
-  FLATTENED: "text-paper bg-amber/15",
-  "NO-OP": "text-muted",
-  REJECTED: "text-rust bg-rust/10",
-};
-
-export function ProtocolsPage() {
-  const [caseId, setCaseId] = useState<WireCaseId>("resp-tools");
-  const [selectedRuleIdx, setSelectedRuleIdx] = useState(0);
-
-  const activeCase = WIRE_CASES.find((w) => w.id === caseId) ?? WIRE_CASES[0];
-
-  return (
-    <div>
-      <PageMasthead
-        path="/protocols"
-        eyebrow="Chapter 04 · Protocol Analyzer & Wire Interchange"
-        title={
-          <>
-            One transparent proxy. <em>Two strictly bounded translators.</em>
-          </>
-        }
-        lede="YAG does not claim universal protocol equivalence. Chat Completions is forwarded verbatim; OpenAI Responses and Anthropic Messages are narrow, stateless-to-Chat adapters that reject unsupported shapes explicitly rather than dropping fields silently."
-        meta={[
-          { k: "Chat /v1", v: "Transparent passthrough", tone: "moss" },
-          { k: "Responses", v: "Stateless subset → Chat (mock-tested)", tone: "amber" },
-          { k: "Messages", v: "Bounded subset → Chat (mock-tested)", tone: "amber" },
-        ]}
-      />
-
-      {/* SIGNATURE INTERACTIVE C: PROTOCOL TRANSFORMATION WORKBENCH */}
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="">
-            {/* Case Selector Tabs */}
-            <div className="px-4 py-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
-                <span className="label text-amber">Interactive Wire Transformation Inspector</span>
-                <StatusBadge tone={activeCase.qualification}>{activeCase.qualificationLabel}</StatusBadge>
-              </div>
-              <div role="tablist" aria-label="Protocol wire transformation cases" className="flex flex-wrap gap-1.5">
-                {WIRE_CASES.map((wc) => {
-                  const selected = wc.id === caseId;
-                  return (
-                    <button
-                      key={wc.id}
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => {
-                        setCaseId(wc.id);
-                        setSelectedRuleIdx(0);
-                      }}
-                      className={cn(
-                        "px-3 py-1.5 font-xmb text-[12px] transition-colors cursor-pointer",
-                        selected
-                          ? "bg-amber/15 text-paper"
-                          : "text-faint hover:text-paper",
-                      )}
-                    >
-                      {wc.title}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3-Column Wire Transformation Stage */}
-            <div className="grid @3xl:grid-cols-12">
-              {/* Column 1: Client Wire Payload */}
-              <div className="p-4 @lg:p-5 @3xl:col-span-5">
-                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
-                  <span className="text-paper">01 · Client Wire Input</span>
-                  <span className="text-faint">{activeCase.protocol}</span>
-                </div>
-                <CodeBlock code={activeCase.clientInput} lang="json" showLineNumbers={false} />
-              </div>
-
-              {/* Column 2: Adapter Mapping Rules */}
-              <div className="p-4 @lg:p-5 @3xl:col-span-3">
-                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
-                  <span className="text-amber">02 · Adapter Rules</span>
-                  <a
-                    href={activeCase.sourceHref}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-faint hover:text-amber"
-                  >
-                    source ↗
-                  </a>
-                </div>
-
-                <ul className="space-y-2">
-                  {activeCase.rules.map((rule, idx) => {
-                    const isFocused = idx === selectedRuleIdx;
-                    return (
-                      <li key={rule.field}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedRuleIdx(idx)}
-                          className={cn(
-                            "w-full p-2.5 text-left transition-colors cursor-pointer",
-                            isFocused ? "bg-amber/[0.07]" : "hover:bg-white/[0.04]",
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-xmb text-[11px] text-paper">{rule.field}</span>
-                            <span
-                              className={cn(
-                                "shrink-0 px-1.5 py-0.5 font-xmb text-[11px]",
-                                ACTION_COLOR[rule.action],
-                              )}
-                            >
-                              {rule.action}
-                            </span>
-                          </div>
-                          <p className="mt-1.5 text-[12px] leading-relaxed text-muted">{rule.detail}</p>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-
-              {/* Column 3: Resulting Upstream Payload / Rejection */}
-              <div className="p-4 @lg:p-5 @3xl:col-span-4">
-                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
-                  <span className="text-paper">03 · {activeCase.outputLabel}</span>
-                </div>
-                <CodeBlock code={activeCase.upstreamOutput} lang="json" showLineNumbers={false} />
-
-                <div className="mt-4 pt-3">
-                  <p className="label text-faint">Return Stream / Event Frame Order</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {activeCase.sseSequence.map((ev) => (
-                      <span
-                        key={ev}
-                        className="px-2 py-1 font-xmb text-[11.5px] text-muted"
-                      >
-                        {ev}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-
-      {/* COMPLETE CAPABILITY & REJECTION LEDGER */}
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="grid gap-10 @3xl:grid-cols-12">
-            <div className="@3xl:col-span-7">
-              <p className="label text-amber">Gateway Endpoint Matrix (from server.c)</p>
-              <h2 className="display mt-2 text-2xl text-paper @lg:text-3xl">
-                Every HTTP path implemented by the host.
-              </h2>
-
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse text-left font-xmb text-[11.5px]">
-                  <thead>
-                    <tr className="text-[11.5px] text-faint">
-                      <th className="px-3.5 py-2.5">Method & Path</th>
-                      <th className="px-3.5 py-2.5">Mode</th>
-                      <th className="px-3.5 py-2.5">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="">
-                    {[
+const ENDPOINTS = [
                       ["GET /health", "Public", "Liveness probe; no key required"],
                       ["GET /v1/models", "Discovery", "Merges default upstream /models + static route IDs"],
                       ["GET /v1/models/{id}", "Discovery", "Exact ID from merged inventory; 404 if unknown"],
@@ -510,62 +337,25 @@ export function ProtocolsPage() {
                       ["POST /v1/responses", "Translated", "Stateless subset → Chat; 4 MiB / 64-item bound"],
                       ["POST /v1/messages", "Translated", "Bounded subset → Chat; Bearer or X-API-Key"],
                       ["POST /v1/messages/count_tokens", "501 Refused", "Explicitly returns 501 Not Implemented"],
-                    ].map(([endpoint, mode, note]) => (
-                      <tr key={endpoint} className="hover:bg-paper/[0.02]">
-                        <td className="px-3.5 py-2.5 text-paper">{endpoint}</td>
-                        <td
-                          className={cn(
-                            "px-3.5 py-2.5",
-                            mode === "Translated"
-                              ? "text-amber"
-                              : mode.includes("501")
-                                ? "text-rust"
-                                : "text-moss",
-                          )}
-                        >
-                          {mode}
-                        </td>
-                        <td className="px-3.5 py-2.5 font-sans text-[12.5px] text-muted">{note}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+];
 
-            <div className="@3xl:col-span-5 space-y-5">
-              <div className="p-5">
-                <p className="label text-rust">CLI Compatibility Warning</p>
-                <h3 className="mt-2 font-serif text-2xl text-paper">
-                  Mock qualification ≠ real-model certification.
-                </h3>
-                <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
-                  Pinned <strong className="text-paper">Codex CLI 0.167.0</strong> (text + local{" "}
-                  <code className="font-xmb text-[12px]">exec_command</code>) and{" "}
-                  <strong className="text-paper">Claude Code CLI</strong> (streaming text + local Read tool) passed
-                  isolated tests against a deterministic mock backend. Compatibility with real inference models and
-                  full CLI toolchains remains <strong className="text-rust">unverified</strong>.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <RouteLink to="/status" className="btn btn-outline">
-                    See Full Qualification Matrix →
-                  </RouteLink>
-                </div>
-              </div>
-
-              <div className="p-5">
-                <p className="label text-faint">Explicitly Unsupported Across Adapters</p>
-                <ul className="mt-3 space-y-2 text-[13px] text-muted">
-                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Hosted server tools (<code className="font-xmb text-paper">web_search</code>, server-side execution)</li>
-                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Multimodal image, audio, or document inputs in Messages/Responses</li>
-                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Stateful Responses (<code className="font-xmb text-paper">store: true</code>, <code className="font-xmb text-paper">previous_response_id</code>)</li>
-                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Native Anthropic thinking blocks, prompt caching, and token counting</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-    </div>
-  );
+export function ProtocolsPage() {
+  return <XmbScreen document={<p>Chat Completions passes through unchanged. Responses and Anthropic Messages use bounded, stateless adapters into Chat. These examples show the actual wire transformations, field rules and explicit rejections; mock qualification does not certify real-model compatibility.</p>} subtitle="One transparent proxy and two bounded translators. Mock qualification is not real-model certification." sections={[
+    ...WIRE_CASES.map((wire) => ({ id: wire.id, interactive: true, label: wire.title.split(" · ")[0] + (wire.id.includes("reject") ? " · rejection" : ""), entries: [
+      { key: `${wire.id}-payload`, title: wire.title, value: wire.qualificationLabel, description: `${wire.protocol}: inspect the client input, adapter result and return events.`, panel: <>
+        <XmbSectionLabel>Client wire input · {wire.protocol}</XmbSectionLabel><CodeBlock code={wire.clientInput} lang="json" showLineNumbers={false} />
+        <XmbSectionLabel>{wire.outputLabel}</XmbSectionLabel><CodeBlock code={wire.upstreamOutput} lang="json" showLineNumbers={false} />
+        <XmbSectionLabel>Return event order</XmbSectionLabel><ol>{wire.sseSequence.map((event) => <li key={event}>{event}</li>)}</ol>
+        <XmbRow href={wire.sourceHref} value={wire.sourceFile}>Adapter source</XmbRow>
+      </> },
+      ...wire.rules.map((rule) => ({ key: `${wire.id}-${rule.field}`, title: rule.field, value: rule.action, description: rule.detail, panel: <>
+        <XmbSectionLabel>{rule.action}</XmbSectionLabel><p>{rule.detail}</p><CodeBlock code={wire.clientInput} lang="json" showLineNumbers={false} /><XmbSectionLabel>{wire.outputLabel}</XmbSectionLabel><CodeBlock code={wire.upstreamOutput} lang="json" showLineNumbers={false} />
+      </> })),
+    ] })),
+    { id: "endpoints", label: "Endpoints", entries: ENDPOINTS.map(([title, value, description]) => ({ key: title, title, value, description })) },
+    { id: "scope", label: "Qualification", entries: [
+      { key: "mock", title: "CLI compatibility", value: "Mock tested", panel: <><p>Pinned Codex CLI 0.167.0 (text and local exec_command) and Claude Code CLI (streaming text and local Read) passed isolated tests against a deterministic mock backend. Real inference models and full CLI toolchains remain unverified.</p><XmbRow to="/status">Full qualification matrix</XmbRow></> },
+      { key: "unsupported", title: "Unsupported adapter features", value: "Explicit rejection", panel: <ul><li>Hosted server tools and server-side execution.</li><li>Multimodal image, audio or document inputs in Responses and Messages.</li><li>Stateful Responses: store=true and previous_response_id.</li><li>Native Anthropic thinking, prompt caching and token counting.</li></ul> },
+    ] },
+  ]} />;
 }

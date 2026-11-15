@@ -1,0 +1,208 @@
+[     243ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[     597ms] [WARNING] The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page.  @ http://127.0.0.1:5173/src/xmb/audio.ts:105
+[  115515ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  141271ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  142360ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  143399ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  144387ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  145245ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  146310ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  147198ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  148300ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  149097ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  150300ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  151153ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  152500ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  153361ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  154261ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  155141ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  156004ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  156054ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  <App>
+    <RouterProvider>
+      <ConsoleEnvironment>
+        <div className="console-en..." data-surface="app" data-phase="idle" data-journey="launch" data-boot="home" ...>
+          <RibbonWallpaper2>
+          <ConsoleClock>
+          <CommitNotifications>
+          <BootScreen>
+          <div>
+          <section className="console-ap..." data-testid="console-ap..." aria-label="Operations" aria-hidden={undefined} ...>
+            <header>
+            <main ref={{current:null}} id="main-content" tabIndex={-1} className="console-ap...">
+              <div className="console-ap...">
+                <ActiveRouteView>
+                  <OperationsPage>
+                    <div className="settings-s..." data-testid="operations" aria-live="polite">
+                      <p>
+                      <XmbList entries={[...]} selected={0} onSelect={function bound dispatchSetState} ...>
+                        <ul className="xmb-list x..." role="listbox" aria-label="Inspection..." ...>
+                          <li id="xmb-row-/h..." role="option" aria-selected={true} className="xmb-list-r..." ...>
+>                           <button
+>                             ref={function ref}
+>                             type="button"
+>                             className="xmb-list-link"
+>                             aria-label="GET /health, Public"
+>                             tabIndex={0}
+>                             onClick={function onClick}
+>                             onMouseEnter={function onMouseEnter}
+>                             onFocus={function onFocus}
+>                           >
+                              ...
+                                <div className="border bor...">
+                                  <div className="flex flex-...">
+                                    <div>
+                                    <CopySnippetButton text="curl http:...">
+>                                     <button
+>                                       type="button"
+>                                       onClick={function onCopy}
+>                                       className="inline-flex items-center gap-1.5 border border-line px-2.5 py-1 fon..."
+>                                     >
+                                  ...
+                          ...
+              ...
+            ...
+          ...
+ @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2156
+[  156054ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2163
+[  156944ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  157885ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  158831ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  159905ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  160756ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  161710ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  162658ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  163566ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  164612ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  165517ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  166381ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  167265ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  168525ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  169368ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  170458ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  171488ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  172340ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  172389ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  <App>
+    <RouterProvider>
+      <ConsoleEnvironment>
+        <div className="console-en..." data-surface="app" data-phase="idle" data-journey="launch" data-boot="home" ...>
+          <RibbonWallpaper2>
+          <ConsoleClock>
+          <CommitNotifications>
+          <BootScreen>
+          <div>
+          <section className="console-ap..." data-testid="console-ap..." aria-label="Operations" aria-hidden={undefined} ...>
+            <header>
+            <main ref={{current:null}} id="main-content" tabIndex={-1} className="console-ap...">
+              <div className="console-ap...">
+                <ActiveRouteView>
+                  <OperationsPage>
+                    <div className="settings-s..." data-testid="operations" aria-live="polite">
+                      <p>
+                      <XmbList entries={[...]} selected={0} onSelect={function bound dispatchSetState} ...>
+                        <ul className="xmb-list x..." role="listbox" aria-label="Inspection..." ...>
+                          <li id="xmb-row-/h..." role="option" aria-selected={true} className="xmb-list-r..." ...>
+>                           <button
+>                             ref={function ref}
+>                             type="button"
+>                             className="xmb-list-link"
+>                             aria-label="GET /health, Public"
+>                             tabIndex={0}
+>                             onClick={function onClick}
+>                             onMouseEnter={function onMouseEnter}
+>                             onFocus={function onFocus}
+>                           >
+                              ...
+                                <div className="border bor...">
+                                  <div className="flex flex-...">
+                                    <div>
+                                    <CopySnippetButton text="curl http:...">
+>                                     <button
+>                                       type="button"
+>                                       onClick={function onCopy}
+>                                       className="inline-flex items-center gap-1.5 border border-line px-2.5 py-1 fon..."
+>                                     >
+                                  ...
+                          ...
+              ...
+            ...
+          ...
+ @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2156
+[  172389ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2163
+[  173261ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  174359ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  175435ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  176291ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  177368ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  178428ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  179362ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  180326ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  181322ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  182502ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  183461ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  184512ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  185605ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  186644ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  188010ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  188852ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  190029ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  190095ms] [ERROR] In HTML, %s cannot be a descendant of <%s>.
+This will cause a hydration error.%s <button> button 
+
+  <App>
+    <RouterProvider>
+      <ConsoleEnvironment>
+        <div className="console-en..." data-surface="app" data-phase="idle" data-journey="launch" data-boot="home" ...>
+          <RibbonWallpaper2>
+          <ConsoleClock>
+          <CommitNotifications>
+          <BootScreen>
+          <div>
+          <section className="console-ap..." data-testid="console-ap..." aria-label="Operations" aria-hidden={undefined} ...>
+            <header>
+            <main ref={{current:null}} id="main-content" tabIndex={-1} className="console-ap...">
+              <div className="console-ap...">
+                <ActiveRouteView>
+                  <OperationsPage>
+                    <div className="settings-s..." data-testid="operations" aria-live="polite">
+                      <p>
+                      <XmbList entries={[...]} selected={0} onSelect={function bound dispatchSetState} ...>
+                        <ul className="xmb-list x..." role="listbox" aria-label="Inspection..." ...>
+                          <li id="xmb-row-/h..." role="option" aria-selected={true} className="xmb-list-r..." ...>
+>                           <button
+>                             ref={function ref}
+>                             type="button"
+>                             className="xmb-list-link"
+>                             aria-label="GET /health, Public"
+>                             tabIndex={0}
+>                             onClick={function onClick}
+>                             onMouseEnter={function onMouseEnter}
+>                             onFocus={function onFocus}
+>                           >
+                              ...
+                                <div className="border bor...">
+                                  <div className="flex flex-...">
+                                    <div>
+                                    <CopySnippetButton text="curl http:...">
+>                                     <button
+>                                       type="button"
+>                                       onClick={function onCopy}
+>                                       className="inline-flex items-center gap-1.5 border border-line px-2.5 py-1 fon..."
+>                                     >
+                                  ...
+                          ...
+              ...
+            ...
+          ...
+ @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2156
+[  190095ms] [ERROR] <%s> cannot contain a nested %s.
+See this log for the ancestor stack trace. button <button> @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:2163
+[  191020ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103
+[  213038ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:5173/node_modules/.vite/deps/react-dom_client.js?v=aeb7f696:20103

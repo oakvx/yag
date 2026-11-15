@@ -63,14 +63,13 @@ export function getBootFrame(clock: BootClock) {
   if (clock.reduced) {
     return {
       boot: 1 - smooth((clock.elapsed - REDUCED_BOOT_HANDOFF) / (REDUCED_BOOT_DURATION - REDUCED_BOOT_HANDOFF)),
-      progress: 0,
-      exposure: smooth((clock.elapsed - 0.22) / 0.35),
+      progress: 1,
+      exposure: 0.12 + 0.88 * smooth(clock.elapsed / 0.35),
     };
   }
-  const reveal = clamp01((clock.elapsed - 0.7) / 1.9);
   return {
     boot: 1 - smooth((clock.elapsed - BOOT_HANDOFF) / (BOOT_DURATION - BOOT_HANDOFF)),
-    progress: 1 - Math.pow(1 - reveal, 3),
-    exposure: smooth((clock.elapsed - 0.7) / 0.38),
+    progress: 1,
+    exposure: 0.12 + 0.88 * smooth(clock.elapsed / 0.38),
   };
 }

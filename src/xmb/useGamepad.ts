@@ -30,9 +30,10 @@ const REPEAT_DELAY = 480;
 const REPEAT_INTERVAL = 120;
 
 export interface GamepadActions {
+  onInput?(): void;
   /** The console is ready to take pad input (boot done, no palette). */
   enabled(): boolean;
-  onStep(axis: "up" | "down" | "left" | "right"): void;
+  onStep(axis: "up" | "down" | "left" | "right", source?: "shoulder"): void;
   onSelect(): void;
   onBack(): void;
   onOptions(): void;
@@ -66,6 +67,7 @@ export function useGamepad(actions: GamepadActions): void {
     const step = (name: GamepadButton) => {
       const current = actionsRef.current;
       if (!current.enabled()) return;
+      current.onInput?.();
       switch (name) {
         case "dpadUp":
           current.onStep("up");
@@ -80,10 +82,10 @@ export function useGamepad(actions: GamepadActions): void {
           current.onStep("right");
           break;
         case "l1":
-          current.onStep("left");
+          current.onStep("left", "shoulder");
           break;
         case "r1":
-          current.onStep("right");
+          current.onStep("right", "shoulder");
           break;
         case "cross":
           current.onSelect();

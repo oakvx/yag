@@ -4,6 +4,7 @@ import {
 } from "react";
 import { usePrefersReducedMotion } from "@/hooks/useInView";
 import { locate, validCursor, type MenuCursor } from "@/xmb/categories";
+import { readStoredCursor, writeStoredCursor } from "@/xmb/cursorStore";
 import { getRouteDef, isRoutePath, type RouteDefinition, type RoutePath } from "./routes";
 
 export type TransitionStyle = "right" | "left" | "down" | "up";
@@ -58,14 +59,36 @@ const RouterContext = createContext<RouterContextValue | null>(null);
 export function RouterProvider({ children }: { children: ReactNode }) {
   const reduced = usePrefersReducedMotion();
   const initial = useMemo(resolveBrowserLocation, []);
-  const firstCursor = useMemo(() => historyMeta()?.cursor ?? locate(initial.path, initial.query), [initial]);
+  const firstCursor = useMemo(
+    () => historyMeta()?.cursor ?? (surfaceOf(initial) === "menu" ? readStoredCursor() : null) ?? locate(initial.path, initial.query),
+    [initial],
+  );
   const [current, setCurrent] = useState(initial);
   const [target, setTarget] = useState(initial);
   const [menuCursor, setMenuCursor] = useState(firstCursor);
   const [phase, setPhase] = useState<TransitionPhase>("idle");
   const [style, setStyle] = useState<TransitionStyle>("right");
   const [journey, setJourney] = useState<Journey>("launch");
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteOpen, setPaletteOpenState] = useState(false);
+  const paletteOpener = useRef<HTMLElement | null>(null);
+  const paletteOrigin = useRef("");
+  const paletteState = useRef(paletteOpen);
+  paletteState.current = paletteOpen;
+  const setPaletteOpen = useCallback((next: boolean | ((value: boolean) => boolean)) => {
+    const open = typeof next === "function" ? next(paletteState.current) : next;
+    if (open && !paletteState.current) {
+      paletteOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      paletteOrigin.current = window.location.href;
+    }
+    paletteState.current = open;
+    setPaletteOpenState(open);
+  }, []);
+  useEffect(() => {
+    if (paletteOpen || !paletteOpener.current) return;
+    const opener = paletteOpener.current;
+    paletteOpener.current = null;
+    if (paletteOrigin.current === window.location.href && opener.isConnected && !opener.closest("[inert]")) opener.focus({ preventScroll: true });
+  }, [paletteOpen]);
   const currentRef = useRef(current);
   const menuRef = useRef(menuCursor);
   const timers = useRef<number[]>([]);
@@ -81,6 +104,7 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     setMenuCursor(safe);
     if (surfaceOf(currentRef.current) === "menu") {
       window.history.replaceState({ ...window.history.state, yagConsole: { cursor: safe, depth: 0 } }, "");
+      writeStoredCursor(safe);
     }
   }, []);
   const transition = useCallback((next: ParsedLocation) => {

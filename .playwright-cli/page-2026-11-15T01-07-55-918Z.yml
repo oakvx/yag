@@ -1,0 +1,303 @@
+- generic [ref=e3]:
+  - time [ref=e7]: 15/11 2:07
+  - button "Close notifications" [expanded] [ref=e264] [cursor=pointer]
+  - status
+  - complementary "Commit notifications" [ref=e265]:
+    - button "Back to menu" [ref=e267] [cursor=pointer]:
+      - generic [aria-hidden] [ref=e268]: ‹
+    - listbox "Commit notifications" [ref=e272]:
+      - option [selected] [ref=e273]:
+        - 'button "Merged PR #74. Gabriele Lucia, d39ad13, 15/11 1:48. Unread." [active] [ref=e274] [cursor=pointer]':
+          - generic [ref=e278]:
+            - generic [ref=e279]:
+              - generic [ref=e281]:
+                - text: "Merged PR #74"
+                - generic [ref=e282]: oakvx/arena/8aeebe85-yag
+              - generic [ref=e283]: 15/11 1:48
+            - generic [ref=e284]: Gabriele Lucia · d39ad13
+      - option [ref=e285]:
+        - 'button "release: enable reviewed one-click YAG prerelease via GitHub Actions (#48). Gabriele Lucia, 5c5f914, 15/11 1:45." [ref=e286] [cursor=pointer]':
+          - generic [ref=e291]:
+            - generic [ref=e292]: "release: enable reviewed one-click YAG prerelease via GitHub Actions (#48)"
+            - generic [ref=e293]: 15/11 1:45
+      - option [ref=e294]:
+        - 'button "fix(console): restore the item column — the fade mask now lives on the full-screen menu. oakvx, 5cb0b4c, 15/11 1:43." [ref=e295] [cursor=pointer]':
+          - generic [ref=e300]:
+            - generic [ref=e301]: "fix(console): restore the item column — the fade mask now lives on the full-screen menu"
+            - generic [ref=e302]: 15/11 1:43
+      - option [ref=e303]:
+        - 'button "security: introduce encrypted native age BYOK vault (#48). Gabriele Lucia, 67605a8, 15/11 1:36." [ref=e304] [cursor=pointer]':
+          - generic [ref=e309]:
+            - generic [ref=e310]: "security: introduce encrypted native age BYOK vault (#48)"
+            - generic [ref=e311]: 15/11 1:36
+      - option [ref=e312]:
+        - 'button "feat: add opt-in live two-client LAN acceptance probe (#48). Gabriele Lucia, d6c3150, 15/11 1:36." [ref=e313] [cursor=pointer]':
+          - generic [ref=e318]:
+            - generic [ref=e319]: "feat: add opt-in live two-client LAN acceptance probe (#48)"
+            - generic [ref=e320]: 15/11 1:36
+      - option [ref=e321]:
+        - 'button "xmb: make the console a real PS3 surface (boards, settings, options, pad, themes) (#71). Gabriele Lucia, 7455b96, 15/11 1:33." [ref=e322] [cursor=pointer]':
+          - generic [ref=e327]:
+            - generic [ref=e328]: "xmb: make the console a real PS3 surface (boards, settings, options, pad, themes) (#71)"
+            - generic [ref=e329]: 15/11 1:33
+      - option [ref=e330]:
+        - 'button "release: pin Colibri Ollama manifest digest before stable promotion (#48). Gabriele Lucia, e6bdae4, 15/11 1:30." [ref=e331] [cursor=pointer]':
+          - generic [ref=e336]:
+            - generic [ref=e337]: "release: pin Colibri Ollama manifest digest before stable promotion (#48)"
+            - generic [ref=e338]: 15/11 1:30
+      - option [ref=e339]:
+        - 'button "release: require trusted Colibri qualification evidence for stable tags (#48). Gabriele Lucia, 019b3d3, 14/11 22:52." [ref=e340] [cursor=pointer]':
+          - generic [ref=e345]:
+            - generic [ref=e346]: "release: require trusted Colibri qualification evidence for stable tags (#48)"
+            - generic [ref=e347]: 14/11 22:52
+      - option [ref=e348]:
+        - 'button "security: block unscoped cloud static routes in LAN preflight (#48). Gabriele Lucia, 722587a, 14/11 22:45." [ref=e349] [cursor=pointer]':
+          - generic [ref=e354]:
+            - generic [ref=e355]: "security: block unscoped cloud static routes in LAN preflight (#48)"
+            - generic [ref=e356]: 14/11 22:45
+      - option [ref=e357]:
+        - 'button "release: enforce Colibri evidence gate and safe prerelease publication (#48). Gabriele Lucia, 9f8a141, 14/11 22:45." [ref=e358] [cursor=pointer]':
+          - generic [ref=e363]:
+            - generic [ref=e364]: "release: enforce Colibri evidence gate and safe prerelease publication (#48)"
+            - generic [ref=e365]: 14/11 22:45
+      - option [ref=e366]:
+        - 'button "feat(console): XMB-faithful notification board, toasts and menu polish (#61). Gabriele Lucia, 4b48232, 14/11 22:42." [ref=e367] [cursor=pointer]':
+          - generic [ref=e372]:
+            - generic [ref=e373]: "feat(console): XMB-faithful notification board, toasts and menu polish (#61)"
+            - generic [ref=e374]: 14/11 22:42
+      - option [ref=e375]:
+        - 'button "feat: add operator-reviewed BYOK pricing estimates (#48). Gabriele Lucia, 1cd70d0, 14/11 22:40." [ref=e376] [cursor=pointer]':
+          - generic [ref=e381]:
+            - generic [ref=e382]: "feat: add operator-reviewed BYOK pricing estimates (#48)"
+            - generic [ref=e383]: 14/11 22:40
+      - option [ref=e384]:
+        - 'button "feat: require cloud model consent in Console and Desktop (#48). Gabriele Lucia, 00b53ae, 14/11 22:40." [ref=e385] [cursor=pointer]':
+          - generic [ref=e390]:
+            - generic [ref=e391]: "feat: require cloud model consent in Console and Desktop (#48)"
+            - generic [ref=e392]: 14/11 22:40
+      - option [ref=e393]:
+        - 'button "security: prevent authenticated upstream proxy exfiltration (#48). Gabriele Lucia, ba2af62, 14/11 22:34." [ref=e394] [cursor=pointer]':
+          - generic [ref=e399]:
+            - generic [ref=e400]: "security: prevent authenticated upstream proxy exfiltration (#48)"
+            - generic [ref=e401]: 14/11 22:34
+      - option [ref=e402]:
+        - button "Full history on GitHub, opens in a new tab." [ref=e403] [cursor=pointer]:
+          - generic [ref=e407]: Full history on GitHub
+  - region "Protocol Landscape" [ref=e16]:
+    - generic [ref=e17]:
+      - button "Back to XMB menu" [ref=e18] [cursor=pointer]: Back
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: Applications
+        - heading "Protocol Landscape" [level=2] [ref=e26]
+    - main [ref=e27]:
+      - generic [ref=e29]:
+        - generic [ref=e32]:
+          - generic [ref=e33]:
+            - generic [ref=e34]: Chapter 04 · Protocol Analyzer & Wire Interchange
+            - generic [ref=e35]: WIRE · CHAT / RESPONSES / MESSAGES
+          - heading [level=1] [ref=e36]:
+            - text: One transparent proxy.
+            - emphasis [ref=e37]: Two strictly bounded translators.
+          - paragraph [ref=e38]: YAG does not claim universal protocol equivalence. Chat Completions is forwarded verbatim; OpenAI Responses and Anthropic Messages are narrow, stateless-to-Chat adapters that reject unsupported shapes explicitly rather than dropping fields silently.
+          - paragraph [ref=e39]:
+            - generic [ref=e40]: Chat /v1 Transparent passthrough
+            - generic [ref=e41]: Responses Stateless subset → Chat (mock-tested)
+            - generic [ref=e42]: Messages Bounded subset → Chat (mock-tested)
+        - generic [ref=e45]:
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: Interactive Wire Transformation Inspector
+              - generic [ref=e49]: Mock-Qualified Subset
+            - tablist "Protocol wire transformation cases" [ref=e51]:
+              - tab "Chat Completions · Transparent Proxy" [ref=e52] [cursor=pointer]
+              - tab "Responses · Namespace Tools & Stateless Map" [selected] [ref=e53] [cursor=pointer]
+              - tab "Responses · Hosted Tool / Stateful Rejection" [ref=e54] [cursor=pointer]
+              - tab "Messages · Tool Replay & Thinking Coarsening" [ref=e55] [cursor=pointer]
+              - tab "Messages · Prompt-Safe Rejection & 501 Bounds" [ref=e56] [cursor=pointer]
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]:
+                - generic [ref=e60]: 01 · Client Wire Input
+                - generic [ref=e61]: OpenAI Responses
+              - code [ref=e64]:
+                - generic [ref=e65]: POST /v1/responses
+                - generic [ref=e67]: "Authorization: Bearer $YAG_API_KEY"
+                - generic [ref=e71]: "{"
+                - generic [ref=e73]: "\"model\": \"response-echo\","
+                - generic [ref=e75]: "\"instructions\": \"be concise\","
+                - generic [ref=e77]: "\"input\": \"Read notes.txt\","
+                - generic [ref=e79]: "\"max_output_tokens\": 42,"
+                - generic [ref=e81]: "\"store\": false,"
+                - generic [ref=e83]: "\"reasoning\": {\"effort\": \"low\"},"
+                - generic [ref=e85]: "\"tools\": [{"
+                - generic [ref=e87]: "\"type\": \"namespace\","
+                - generic [ref=e89]: "\"name\": \"workspace\","
+                - generic [ref=e91]: "\"tools\": [{\"type\": \"function\", \"name\": \"read_file\", \"parameters\": {\"type\": \"object\"}}]"
+                - generic [ref=e93]: "}]"
+                - generic [ref=e95]: "}"
+            - generic [ref=e97]:
+              - generic [ref=e98]:
+                - generic [ref=e99]: 02 · Adapter Rules
+                - link "source ↗" [ref=e100] [cursor=pointer]:
+                  - /url: https://github.com/oakvx/yag/blob/main/host/src/protocols/openai_responses/request.c
+              - list [ref=e101]:
+                - listitem [ref=e102]:
+                  - 'button "instructions TRANSLATED Inserted as leading {role: ''system''} message in Chat messages[]." [ref=e103] [cursor=pointer]':
+                    - generic [ref=e104]:
+                      - generic [ref=e105]: instructions
+                      - generic [ref=e106]: TRANSLATED
+                    - paragraph [ref=e107]: "Inserted as leading {role: 'system'} message in Chat messages[]."
+                - listitem [ref=e108]:
+                  - 'button "tools[type=namespace] FLATTENED Flattened to workspace__read_file upstream and restored to {namespace, name} on output." [ref=e109] [cursor=pointer]':
+                    - generic [ref=e110]:
+                      - generic [ref=e111]: tools[type=namespace]
+                      - generic [ref=e112]: FLATTENED
+                    - paragraph [ref=e113]: "Flattened to workspace__read_file upstream and restored to {namespace, name} on output."
+                - listitem [ref=e114]:
+                  - button "max_output_tokens TRANSLATED Mapped to Chat max_tokens; reasoning.effort maps to reasoning_effort." [ref=e115] [cursor=pointer]:
+                    - generic [ref=e116]:
+                      - generic [ref=e117]: max_output_tokens
+                      - generic [ref=e118]: TRANSLATED
+                    - paragraph [ref=e119]: Mapped to Chat max_tokens; reasoning.effort maps to reasoning_effort.
+                - listitem [ref=e120]:
+                  - 'button "store: false / metadata NO-OP Omitted or false store accepted (stateless); metadata echoed on Response object, never sent upstream." [ref=e121] [cursor=pointer]':
+                    - generic [ref=e122]:
+                      - generic [ref=e123]: "store: false / metadata"
+                      - generic [ref=e124]: NO-OP
+                    - paragraph [ref=e125]: Omitted or false store accepted (stateless); metadata echoed on Response object, never sent upstream.
+            - generic [ref=e126]:
+              - generic [ref=e127]: 03 · Translated Upstream (/chat/completions)
+              - code [ref=e131]:
+                - generic [ref=e132]: "{"
+                - generic [ref=e134]: "\"model\": \"response-echo\","
+                - generic [ref=e136]: "\"stream\": false,"
+                - generic [ref=e138]: "\"messages\": ["
+                - generic [ref=e140]: "{\"role\": \"system\", \"content\": \"be concise\"},"
+                - generic [ref=e142]: "{\"role\": \"user\", \"content\": \"Read notes.txt\"}"
+                - generic [ref=e144]: "],"
+                - generic [ref=e146]: "\"tools\": [{"
+                - generic [ref=e148]: "\"type\": \"function\","
+                - generic [ref=e150]: "\"function\": {"
+                - generic [ref=e152]: "\"name\": \"workspace__read_file\","
+                - generic [ref=e154]: "\"parameters\": {\"type\": \"object\"}"
+                - generic [ref=e156]: "}"
+                - generic [ref=e158]: "}],"
+                - generic [ref=e160]: "\"max_tokens\": 42,"
+                - generic [ref=e162]: "\"reasoning_effort\": \"low\""
+                - generic [ref=e164]: "}"
+              - generic [ref=e166]:
+                - paragraph [ref=e167]: Return Stream / Event Frame Order
+                - generic [ref=e168]:
+                  - generic [ref=e169]: "0: response.created"
+                  - generic [ref=e170]: "1: response.in_progress"
+                  - generic [ref=e171]: "2: response.output_item.added"
+                  - generic [ref=e172]: "3: response.output_text.delta"
+                  - generic [ref=e173]: "4: response.output_item.done"
+                  - generic [ref=e174]: "5: response.completed"
+        - generic [ref=e177]:
+          - generic [ref=e178]:
+            - paragraph [ref=e179]: Gateway Endpoint Matrix (from server.c)
+            - heading "Every HTTP path implemented by the host." [level=2] [ref=e180]
+            - table [ref=e182]:
+              - rowgroup [ref=e183]:
+                - row [ref=e184]:
+                  - columnheader "Method & Path" [ref=e185]
+                  - columnheader "Mode" [ref=e186]
+                  - columnheader "Notes" [ref=e187]
+              - rowgroup [ref=e188]:
+                - row [ref=e189]:
+                  - cell "GET /health" [ref=e190]
+                  - cell "Public" [ref=e191]
+                  - cell "Liveness probe; no key required" [ref=e192]
+                - row [ref=e193]:
+                  - cell "GET /v1/models" [ref=e194]
+                  - cell "Discovery" [ref=e195]
+                  - cell "Merges default upstream /models + static route IDs" [ref=e196]
+                - row [ref=e197]:
+                  - 'cell "GET /v1/models/{id}" [ref=e198]'
+                  - cell "Discovery" [ref=e199]
+                  - cell "Exact ID from merged inventory; 404 if unknown" [ref=e200]
+                - row [ref=e201]:
+                  - cell "POST /v1/chat/completions" [ref=e202]
+                  - cell "Passthrough" [ref=e203]
+                  - cell "SSE + tool_calls; checks model & messages[]" [ref=e204]
+                - row [ref=e205]:
+                  - cell "POST /v1/completions" [ref=e206]
+                  - cell "Passthrough" [ref=e207]
+                  - cell "Legacy completions; checks model & prompt" [ref=e208]
+                - row [ref=e209]:
+                  - cell "POST /v1/embeddings" [ref=e210]
+                  - cell "Passthrough" [ref=e211]
+                  - cell "Vector embeddings; requires upstream embedding model" [ref=e212]
+                - row [ref=e213]:
+                  - cell "POST /v1/images/generations" [ref=e214]
+                  - cell "Passthrough" [ref=e215]
+                  - cell "Checks model & prompt; upstream dependent" [ref=e216]
+                - row [ref=e217]:
+                  - cell "POST /v1/audio/speech" [ref=e218]
+                  - cell "Passthrough" [ref=e219]
+                  - cell "Checks model, input & voice; upstream dependent" [ref=e220]
+                - row [ref=e221]:
+                  - cell "POST /v1/responses" [ref=e222]
+                  - cell "Translated" [ref=e223]
+                  - cell "Stateless subset → Chat; 4 MiB / 64-item bound" [ref=e224]
+                - row [ref=e225]:
+                  - cell "POST /v1/messages" [ref=e226]
+                  - cell "Translated" [ref=e227]
+                  - cell "Bounded subset → Chat; Bearer or X-API-Key" [ref=e228]
+                - row [ref=e229]:
+                  - cell "POST /v1/messages/count_tokens" [ref=e230]
+                  - cell "501 Refused" [ref=e231]
+                  - cell "Explicitly returns 501 Not Implemented" [ref=e232]
+          - generic [ref=e233]:
+            - generic [ref=e234]:
+              - paragraph [ref=e235]: CLI Compatibility Warning
+              - heading "Mock qualification ≠ real-model certification." [level=3] [ref=e236]
+              - paragraph [ref=e237]:
+                - text: Pinned
+                - strong [ref=e238]: Codex CLI 0.167.0
+                - text: (text + local
+                - code [ref=e239]: exec_command
+                - text: ) and
+                - strong [ref=e240]: Claude Code CLI
+                - text: (streaming text + local Read tool) passed isolated tests against a deterministic mock backend. Compatibility with real inference models and full CLI toolchains remains
+                - strong [ref=e241]: unverified
+                - text: .
+              - link "See Full Qualification Matrix →" [ref=e243] [cursor=pointer]:
+                - /url: /status
+            - generic [ref=e244]:
+              - paragraph [ref=e245]: Explicitly Unsupported Across Adapters
+              - list [ref=e246]:
+                - listitem [ref=e247]:
+                  - generic [ref=e248]: ×
+                  - text: Hosted server tools (
+                  - code [ref=e249]: web_search
+                  - text: ", server-side execution)"
+                - listitem [ref=e250]:
+                  - generic [ref=e251]: ×
+                  - text: Multimodal image, audio, or document inputs in Messages/Responses
+                - listitem [ref=e252]:
+                  - generic [ref=e253]: ×
+                  - text: Stateful Responses (
+                  - code [ref=e254]: "store: true"
+                  - text: ","
+                  - code [ref=e255]: previous_response_id
+                  - text: )
+                - listitem [ref=e256]:
+                  - generic [ref=e257]: ×
+                  - text: Native Anthropic thinking blocks, prompt caching, and token counting
+      - generic [ref=e258]: YAG is experimental software. Repository references are authoritative.
+    - button "Back to menu Esc" [ref=e259] [cursor=pointer]:
+      - text: Back to menu
+      - generic [ref=e263]: Esc
+  - generic:
+    - button "YAG / Yet Another Gateway": YAG
+    - generic:
+      - generic:
+        - text: Yet Another Gateway
+        - generic: Experimental
+      - generic:
+        - button "Audio settings. Press and hold to replay the boot sequence.":
+          - generic: Audio
+  - paragraph [ref=e4]: Protocol Landscape application. Escape returns to the menu.
+  - button "Search all destinations" [ref=e5] [cursor=pointer]

@@ -11,7 +11,6 @@ interface BrandCandidate {
 
 /** Optional user-supplied display faces, most specific first. */
 const CANDIDATES: BrandCandidate[] = [
-  { path: "fonts/PS4-Logo.otf", format: "opentype" },
   { path: "fonts/YAG-Boot-Display.woff2", format: "woff2" },
   { path: "fonts/YAG-Boot-Display.ttf", format: "truetype" },
 ];

@@ -11,7 +11,8 @@ export type RoutePath =
   | "/deploy"
   | "/project"
   | "/profile"
-  | "/theme";
+  | "/theme"
+  | "/trophies";
 
 export type SubsystemGroup = "Thesis" | "System Core" | "Wire & Routing" | "Trust & Operations";
 
@@ -232,6 +233,20 @@ export const ROUTES: RouteDefinition[] = [
     seoTitle: "Theme Settings · YAG — Yet Another Gateway",
     seoDescription:
       "Choose the console's wallpaper atmosphere from the twelve monthly palettes or the original rotation; the choice is stored only in this browser.",
+  },
+  {
+    path: "/trophies",
+    order: 13,
+    index: "13",
+    label: "Trophies",
+    shortLabel: "Trophies",
+    group: "Trust & Operations",
+    signalMode: "open",
+    packetTag: "TROPHIES · LOCAL · BROWSER",
+    summary: "The trophies earned by exploring this console, stored only in this browser.",
+    seoTitle: "Trophies · YAG — Yet Another Gateway",
+    seoDescription:
+      "Trophies earned by exploring the YAG console; the list is stored only in this browser and nothing is sent anywhere.",
   },
 ];
 

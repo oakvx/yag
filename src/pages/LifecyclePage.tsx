@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { XmbScreen, XmbSectionLabel } from "@/components/XmbScreen";
+import { XmbRow } from "@/components/XmbRow";
 import { CodeBlock } from "@/components/CodeBlock";
-import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
 import { BLOB_URL } from "@/data/repository";
-import { RouteLink, useRouter } from "@/router/RouterContext";
-import { cn } from "@/utils/cn";
+import { useRouter } from "@/router/RouterContext";
 
 type TraceScenarioId = "chat" | "responses" | "messages" | "routed" | "rejected";
 
@@ -25,7 +25,6 @@ interface TraceScenario {
   id: TraceScenarioId;
   label: string;
   requestLine: string;
-  badge: string;
   summary: string;
   haltStageIndex?: number;
   stages: StageStep[];
@@ -36,7 +35,6 @@ const SCENARIOS: TraceScenario[] = [
     id: "chat",
     label: "01 · Chat Passthrough",
     requestLine: "POST /v1/chat/completions (model: llama3.2, stream: true)",
-    badge: "Transparent Proxy",
     summary: "Standard OpenAI Chat Completions request forwarded to the default upstream with SSE relayed directly.",
     stages: [
       {
@@ -152,7 +150,6 @@ if (cancel_fd >= 0 && peer_closed(cancel_fd)) {
     id: "responses",
     label: "02 · Responses Adapter",
     requestLine: "POST /v1/responses (input, instructions, namespace tools, store: false)",
-    badge: "Stateless Translation",
     summary: "Stateless OpenAI Responses subset translated to Chat Completions and re-emitted as numbered Responses SSE events.",
     stages: [
       {
@@ -253,7 +250,6 @@ if (cancel_fd >= 0 && peer_closed(cancel_fd)) {
     id: "messages",
     label: "03 · Anthropic Messages",
     requestLine: "POST /v1/messages (x-api-key, system, tool_use / tool_result, stream: true)",
-    badge: "Bounded Subset",
     summary: "Anthropic Messages request authenticated via X-API-Key, translated to Chat, and streamed back as Anthropic SSE.",
     stages: [
       {
@@ -358,7 +354,6 @@ if (cancel_fd >= 0 && peer_closed(cancel_fd)) {
     id: "routed",
     label: "04 · Routed Model Match",
     requestLine: 'POST /v1/chat/completions (model: "qwen2.5-coder")',
-    badge: "Exact-Model Dispatch",
     summary: "Request whose model string matches an entry in YAG_MODEL_ROUTES, switching destination URL and upstream secret.",
     stages: [
       {
@@ -458,7 +453,6 @@ selected->upstream_key = c->routes[i].key;`,
     id: "rejected",
     label: "05 · Pre-Body Short-Circuit",
     requestLine: "POST /v1/chat/completions (invalid key or 429 rate-limit exceeded)",
-    badge: "Halts at Stage 02",
     summary: "Demonstrates defensive short-circuiting: unauthenticated or rate-limited POSTs are rejected before body allocation.",
     haltStageIndex: 1,
     stages: [
@@ -593,237 +587,21 @@ export function LifecyclePage() {
     setStageIdx(0);
   };
 
-  return (
-    <div>
-      <PageMasthead
-        path="/lifecycle"
-        eyebrow="Chapter 03 · Deterministic Request Tracer"
-        title={
-          <>
-            Seven stages from <code className="font-xmb text-[0.82em] text-amber">accept()</code> to socket close.
-          </>
-        }
-        lede="Select a request shape and step the signal through YAG's seven execution stages — or run the deterministic trace to watch how admission, pre-body header authentication, adaptation, and upstream polling interact."
-        aside={
-          <div className="p-4 font-xmb text-[11px]">
-            <StatusBadge tone="mock">Educational Simulation</StatusBadge>
-            <p className="mt-2.5 leading-relaxed text-muted">
-              This tracer steps through deterministic state transitions derived directly from{" "}
-              <span className="text-paper">host/src/</span>. It performs zero network calls.
-            </p>
-          </div>
-        }
-      />
-
-      <section className="py-6 @lg:py-8">
-        <Container>
-          {/* Scenario Selector + Playback Controls */}
-          <div className="">
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div role="tablist" aria-label="Request shape scenarios" className="flex flex-wrap gap-1.5">
-                {SCENARIOS.map((sc) => {
-                  const selected = sc.id === scenarioId;
-                  return (
-                    <button
-                      key={sc.id}
-                      role="tab"
-                      aria-selected={selected}
-                      onClick={() => selectScenario(sc.id)}
-                      className={cn(
-                        "px-3 py-1.5 font-xmb text-[12px] transition-colors cursor-pointer",
-                        selected
-                          ? "bg-amber/15 text-paper"
-                          : "text-faint hover:text-paper",
-                      )}
-                    >
-                      {sc.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlaying(false);
-                    setStageIdx((i) => Math.max(0, i - 1));
-                  }}
-                  disabled={stageIdx === 0}
-                  className="px-2.5 py-1 font-xmb text-[12px] text-muted hover:text-paper disabled:opacity-35 cursor-pointer"
-                >
-                  ◀ Prev
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (playing) {
-                      setPlaying(false);
-                    } else {
-                      if (stageIdx >= maxReachable) setStageIdx(0);
-                      setPlaying(true);
-                    }
-                  }}
-                  className="bg-amber/15 px-3.5 py-1 font-xmb text-[12px] text-paper hover:bg-amber/25 cursor-pointer"
-                >
-                  {playing ? "❚❚ Pause Trace" : "▶ Run Signal Trace"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlaying(false);
-                    setStageIdx((i) => Math.min(scenario.stages.length - 1, i + 1));
-                  }}
-                  disabled={stageIdx === scenario.stages.length - 1}
-                  className="px-2.5 py-1 font-xmb text-[12px] text-muted hover:text-paper disabled:opacity-35 cursor-pointer"
-                >
-                  Next ▶
-                </button>
-              </div>
-            </div>
-
-            {/* Active Scenario Wire Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 font-xmb text-[11px]">
-              <div>
-                <span className="text-amber">WIRE:</span> <span className="text-paper">{scenario.requestLine}</span>
-              </div>
-              <span className="text-faint">{scenario.summary}</span>
-            </div>
-
-            {/* 7-Stage Spatial Signal Bus */}
-            <div className="overflow-x-auto px-4 py-6 @lg:px-6">
-              <ol className="grid min-w-[780px] grid-cols-7 gap-2">
-                {scenario.stages.map((st, idx) => {
-                  const isCurrent = idx === stageIdx;
-                  const isPassed = idx < stageIdx && st.active;
-                  const isUnreached = !st.active;
-
-                  return (
-                    <li key={st.num} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPlaying(false);
-                          setStageIdx(idx);
-                        }}
-                        className={cn(
-                          "w-full p-3 text-left transition-all cursor-pointer",
-                          isCurrent && st.haltedHere
-                            ? "bg-rust/15"
-                            : isCurrent
-                              ? "bg-amber/[0.12]"
-                              : isPassed
-                                ? "bg-moss/[0.06]"
-                                : isUnreached
-                                  ? "hatch-rust opacity-50"
-                                  : "hover:bg-white/[0.04]",
-                        )}
-                      >
-                        <div className="flex items-center justify-between font-xmb text-[11.5px]">
-                          <span
-                            className={cn(
-                              isCurrent && st.haltedHere
-                                ? "text-rust"
-                                : isCurrent
-                                  ? "text-amber"
-                                  : isPassed
-                                    ? "text-moss"
-                                    : "text-faint",
-                            )}
-                          >
-                            {st.num}
-                          </span>
-                          <span
-                            className={cn(
-                              "h-2 w-2 rounded-full",
-                              isCurrent && st.haltedHere
-                                ? "bg-rust"
-                                : isCurrent
-                                  ? "bg-amber"
-                                  : isPassed
-                                    ? "bg-moss"
-                                    : "bg-line-strong",
-                            )}
-                          />
-                        </div>
-                        <div className="mt-2 truncate text-[12.5px] font-medium text-paper">{st.name}</div>
-                        <div className="mt-1 truncate font-xmb text-[11px] text-faint">
-                          {st.haltedHere ? "HALT · 401/429" : isUnreached ? "unreached" : st.file.split("/").pop()}
-                        </div>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-
-            {/* Synchronized 3-Pane Stage Readout */}
-            <div className="grid @3xl:grid-cols-12" aria-live="polite">
-              {/* Pane 1: Stage Contract */}
-              <div className="p-5 @lg:p-6 @3xl:col-span-5">
-                <div className="flex items-center justify-between font-xmb text-[12px]">
-                  <span className="text-amber">
-                    Stage {stage.num} · {stage.name}
-                  </span>
-                  <a
-                    href={stage.href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-muted hover:text-amber"
-                  >
-                    {stage.file} ↗
-                  </a>
-                </div>
-
-                <p className="mt-3 text-[14.5px] leading-[1.74] text-paper/95">{stage.whatHappens}</p>
-
-                <dl className="mt-5 space-y-3 pt-4 font-xmb text-[11px]">
-                  <div>
-                    <dt className="text-faint">Stage Input</dt>
-                    <dd className="mt-1 text-paper">{stage.input}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-faint">Stage Output</dt>
-                    <dd className="mt-1 text-amber">{stage.output}</dd>
-                  </div>
-                  <div className="pt-3">
-                    <dt className="text-rust">Failure Conditions & Boundaries</dt>
-                    <dd className="mt-1 leading-relaxed text-muted">{stage.failureModes}</dd>
-                  </div>
-                </dl>
-              </div>
-
-              {/* Pane 2 & 3: Implementation Code + Architectural Cross-links */}
-              <div className="p-5 @lg:p-6 @3xl:col-span-7 flex flex-col justify-between">
-                <div>
-                  <p className="label mb-3 text-faint">Implementation Excerpt ({stage.file})</p>
-                  <CodeBlock
-                    code={stage.code}
-                    lang="c"
-                    path={stage.file}
-                    href={stage.href}
-                    highlights={[1, 2]}
-                  />
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 font-xmb text-[11px]">
-                  <span className="text-faint">
-                    Stage {stageIdx + 1} of {scenario.stages.length}
-                  </span>
-                  <div className="flex flex-wrap gap-3">
-                    <RouteLink to="/protocols" className="text-amber hover:underline">
-                      Inspect Protocol Adapters →
-                    </RouteLink>
-                    <RouteLink to="/source" className="text-muted hover:text-paper">
-                      Open Full Source Atlas →
-                    </RouteLink>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </section>
-    </div>
-  );
+  const detail = <><XmbSectionLabel>Stage {stage.num} · {stage.name}</XmbSectionLabel>
+    <p>{scenario.requestLine} · {scenario.summary}</p>
+    <ol className="xmb-signal-stages" aria-label="Request stages">{scenario.stages.map((item, index) => <li key={item.num} aria-current={index === stageIdx ? "step" : undefined}>{item.num} · {item.name}{item.haltedHere ? " · Halt" : !item.active ? " · Unreached" : ""}</li>)}</ol>
+    <p aria-live="polite">{stage.whatHappens}</p>
+    <dl className="xmb-facts"><div><dt>Stage input</dt><dd>{stage.input}</dd></div><div><dt>Stage output</dt><dd>{stage.output}</dd></div><div><dt>Failure conditions</dt><dd>{stage.failureModes}</dd></div></dl>
+    <CodeBlock code={stage.code} lang="c" path={stage.file} href={stage.href} highlights={[1, 2]} />
+    <XmbRow to="/protocols">Inspect protocol adapters</XmbRow><XmbRow to="/source">Open source atlas</XmbRow>
+  </>;
+  return <XmbScreen document={<p>A request passes through seven stages, from accept() to socket close. Authentication happens before buffering a body; protocol adaptation and route selection happen before upstream transport. Choose a scenario and run or step the deterministic trace below. No network calls are made.</p>} initialSection={query.autorun === "1" ? 1 : undefined} subtitle="Deterministic educational trace from admission to socket close. No network calls." sections={[
+    { id: "scenario", label: "Request shape", entries: SCENARIOS.map((item) => ({ key: item.id, title: item.label, value: scenarioId === item.id ? "Selected" : "Load scenario", description: item.summary, activate: () => selectScenario(item.id) })) },
+    { id: "playback", label: "Playback", panel: detail, entries: [
+      { key: "run", title: playing ? "Pause trace" : "Run signal trace", value: `Stage ${stageIdx + 1} / ${scenario.stages.length}`, description: "Run or pause the deterministic signal. Halted requests stop before unreachable stages.", activate: () => { if (playing) setPlaying(false); else { if (stageIdx >= maxReachable) setStageIdx(0); setPlaying(true); } } },
+      { key: "previous", title: "Previous stage", description: "Inspect the preceding request stage.", activate: () => { setPlaying(false); setStageIdx((index) => Math.max(0, index - 1)); } },
+      { key: "next", title: "Next stage", description: "Inspect the next stage, including stages marked unreached.", activate: () => { setPlaying(false); setStageIdx((index) => Math.min(scenario.stages.length - 1, index + 1)); } },
+      ...scenario.stages.map((item, index) => ({ key: item.num, title: item.name, value: item.haltedHere ? "Halt" : !item.active ? "Unreached" : `Stage ${index + 1}`, description: item.whatHappens, activate: () => { setPlaying(false); setStageIdx(index); } })),
+    ] },
+  ]} />;
 }

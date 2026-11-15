@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { XmbRow } from "@/components/XmbRow";
 import { CodeBlock } from "@/components/CodeBlock";
 import { BLOB_URL, REPO_LINKS } from "@/data/repository";
-import { XmbList, type XmbListEntry } from "@/xmb/XmbList";
+import { XmbScreen, type XmbScreenEntry } from "@/components/XmbScreen";
+import { PROJECT_REVIEW } from "@/data/projectKnowledge";
 
 /**
  * The three System Screens, drawn the way the console draws its own
@@ -13,6 +14,9 @@ import { XmbList, type XmbListEntry } from "@/xmb/XmbList";
 const SPECIFICATIONS: Array<[string, string]> = [
   ["Project", "YAG - Yet Another Gateway"],
   ["Project version", "0.1.0 (CMake project definition)"],
+  ["Reviewed source", `main @ ${PROJECT_REVIEW.revision.slice(0, 7)} · ${PROJECT_REVIEW.date}`],
+  ["Desktop client", "Optional Windows, macOS and Linux client; no local model execution"],
+  ["Replica pool", "Up to 8 backends; model policies and declared resource reservations"],
   ["Qualification", "Experimental; real inference-model compatibility is unverified"],
   ["Native host", "C17, POSIX sockets, libcurl, pthreads"],
   ["JSON implementation", "yyjson 0.12.0, vendored under third_party/yyjson"],
@@ -27,37 +31,14 @@ const SPECIFICATIONS: Array<[string, string]> = [
 ];
 
 export function SystemInfoPage() {
-  const [cursor, setCursor] = useState(0);
-  const entries: XmbListEntry[] = SPECIFICATIONS.map(([label, value]) => ({
+  const entries: XmbScreenEntry[] = SPECIFICATIONS.map(([label, value]) => ({
     key: label,
     title: label,
     value,
+    description: value,
     ariaLabel: `${label}: ${value}`,
   }));
-  return (
-    <div className="settings-screen" data-testid="system-info">
-      <p className="settings-lede">
-        Specifications from the project repository. This website is not attached to a running
-        YAG host and displays no live telemetry.
-      </p>
-      <XmbList
-        entries={entries}
-        selected={cursor}
-        onSelect={setCursor}
-        onHighlight={setCursor}
-        compact
-        focusOnMount
-        className="settings-list"
-        ariaLabel="System specifications"
-      />
-      <p className="settings-note">
-        Source:{" "}
-        <a href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener">
-          Architecture and implementation status
-        </a>
-      </p>
-    </div>
-  );
+  return <XmbScreen testId="system-info" subtitle="Specifications from the repository, not live telemetry from a running host." sections={[{ id: "system-info", label: "System specifications", entries, panel: <p>These values describe the software. Architecture and implementation status is available in the repository.</p> }]} />;
 }
 
 const VARIABLES = [
@@ -78,47 +59,37 @@ const VARIABLES = [
   { name: "YAG_CIRCUIT_THRESHOLD", value: "0 (disabled)", text: "Optional admission breaker: 1-20 consecutive failures can suppress a routed provider." },
   { name: "YAG_CIRCUIT_COOLDOWN_SECONDS", value: "30 seconds", text: "An open route waits before one half-open request probes recovery." },
   { name: "YAG_ASSETS", value: "console/dist", text: "Optional Console assets relative to the native host's working directory." },
+  { name: "YAG_CLIENT_STORE", value: "Disabled", text: "Private managed-client registry. Enables runtime issuance, disable and revocation of managed keys; static environment keys remain startup configuration." },
+  { name: "YAG_PROVIDER_STORE", value: "Disabled", text: "Private persisted replica registry. Live edits require idle pool work and the primary administrator key." },
+  { name: "YAG_ADMIN_AUDIT_FILE", value: "Disabled", text: "Opt-in private JSONL administrative response events. Excludes request bodies, API keys and client identities." },
+  { name: "YAG_MAX_INFERENCE", value: "0 standalone; 6 LAN", text: "Global inference ceiling. The standalone scheduler is disabled by default; the LAN profile enables bounded admission." },
+  { name: "YAG_ADAPTIVE_SCHEDULER", value: "0 standalone; 1 LAN", text: "Optional GPU-aware admission under the static ceiling. Requires a positive YAG_MAX_INFERENCE; missing VRAM sensors retain the static capacity." },
+  { name: "YAG_GPU_REQUEST_VRAM_MB", value: "1024 MiB", text: "Operator-supplied incremental allowance per admitted request, not a verified model memory requirement." },
+  { name: "YAG_GPU_VRAM_MARGIN_PERCENT", value: "10%", text: "Measured total VRAM fraction reserved as headroom. Accepted range 0–50%. Backend OOM remains possible." },
+  { name: "YAG_POOL_WAIT_MS", value: "0", text: "Optional bounded wait for replica resources, up to 30000 ms. Saturated pool admission is distinct from upstream transport failure." },
 ];
 
 export function ConfigurationPage() {
-  const [cursor, setCursor] = useState(0);
-  const entries: XmbListEntry[] = VARIABLES.map((v) => ({
+  const entries: XmbScreenEntry[] = VARIABLES.map((v) => ({
     key: v.name,
     title: v.name,
     value: v.value,
+    description: v.text,
     detail: (
-      <span className="xmb-config-detail">
-        <span>{v.text}</span>
-        <a className="xmb-code-link" href={`${BLOB_URL}/host/src/core/config.c`} target="_blank" rel="noreferrer noopener">
+      <>
+        <p>{v.text}</p>
+        <XmbRow href={`${BLOB_URL}/host/src/core/config.c`}>
           host/src/core/config.c
-        </a>
-        <span className="xmb-config-warn">
+        </XmbRow>
+        <p>
           Never commit secrets to public files. Plain HTTP on an untrusted network exposes
           gateway keys and request traffic.
-        </span>
-      </span>
+        </p>
+      </>
     ),
     ariaLabel: `${v.name}, default ${v.value}`,
   }));
-  return (
-    <div className="settings-screen" data-testid="configuration" aria-live="polite">
-      <p className="settings-lede">
-        The native host reads these values from its private environment at startup. This
-        reference does not edit a running gateway or collect credentials. Restart the host to
-        apply static configuration changes.
-      </p>
-      <XmbList
-        entries={entries}
-        selected={cursor}
-        onSelect={setCursor}
-        onHighlight={setCursor}
-        compact
-        focusOnMount
-        className="settings-list"
-        ariaLabel="Startup environment settings"
-      />
-    </div>
-  );
+  return <XmbScreen testId="configuration" subtitle="Startup environment reference. Restart the host to apply static configuration changes." sections={[{ id: "configuration", label: "Startup environment settings", entries }]} />;
 }
 
 const OPERATIONS = [
@@ -129,50 +100,36 @@ const OPERATIONS = [
   { path: "/api/clients", auth: "Monitoring permission", description: "Per-key accepted and throttled counts, positional labels and scopes. No prompts or secrets." },
   { path: "/api/providers/status", auth: "Monitoring permission", description: "Passive attempts, failures, reported usage, latency and circuit state per provider." },
   { path: "/api/capabilities", auth: "Gateway key", description: "Gateway protocol and limit support, not live model capability discovery." },
+  { path: "/api/providers/pool", auth: "Monitoring permission", description: "Replica model policies, admission reservations and saturation counters; resource budgets are operator estimates." },
+  { path: "/api/system/resources", auth: "Monitoring permission", description: "Available resource telemetry with explicit scope and sensor availability. Missing data does not mean zero usage." },
+  { path: "/api/scheduler", auth: "Monitoring permission", description: "Configured and effective inference capacities, queue state and adaptive sensor availability." },
 ];
 
 export function OperationsPage() {
-  const [cursor, setCursor] = useState(0);
-  const entries: XmbListEntry[] = OPERATIONS.map((op, i) => ({
+  const entries: XmbScreenEntry[] = OPERATIONS.map((op, i) => ({
     key: op.path,
     title: `GET ${op.path}`,
     sub: op.auth,
+    description: op.description,
     detail: (
-      <span className="xmb-config-detail">
-        <span>{op.description}</span>
+      <>
+        <p>{op.description}</p>
         <CodeBlock
           code={`curl http://127.0.0.1:8080${op.path}${i > 0 ? ' \\\n  -H "Authorization: Bearer $YAG_API_KEY"' : ""}`}
           lang="bash"
           path="Operator command - not executed here"
           showLineNumbers={false}
         />
-        <span className="xmb-config-warn">
+        <p>
           Counters are ephemeral and reset on restart. Reported token counts come from upstream
           usage fields, not estimates. A successful /models probe only establishes reachability.
-        </span>
-        <a className="xmb-code-link" href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener">
+        </p>
+        <XmbRow href={REPO_LINKS.statusDoc}>
           Architecture and implementation status
-        </a>
-      </span>
+        </XmbRow>
+      </>
     ),
     ariaLabel: `GET ${op.path}, ${op.auth}`,
   }));
-  return (
-    <div className="settings-screen" data-testid="operations" aria-live="polite">
-      <p className="settings-lede">
-        Select an inspection endpoint to see its purpose and a copyable request. This website
-        performs no calls to a gateway; all examples are local instructions.
-      </p>
-      <XmbList
-        entries={entries}
-        selected={cursor}
-        onSelect={setCursor}
-        onHighlight={setCursor}
-        compact
-        focusOnMount
-        className="settings-list"
-        ariaLabel="Inspection endpoints"
-      />
-    </div>
-  );
+  return <XmbScreen testId="operations" subtitle="Inspection endpoints and local commands. No requests are executed by this website." sections={[{ id: "operations", label: "Inspection endpoints", entries }]} />;
 }
