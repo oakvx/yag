@@ -39,6 +39,11 @@
         <div class="page-title"><span class="eyebrow">WORKSPACE / CHAT</span><strong id="currentModel">Select a model</strong></div>
         <div class="topbar-actions"><button id="copyChatButton" class="secondary-button" type="button" disabled>Copy chat</button><button id="settingsButton" class="secondary-button" type="button">Preferences</button><span id="statusText" class="status-text">Disconnected</span><span id="statusPill" class="pill">OFFLINE</span></div>
       </header>
+      <div id="updateBanner" class="update-banner" role="status" hidden>
+        <span id="updateBannerText"></span>
+        <button id="reviewUpdate" class="secondary-button" type="button">Review update</button>
+        <button id="dismissUpdate" class="icon-button" type="button" aria-label="Dismiss update notification">×</button>
+      </div>
       <section id="chat" class="chat" aria-label="Conversation" aria-live="polite">
         <div id="emptyState" class="empty-state">
           <div class="empty-logo">Y</div>
@@ -104,9 +109,15 @@
       <p id="relayError" class="dialog-error" role="alert" hidden></p>
       <div class="settings-divider"></div>
       <h3>Application updates</h3>
-      <p class="field-note">Check GitHub Releases manually. This sends no chat text or API keys. Installers are currently unsigned; verify downloaded files before installing.</p>
-      <button id="checkUpdates" class="secondary-button" type="button">Check for new release</button>
+      <label class="switch-line"><input id="autoCheckUpdates" type="checkbox"> Check GitHub for updates when Desktop starts</label>
+      <p class="field-note">Optional: queries the public GitHub Releases API without sending API keys, models or chat contents. Includes experimental weekly builds and release candidates. GitHub can observe your IP address.</p>
+      <div class="modal-actions update-actions">
+        <button id="checkUpdates" class="secondary-button" type="button">Check for updates</button>
+        <button id="downloadUpdate" class="secondary-button" type="button" hidden>Download verified installer</button>
+      </div>
       <p id="updateStatus" class="field-note" role="status"></p>
+      <button id="copyReleaseLink" class="secondary-button" type="button" hidden>Copy release page link</button>
+      <p class="field-note">Packages are checked against published SHA-256 checksums but remain unsigned. A checksum alone is not proof of publisher identity. Verify GitHub Sigstore provenance before manual installation. YAG never silently runs an installer.</p>
     </section>
   </div>
 </body>
