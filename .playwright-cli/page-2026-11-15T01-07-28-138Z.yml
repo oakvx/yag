@@ -1,8 +1,0 @@
-- generic [ref=e3]:
-  - status
-  - generic:
-    - status: YAG is starting. Press a key or click to skip after one second.
-    - generic [aria-hidden]:
-      - generic: Yet Another Gateway
-  - paragraph [ref=e4]: Protocol Landscape application. Escape returns to the menu.
-  - button "Search all destinations" [ref=e5] [cursor=pointer]
