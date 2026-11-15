@@ -16,7 +16,9 @@ SHA = 'a' * 40
 
 def valid_report():
     return {
-        'schema_version': 2,
+        'schema_version': 3,
+        'ollama_manifest_sha256': 'c'*64,
+        'ollama_manifest_source': 'ollama_api_tags',
         'source': 'real_upstream_gateway_probe',
         'measured_at_utc': '2026-11-14T20:00:00+00:00',
         'gateway_commit': SHA,
@@ -42,14 +44,16 @@ class ReleaseGateTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / 'evidence.json'
         self.now = datetime.datetime(2026,11,15,tzinfo=datetime.timezone.utc)
 
-    def run_case(self, data, *, gpu=True):
+    def run_case(self, data, *, gpu=True, digest=True):
         self.path.write_text(json.dumps(data), encoding='utf-8')
-        return evaluate(self.path, SHA, now=self.now, require_gpu=gpu)
+        return evaluate(self.path, SHA, now=self.now, require_gpu=gpu,
+                        require_model_digest=digest)
 
     def test_real_full_evidence_accepted(self):
         result = self.run_case(valid_report())
         self.assertEqual(result['protocol_count'],3)
         self.assertEqual(result['model_id_sha256'],'b'*64)
+        self.assertEqual(result['ollama_manifest_sha256'],'c'*64)
 
     def test_partial_and_unverified_fails_closed(self):
         cases = [
@@ -85,6 +89,29 @@ class ReleaseGateTests(unittest.TestCase):
         data=valid_report()
         data['runtime']['gpu']['driver_version']='unknown'
         with self.assertRaises(ValueError):self.run_case(data)
+
+    def test_stable_requires_exact_native_ollama_manifest_digest(self):
+        data=valid_report()
+        data['schema_version']=2
+        data.pop('ollama_manifest_sha256')
+        data.pop('ollama_manifest_source')
+        with self.assertRaisesRegex(ValueError,'manifest'):
+            self.run_case(data)
+        self.assertIsNone(self.run_case(data,digest=False)['ollama_manifest_sha256'])
+        for bad in (None,'unknown','d'*63,'D'*64):
+            with self.subTest(bad=bad):
+                case=valid_report()
+                case['ollama_manifest_sha256']=bad
+                if bad=='D'*64:
+                    # Uppercase hex is syntactically valid and represents the same digest.
+                    self.assertEqual(self.run_case(case)['ollama_manifest_sha256'],bad)
+                else:
+                    with self.assertRaises(ValueError):
+                        self.run_case(case)
+        case=valid_report()
+        case['ollama_manifest_source']='operator_assertion'
+        with self.assertRaises(ValueError):
+            self.run_case(case)
 
     def test_invalid_permissions_and_symlink(self):
         self.run_case(valid_report())
