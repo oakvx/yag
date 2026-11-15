@@ -19,7 +19,7 @@ SHA64 = re.compile(r'[0-9a-fA-F]{64}\Z')
 MAX_REPORT_BYTES = 16 * 1024
 
 
-def evaluate(path, expected_commit, now=None, max_age_days=30, require_gpu=True):
+def evaluate(path, expected_commit, now=None, max_age_days=30, require_gpu=True, require_model_digest=False):
     if not SHA40.fullmatch(expected_commit):
         raise ValueError('Expected an exact 40-character gateway commit SHA')
     if not isinstance(max_age_days, int) or not 1 <= max_age_days <= 30:
@@ -33,7 +33,7 @@ def evaluate(path, expected_commit, now=None, max_age_days=30, require_gpu=True)
         data = json.loads(file.read_text('utf-8'))
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError('Invalid qualification JSON') from exc
-    if not isinstance(data, dict) or data.get('schema_version') != 2:
+    if not isinstance(data, dict) or data.get('schema_version') not in (2, 3):
         raise ValueError('Unsupported or obsolete qualification evidence schema')
     if data.get('source') != 'real_upstream_gateway_probe':
         raise ValueError('Not a real-upstream qualification report')
@@ -93,7 +93,19 @@ def evaluate(path, expected_commit, now=None, max_age_days=30, require_gpu=True)
                 or type(gpu.get('memory_total_mib')) is not int
                 or gpu['memory_total_mib'] <= 0):
             raise ValueError('Invalid measured GPU information')
+    digest = data.get('ollama_manifest_sha256')
+    digest_source = data.get('ollama_manifest_source')
+    if require_model_digest:
+        if data['schema_version'] != 3 or digest_source != 'ollama_api_tags':
+            raise ValueError('Release requires an Ollama manifest digest measured from its native API')
+        if not isinstance(digest, str) or not SHA64.fullmatch(digest):
+            raise ValueError('Missing or invalid Ollama manifest SHA-256')
+    elif digest is not None and (
+            not isinstance(digest, str) or not SHA64.fullmatch(digest)
+            or digest_source != 'ollama_api_tags'):
+        raise ValueError('Invalid optional Ollama manifest evidence')
     return {
+        'ollama_manifest_sha256': digest,
         'commit': expected_commit.lower(),
         'model_id_sha256': data['model_id_sha256'].lower(),
         'measured_at_utc': stamp,
@@ -107,12 +119,15 @@ def main(argv=None):
     parser.add_argument('--evidence', required=True, help='Metadata-only JSON emitted by the real-provider probe')
     parser.add_argument('--commit', required=True, help='Exact, reviewed, full Git commit SHA')
     parser.add_argument('--max-age-days', type=int, default=30)
+    parser.add_argument('--require-model-digest', action='store_true',
+                        help='Require an exact locally measured Ollama model manifest SHA-256')
     parser.add_argument('--allow-no-gpu', action='store_true',
                         help='For CPU-only development; do not use to qualify Colibri GPU release')
     args = parser.parse_args(argv)
     try:
         result = evaluate(args.evidence, args.commit, max_age_days=args.max_age_days,
-                          require_gpu=not args.allow_no_gpu)
+                          require_gpu=not args.allow_no_gpu,
+                          require_model_digest=args.require_model_digest)
     except (OSError, ValueError) as exc:
         # Only fixed messages; never print model names, host addresses or secrets.
         print('RELEASE QUALIFICATION BLOCKED:', str(exc), file=sys.stderr)
@@ -122,6 +137,7 @@ def main(argv=None):
     print('Model ID SHA-256:', result['model_id_sha256'])
     print('Tested protocols:', result['protocol_count'])
     print('Measured GPU inventory included:', result['gpu_evidence_present'])
+    print('Ollama manifest digest present:', bool(result['ollama_manifest_sha256']))
     print('Verify trusted workflow identity, operator consent and hardware separately.')
     return 0
 
