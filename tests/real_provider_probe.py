@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 from urllib.parse import urlsplit
-from urllib.request import ProxyHandler, build_opener
+from urllib.request import ProxyHandler, Request, build_opener
 
 from live_model import exercise
 
@@ -56,6 +56,48 @@ def _runtime_metadata():
             }
     return result
 
+def probe_ollama_manifest(model, native_url):
+    """Read the exact, running Ollama model manifest digest without logging it.
+
+    The endpoint is explicitly opted in and MUST be on loopback. The digest
+    identifies Ollama's model manifest, not a proof of model behavior.
+    """
+    if not native_url:
+        return None
+    try:
+        address = urlsplit(native_url)
+        if (address.scheme != 'http'
+            or address.hostname not in ('localhost', '127.0.0.1', '::1')
+            or address.username is not None or address.password is not None
+            or address.query or address.fragment or address.path not in ('', '/')
+            or address.port == 0):
+            return None
+        origin = native_url.rstrip('/')
+        opener = build_opener(ProxyHandler({}))
+        with opener.open(Request(origin + '/api/tags', method='GET'), timeout=4) as response:
+            raw = response.read(2*1024*1024+1)
+        if len(raw) > 2*1024*1024:
+            return None
+        catalog = json.loads(raw)
+        models = catalog.get('models')
+        if not isinstance(models, list) or len(models)>1024:
+            return None
+        matches = [item for item in models if isinstance(item, dict)
+                   and (item.get('name') == model or item.get('model') == model)]
+        if len(matches) != 1:
+            return None
+        digest = matches[0].get('digest')
+        if not isinstance(digest,str):
+            return None
+        if digest.startswith('sha256:'):
+            digest=digest[7:]
+        if not re.fullmatch(r'[0-9a-fA-F]{64}',digest):
+            return None
+        return digest.lower()
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        # Unavailable or malformed local catalog: never fabricate a digest.
+        return None
+
 def write_report(path,model,selected,tools,stream,results,success):
     """Write metadata-only evidence, never secrets, URLs, prompts or model text.
 
@@ -63,8 +105,11 @@ def write_report(path,model,selected,tools,stream,results,success):
     the operator's model identifier in public Actions artifacts.
     """
     sha=os.environ.get('GITHUB_SHA','')
+    digest=probe_ollama_manifest(model,os.environ.get('YAG_REAL_OLLAMA_NATIVE_URL',''))
     report={
-        'schema_version':2,
+        'schema_version':3,
+        'ollama_manifest_sha256':digest,
+        'ollama_manifest_source':'ollama_api_tags' if digest else None,
         'source':'real_upstream_gateway_probe',
         'measured_at_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'runtime':_runtime_metadata(),
