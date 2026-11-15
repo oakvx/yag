@@ -47,6 +47,8 @@ jobs:
         run: python tests/release_gate_test.py
       - name: Verify trusted self-hosted Colibri Actions run provenance
         run: python tests/verify_colibri_run_test.py
+      - name: Verify immutable candidate tag policy and latest reviewed CI
+        run: python tests/release_candidate_test.py
       - name: Test offline encrypted backup verification and safe staging
         run: python tests/lan_recovery_test.py
       - name: Verify tagged release integrity and safe rollback staging
