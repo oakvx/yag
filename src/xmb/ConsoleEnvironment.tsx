@@ -21,6 +21,8 @@ import { useIdleChrome } from "./useIdleChrome";
 import { ScrollEdges } from "@/components/XmbScreen";
 import { CardPageInfoContext } from "@/components/CardPage";
 import { ApplicationHints, sendApplicationInput } from "./ApplicationControls";
+import { ParticleBurst, emitBurst } from "./ParticleBurst";
+import { ShutdownOverlay, useShutdown } from "./ShutdownScreen";
 
 /* Pointer sensitivity: one deliberate input = one step, as with the PS3 D-pad. */
 /** px the pointer must travel over the same category/item before hover selects it. */
@@ -65,6 +67,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("yag:screen-title", title);
   }, []);
   const boot = useBootSequence();
+  const shutdown = useShutdown();
   const [unreadCount, setUnreadCount] = useState(0);
   const [easterOpen, setEasterOpen] = useState(false);
   const [noticesOpen, setNoticesOpenState] = useState(false);
@@ -121,7 +124,8 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const isApp = surface === "app";
   const isLaunching = journey === "launch" && phase === "cover";
   const isReturning = journey === "return" && phase === "reveal" && !isApp;
-  const bootReady = boot.stage === "home";
+  const isShuttingDown = shutdown.phase !== "idle";
+  const bootReady = boot.stage === "home" && !isShuttingDown;
   const chrome = useIdleChrome(bootReady && !noticesOpen && !paletteOpen && !optionsOpen && !dialog && !easterOpen);
   const openEaster = useCallback(() => {
     if (!bootReady) return;
@@ -233,8 +237,17 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     blip(confirm ? "select" : "back");
     if (confirm) current?.run();
   }, []);
-  const activate = useCallback((item: XmbItem) => {
+  const activate = useCallback((item: XmbItem, coords?: { x: number; y: number }) => {
     blip("select");
+    if (coords) {
+      emitBurst(coords.x, coords.y);
+    } else {
+      const icon = itemRefs.current[cursorRef.current.item];
+      if (icon) {
+        const rect = icon.getBoundingClientRect();
+        emitBurst(rect.left + rect.width * 0.15, rect.top + rect.height * 0.5);
+      }
+    }
     const target = itemTarget(item);
     if (target) navigate(target);
     else if (item.href) askExternal(item.href, item.sub);
@@ -575,7 +588,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     if (gestures.suppressClick()) { e.preventDefault(); return; }
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     e.preventDefault();
-    activate(item);
+    activate(item, { x: e.clientX, y: e.clientY });
   };
 
   const selectionStyle = { "--selected-category": menuCursor.cat } as CSSProperties;
@@ -587,7 +600,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const listAnchor = menuCursor.item;
 
   return (
-    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"} data-hints-idle={chrome.idle} data-input-mode={chrome.keyboardMode ? "keyboard" : "pointer"}>
+    <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-shutdown={shutdown.phase === "fading" ? "active" : shutdown.phase === "closing" ? "closing" : undefined} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"} data-hints-idle={chrome.idle} data-input-mode={chrome.keyboardMode ? "keyboard" : "pointer"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp && !noticesOpen} />
       <XmbStatusBar unreadCount={unreadCount} noticesOpen={noticesOpen} infoDisabled={paletteOpen || optionsOpen || dialog !== null || !bootReady} searchDisabled={noticesOpen || optionsOpen || paletteOpen || !bootReady || dialog !== null}
         onInfo={() => { blip(noticesOpen ? "back" : "select"); setNoticesOpen(!noticesOpen); }} onSearch={() => setPaletteOpen(true)} />
@@ -808,7 +821,21 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
             the menu's own column, however narrow the screen. */}
         <span className="console-identity-meta">
           <span className="console-identity-caption">Yet Another Gateway <span>Experimental</span></span>
-          <AudioControls onReplay={boot.replay} />
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <AudioControls onReplay={boot.replay} />
+            <button
+              type="button"
+              className="console-sound"
+              aria-label="Turn off console"
+              title="Sleep / Turn off"
+              onClick={shutdown.start}
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M12 6v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
         </span>
       </div>
 
@@ -848,6 +875,14 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         onCancel={() => resolveDialog(false)}
       />
       <TrophyToast enabled={bootReady} />
+      <ParticleBurst />
+      <ShutdownOverlay
+        phase={shutdown.phase}
+        onRestart={() => {
+          shutdown.cancel();
+          boot.replay();
+        }}
+      />
       <div className="console-throbber" data-active={phase !== "idle" && bootReady} aria-hidden="true">
         {Array.from({ length: 12 }, (_, i) => <span key={i} style={{ "--i": i } as CSSProperties} />)}
       </div>

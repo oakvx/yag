@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type GamepadButton =
   | "cross"
@@ -152,4 +152,31 @@ export function useGamepad(actions: GamepadActions): void {
       window.removeEventListener("gamepaddisconnected", disconnected);
     };
   }, []);
+}
+
+export function useGamepadStatus(): { connected: boolean; count: number } {
+  const [status, setStatus] = useState({ connected: false, count: 0 });
+
+  useEffect(() => {
+    const check = () => {
+      const pads = typeof navigator.getGamepads === "function" ? navigator.getGamepads() : [];
+      let count = 0;
+      for (const p of pads) {
+        if (p && p.connected) count++;
+      }
+      setStatus({ connected: count > 0, count });
+    };
+
+    check();
+    window.addEventListener("gamepadconnected", check);
+    window.addEventListener("gamepaddisconnected", check);
+    const interval = window.setInterval(check, 2500);
+    return () => {
+      window.removeEventListener("gamepadconnected", check);
+      window.removeEventListener("gamepaddisconnected", check);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  return status;
 }

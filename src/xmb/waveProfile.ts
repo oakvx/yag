@@ -1,15 +1,15 @@
 /** One material and one continuous field, shared by WebGL, Canvas and boot. */
 export const WAVE_MOTION = {
-  speed: 0.32, horizontalAmplitude: 0.07, verticalAmplitude: 0.024,
-  driftAmplitude: 0.034, rippleAmplitude: 0.012,
-  layerSpeed: 0.13, layerPhase: 2.15, shimmerSpeed: 0.8, shimmerAmplitude: 0.12,
+  speed: 0.30, horizontalAmplitude: 0.085, verticalAmplitude: 0.028,
+  driftAmplitude: 0.038, rippleAmplitude: 0.015,
+  layerSpeed: 0.11, layerPhase: 2.35, shimmerSpeed: 0.65, shimmerAmplitude: 0.15,
 } as const;
 export const BOOT_MATERIAL = { backdropExposure: 0.28, paletteWash: 0.62, warmth: [1, 0.96, 0.72] } as const;
 const PROFILE = {
-  baseline: 0.56, sag: 0.15, slope: 0.025, half: 0.035, twistWidth: 0.09,
-  gatheredCentre: 0.54, gatheredAnchor: 0.66, gatheredSpread: 0.6, gatheredWidth: 0.62, gatheredSlope: 0.08,
+  baseline: 0.55, sag: 0.17, slope: 0.022, half: 0.038, twistWidth: 0.10,
+  gatheredCentre: 0.53, gatheredAnchor: 0.65, gatheredSpread: 0.58, gatheredWidth: 0.65, gatheredSlope: 0.075,
 };
-export const WAVE_LAYERS = [1, 0.68, 0.48].map((weight, layer) => ({
+export const WAVE_LAYERS = [1, 0.68, 0.48, 0.22].map((weight, layer) => ({
   phase: 0.4 + layer * WAVE_MOTION.layerPhase,
   speed: 1 + layer * WAVE_MOTION.layerSpeed,
   offset: (layer - 1) * 0.025, width: 1 - layer * 0.1, weight,

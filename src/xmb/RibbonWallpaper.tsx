@@ -216,8 +216,15 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.ribbons);
       gl.vertexAttribPointer(renderer.position, 2, gl.FLOAT, false, 0, 0);
       for (let layer = 0; layer < WAVE_LAYERS.length; layer++) {
+        // The deepest layer (mist/fog) uses additive blending for bloom
+        if (layer === WAVE_LAYERS.length - 1) {
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE);
+        }
         gl.uniform1f(uniforms.uLayer, layer);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, renderer.ribbonCount);
+        if (layer === WAVE_LAYERS.length - 1) {
+          gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        }
       }
       gl.uniform1i(uniforms.uPass, 2);
       gl.bindBuffer(gl.ARRAY_BUFFER, renderer.dust);
@@ -249,7 +256,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
           observedFrames = slowFrames = 0;
         }
       }
-      const blend = reduced ? 1 : 1 - Math.exp(-dt * 0.7);
+      const blend = reduced ? 1 : 1 - Math.exp(-dt * 0.45);
       let paletteMoving = false;
       for (let i = 0; i < palette.length; i++) {
         const difference = targetPalette[i] - palette[i];

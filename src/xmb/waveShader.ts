@@ -114,17 +114,21 @@ void main() {
     float absolute = abs(distance);
     float ridge = (distance - vHighlight) / 0.34;
     float sheen = 1.0 / (1.0 + 2.72 * ridge * ridge);
-    float body = 1.0 - smoothstep(0.18 - softness, 1.0 + softness, absolute);
-    float hem = smoothstep(0.70 - softness, 0.93, absolute)
-      * (1.0 - smoothstep(0.95, 1.0 + softness, absolute));
+    // Localized specular: a bright spot that slides across the ribbon
+    float specX = fract(vUv.x * 0.5 + uTime * 0.018);
+    float specD = (specX - 0.5) * 4.0;
+    float specular = exp(-specD * specD * 1.8) * sheen * 0.35;
+    float body = 1.0 - smoothstep(0.15 - softness, 1.0 + softness, absolute);
+    float hem = smoothstep(0.65 - softness, 0.90, absolute)
+      * (1.0 - smoothstep(0.92, 1.0 + softness, absolute));
     float fade = smoothstep(-0.1, 0.22, vUv.x) * (1.0 - smoothstep(0.82, 1.13, vUv.x));
-    float weight = uLayer < 0.5 ? 1.0 : (uLayer < 1.5 ? 0.68 : 0.48);
+    float weight = uLayer < 0.5 ? 1.0 : (uLayer < 1.5 ? 0.68 : (uLayer < 2.5 ? 0.48 : 0.26));
     float band = 1.0 - smoothstep(1.4, 1.7, absolute);
     float bloom = exp(-distance * distance * 1.9);
     float threadA = (distance - 0.36 * sin(vUv.x * 4.2 + vHighlight * 2.0 + uLayer)) / 0.055;
     float threadB = (distance + 0.48 * sin(vUv.x * 3.3 - vHighlight + uLayer * 1.7)) / 0.045;
     float threads = exp(-threadA * threadA) * 0.10 + exp(-threadB * threadB) * 0.065;
-    float homeLight = body * 0.12 + sheen * 0.40 + hem * 0.09 + bloom * 0.095 + threads;
+    float homeLight = body * 0.12 + sheen * 0.40 + hem * 0.09 + bloom * 0.095 + threads + specular;
     float gatheredLight = body * 0.11 + sheen * 0.08 + hem * 0.09 + bloom * 0.012 + threads * 0.22;
     float alpha = mix(homeLight, gatheredLight, uBoot) * band
       * fade * weight * uExposure * vShimmer * 1.05;
@@ -135,7 +139,8 @@ void main() {
     float core = 1.0 - smoothstep(0.1, 0.5, radius);
     // The halo is a soft ring just outside the core, for the larger motes.
     float halo = smoothstep(0.1, 0.28, radius) * (1.0 - smoothstep(0.26, 0.5, radius));
-    float alpha = (core + vHalo * halo * 0.9) * vStar * 0.24 * uExposure * mix(1.0, 0.08, uBoot);
+    float glow = exp(-radius * radius * 6.0) * 0.3;
+    float alpha = (core + vHalo * halo * 0.9 + glow) * vStar * 0.28 * uExposure * mix(1.0, 0.08, uBoot);
     gl_FragColor = vec4(mix(vec3(1.0), uPalette[2], 0.25), alpha);
   }
 }
