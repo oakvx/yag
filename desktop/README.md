@@ -148,12 +148,32 @@ local applications may retain that copy.
 
 ## Release checks and installer authenticity
 
-**Preferences → Check for new release** performs an explicit, outbound HTTPS
-request to the public `oakvx/yag` GitHub Releases metadata API. It sends
-no API keys or prompt text. This is a manual *version check*, not an
-automatic updater. App installers remain unsigned until dedicated
-Authenticode/macOS signing identities are configured; verify their
-published SHA-256 checksums before running them.
+**Preferences → Check for updates** queries the public `oakvx/yag` GitHub
+Releases API and includes complete weekly experimental releases, release
+candidates and stable versions. The separate **Check GitHub for updates
+when Desktop starts** option is **disabled by default**. Enabling it
+stores only a local boolean and checks once when the app starts (and
+immediately when enabled). GitHub sees the network request's IP address;
+no client API key, model ID, prompts or conversation text are sent.
+
+When a newer compatible build exists, the update banner links to
+Preferences. **Download verified installer** retrieves the platform-specific
+package and `SHA256SUMS.txt` over HTTPS, enforcing fixed GitHub hosts,
+release tag and asset-name allowlists, strict size limits and SHA-256
+verification before writing a new file in the system Downloads folder.
+A filename collision aborts the write rather than replacing files.
+Unsupported architectures do not offer downloads. Release discovery and
+all paths are generated natively, never accepted from renderer input.
+
+**Important:** SHA-256 protects integrity relative to the published
+checksum, but a checksum hosted alongside a binary does not establish
+publisher identity. Use `gh attestation verify <package> --repo oakvx/yag`
+for Sigstore provenance validation before manually running a downloaded
+installer. This remains an explicitly confirmed, manual installation;
+YAG does not silently execute, elevate or replace the running app.
+Windows/macOS installers are currently unsigned at the operating-system
+level pending Authenticode signing and Apple notarization. Unattended
+installation is intentionally disabled until a signed update channel exists.
 
 ## Architecture
 
