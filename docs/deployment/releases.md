@@ -25,6 +25,20 @@ Verify `gh attestation verify <downloaded-file> --repo oakvx/yag` before
 manual installation. The update setting is opt-in; no YAG Host API keys or
 chat content are sent to GitHub.
 
+The update downloader uses a streaming SHA-256 digest and a hidden
+temporary file, so installer-sized downloads are **not kept in RAM**.
+It checks the exact GitHub asset length, verifies the complete four-package
+release checksum manifest, then publishes a new file in Downloads without
+overwriting any existing installer. Interrupted or mismatched downloads are
+not exposed as installable packages. Installers remain **manual**, unsigned
+and subject to the separate Sigstore provenance verification.
+
+A tagged release package embeds its exact `v...` tag identity at Rust build
+time. Untagged development artifacts identify as local builds and can
+offer a same-version weekly or RC package; an installed tagged stable release
+is never downgraded to a same-version prerelease. Weekly tags are checked
+against real Gregorian Mondays, not merely an eight-digit string.
+
 ## Create a candidate from GitHub Actions
 
 With green CI/security checks on reviewed `main`, open **Actions →
