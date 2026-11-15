@@ -229,6 +229,77 @@ fn checksums(input: &[u8], tag: &str) -> Result<BTreeMap<String, String>, String
     Ok(map)
 }
 
+struct RemoveOnDrop(PathBuf);
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) { let _ = fs::remove_file(&self.0); }
+}
+
+fn publish_verified(source: &std::path::Path, target: &std::path::Path,
+                    expected_size: u64) -> Result<(), String> {
+    // create_new refuses existing files, including symlinks, on every OS.
+    let mut destination = OpenOptions::new().write(true).create_new(true).open(target)
+        .map_err(|_| "A file with this installer name already exists in Downloads")?;
+    let copied = (|| -> io::Result<u64> {
+        let mut input = fs::File::open(source)?;
+        let copied = io::copy(&mut input, &mut destination)?;
+        destination.sync_all()?;
+        Ok(copied)
+    })();
+    drop(destination);
+    match copied {
+        Ok(n) if n == expected_size => Ok(()),
+        _ => {
+            let _ = fs::remove_file(target);
+            Err("Cannot publish the complete verified installer".into())
+        }
+    }
+}
+
+async fn stream_verified_package(client: &reqwest::Client, url: &str, size: u64,
+                                 expected_sha256: &str, destination: &std::path::Path)
+    -> Result<(), String> {
+    if size == 0 || size > MAX_INSTALLER { return Err("Unexpected installer size".into()); }
+    let response = client.get(url).header("User-Agent", "YAG-Desktop-Update-Check")
+        .timeout(Duration::from_secs(600)).send().await
+        .map_err(|_| "Could not download GitHub release installer".to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("GitHub installer download returned HTTP {}", response.status().as_u16()));
+    }
+    if response.content_length().is_some_and(|header| header != size) {
+        return Err("Installer size disagrees with GitHub release metadata".into());
+    }
+
+    let parent = destination.parent().ok_or("Invalid Downloads directory")?;
+    let filename = destination.file_name().and_then(|name| name.to_str())
+        .ok_or("Invalid installer filename")?;
+    let temp = parent.join(format!(".{filename}-{}.partial", Uuid::new_v4().simple()));
+    let mut file = OpenOptions::new().write(true).create_new(true).open(&temp)
+        .map_err(|_| "Cannot create a private temporary installer file")?;
+    let _cleanup = RemoveOnDrop(temp.clone());
+
+    let mut stream = response.bytes_stream();
+    let mut hasher = Sha256::new();
+    let mut total = 0u64;
+    while let Some(next) = stream.next().await {
+        let bytes = next.map_err(|_| "Installer download interrupted".to_string())?;
+        total = total.checked_add(bytes.len() as u64)
+            .ok_or("Installer size exceeded the limit")?;
+        if total > size || total > MAX_INSTALLER {
+            return Err("Installer exceeded the expected size".into());
+        }
+        file.write_all(&bytes).map_err(|_| "Cannot write the temporary installer")?;
+        hasher.update(&bytes);
+    }
+    file.sync_all().map_err(|_| "Cannot flush the temporary installer")?;
+    drop(file);
+    if total != size || format!("{:x}", hasher.finalize()) != expected_sha256 {
+        return Err("Installer size or SHA-256 digest did not match the release manifest".into());
+    }
+    // Publish only after full integrity verification. Never overwrite an
+    // existing file, and never execute the installer automatically.
+    publish_verified(&temp, destination, total)
+}
+
 pub(crate) async fn download(app: tauri::AppHandle, requested: String) -> Result<String, String> {
     // Accept only the selected, complete, strictly parsed latest release.
     // Never accept renderer-supplied URLs or filesystem paths.
@@ -248,23 +319,13 @@ pub(crate) async fn download(app: tauri::AppHandle, requested: String) -> Result
     let expected = checksums(&manifest, &requested)?
         .remove(&name).ok_or("Installer checksum missing")?;
     let url = format!("{DOWNLOAD_ROOT}/{requested}/{name}");
-    let package = bounded_get(&client, &url, MAX_INSTALLER as usize).await?;
-    if package.len() as u64 != asset.size {
-        return Err("Installer size does not match GitHub release metadata".into());
-    }
-    let actual = format!("{:x}", Sha256::digest(&package));
-    if actual != expected { return Err("Installer failed SHA-256 integrity verification".into()); }
-
     let downloads = app.path().download_dir()
         .map_err(|_| "Cannot locate the system Downloads folder")?;
     let destination = downloads.join(&name);
-    let mut file = OpenOptions::new().write(true).create_new(true).open(&destination)
-        .map_err(|_| "Cannot create installer in Downloads (a file with that name may exist)")?;
-    if let Err(error) = file.write_all(&package).and_then(|_| file.sync_all()) {
-        drop(file);
-        let _ = std::fs::remove_file(&destination);
-        return Err(format!("Could not save verified installer: {error}"));
+    if destination.exists() {
+        return Err("A file with that installer name already exists in Downloads".into());
     }
+    stream_verified_package(&client, &url, asset.size, &expected, &destination).await?;
     Ok(destination.to_string_lossy().into_owned())
 }
 
