@@ -86,7 +86,7 @@ def run_acceptance(config, ca_path, model, *, make_request=fetch):
         raise AcceptanceError('Choose a valid exact installed Ollama model ID')
     keys=config.get('YAG_EXTRA_API_KEYS','').split(',')
     scopes=config.get('YAG_EXTRA_KEY_SCOPES','').split(',')
-    if (len(keys)<2 or len(set(keys[:2]))!=2
+    if (len(keys)<2 or len(scopes)<2 or len(set(keys[:2]))!=2
             or any(len(key)<32 for key in keys[:2])
             or any(scope != 'inference+models' for scope in scopes[:2])):
         raise AcceptanceError('Two different scoped inference+models client keys are required')
