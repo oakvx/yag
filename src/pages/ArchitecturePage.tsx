@@ -1,7 +1,9 @@
-import { XmbScreen, XmbSectionLabel } from "@/components/XmbScreen";
-import { XmbRow } from "@/components/XmbRow";
-import { CodeBlock } from "@/components/CodeBlock";
+import { useState } from "react";
+import { CodeBlock } from "@/components/CodeCard";
+import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
 import { BLOB_URL, TREE_URL } from "@/data/repository";
+import { RouteLink } from "@/router/RouterContext";
+import { cn } from "@/utils/cn";
 
 type NodeId =
   | "clients"
@@ -288,13 +290,44 @@ const EDGES: Array<{ id: string; d: string }> = [
   { id: "e-transport-routed", d: "M 667 254 C 692 254, 692 223, 716 223" },
 ];
 
-function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] }) {
-  return <><XmbSectionLabel>{activeNode.layer}</XmbSectionLabel>
+export function ArchitecturePage() {
+  const [selectedId, setSelectedId] = useState<NodeId>("listener");
+  const activeNode = ARCH_NODES.find((n) => n.id === selectedId) ?? ARCH_NODES[0];
+
+  return (
+    <div>
+      <PageMasthead
+        path="/architecture"
+        eyebrow="Chapter 02 · Interactive System Blueprint"
+        title={
+          <>
+            One binary, six internal stages, <em>zero hidden runtimes.</em>
+          </>
+        }
+        lede="Select any node in the engineering schematic below to inspect its responsibilities, memory/socket bounds, and exact C17 implementation file."
+        meta={[
+          { k: "Binary", v: "yag · C17 + POSIX sockets", tone: "amber" },
+          { k: "Libraries", v: "libcurl · pthreads · yyjson 0.12.0" },
+          { k: "Execution", v: "Never runs models or tools", tone: "moss" },
+        ]}
+      />
+
+      <section className="py-6 @lg:py-8">
+        <Container>
+          {/* Interactive Blueprint Frame */}
+          <div className="">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 font-xmb text-[11.5px]">
+              <span className="text-amber">Schematic 02.A · Navigable Host Topology</span>
+              <span className="text-faint">Click any subsystem block [C1..U2] to inspect</span>
+            </div>
+
+            {/* SVG Blueprint */}
+            <div className="overflow-x-auto p-4 @lg:p-6">
               <svg
                 viewBox="0 0 920 310"
-                className="xmb-diagram"
+                className="min-w-[740px] w-full h-auto"
                 role="img"
-                aria-label="YAG system architecture diagram; the screen rows select each subsystem"
+                aria-label="Interactive YAG system architecture diagram with ten selectable subsystem blocks"
               >
                 {/* Host Enclosure Box */}
                 <rect
@@ -302,14 +335,14 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                   y="20"
                   width="456"
                   height="274"
-                  fill="none"
-                  stroke="rgba(255,255,255,0.4)"
+                  fill="rgba(108,203,255,0.025)"
+                  stroke="rgba(108,203,255,0.4)"
                   strokeDasharray="5 4"
                 />
                 <g fontFamily="JetBrains Mono, monospace" fontSize="8.5" letterSpacing="1.3">
-                  <text x="20" y="34" fill="#ffffff">01 · CLIENT SURFACE</text>
-                  <text x="242" y="36" fill="#ffffff">02 · YAG C17 HOST PROCESS (:8080)</text>
-                  <text x="716" y="34" fill="#ffffff">03 · UPSTREAM SERVERS</text>
+                  <text x="20" y="34" fill="#7F98BC">01 · CLIENT SURFACE</text>
+                  <text x="242" y="36" fill="#6CCBFF">02 · YAG C17 HOST PROCESS (:8080)</text>
+                  <text x="716" y="34" fill="#7F98BC">03 · UPSTREAM SERVERS</text>
                 </g>
 
                 {/* Signal Edges */}
@@ -320,14 +353,14 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                       <path
                         d={edge.d}
                         fill="none"
-                        stroke={isHighlighted ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.16)"}
+                        stroke={isHighlighted ? "rgba(108,203,255,0.55)" : "rgba(190,220,255,0.16)"}
                         strokeWidth={isHighlighted ? 1.8 : 1.1}
                       />
                       {isHighlighted && (
                         <path
                           d={edge.d}
                           fill="none"
-                          stroke="#ffffff"
+                          stroke="#6CCBFF"
                           strokeWidth="2.4"
                           className="signal-flow"
                         />
@@ -338,18 +371,30 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
 
                 {/* Selectable Nodes */}
                 {ARCH_NODES.map((node) => {
-                  const selected = node.id === activeNode.id;
+                  const selected = node.id === selectedId;
                   return (
                     <g
                       key={node.id}
+                      onClick={() => setSelectedId(node.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedId(node.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={selected}
+                      aria-label={`${node.code} ${node.title}`}
+                      className="cursor-pointer focus:outline-none"
                     >
                       <rect
                         x={node.x}
                         y={node.y}
                         width={node.w}
                         height={node.h}
-                        fill="none"
-                        stroke={selected ? "#ffffff" : "rgba(255,255,255,0.24)"}
+                        fill={selected ? "rgba(60,140,230,0.3)" : "rgba(10,30,74,0.7)"}
+                        stroke={selected ? "#6CCBFF" : "rgba(190,220,255,0.24)"}
                         strokeWidth={selected ? 1.6 : 1}
                       />
                       <rect
@@ -357,7 +402,7 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                         y={node.y}
                         width={28}
                         height={18}
-                        fill="none"
+                        fill={selected ? "#6CCBFF" : "rgba(190,220,255,0.08)"}
                       />
                       <text
                         x={node.x + 14}
@@ -365,8 +410,8 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                         textAnchor="middle"
                         fontFamily="JetBrains Mono, monospace"
                         fontSize="8.5"
-                        fontWeight="400"
-                        fill="none"
+                        fontWeight="600"
+                        fill={selected ? "#04122E" : "#A9C1E0"}
                       >
                         {node.code}
                       </text>
@@ -375,7 +420,7 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                         y={node.y + 13}
                         fontFamily="JetBrains Mono, monospace"
                         fontSize="8"
-                        fill="#ffffff"
+                        fill="#7F98BC"
                       >
                         {node.sourceFile.split("/").pop()}
                       </text>
@@ -384,8 +429,8 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                         y={node.y + 36}
                         fontFamily="Inter, sans-serif"
                         fontSize="11.5"
-                        fontWeight="400"
-                        fill="#ffffff"
+                        fontWeight="500"
+                        fill="#EAF4FF"
                       >
                         {node.title}
                       </text>
@@ -394,32 +439,124 @@ function NodeDetail({ activeNode }: { activeNode: (typeof ARCH_NODES)[number] })
                         y={node.y + 52}
                         fontFamily="JetBrains Mono, monospace"
                         fontSize="8.5"
-                        fill="none"
+                        fill={selected ? "#6CCBFF" : "#7F98BC"}
                       >
-                        {selected ? "● inspecting node" : ""}
+                        {selected ? "● inspecting node" : "click to inspect"}
                       </text>
                     </g>
                   );
                 })}
               </svg>
-    <p>{activeNode.summary}</p>
-    <XmbSectionLabel>Implementation invariants</XmbSectionLabel>
-    <ul>{activeNode.invariants.map((item) => <li key={item}>{item}</li>)}</ul>
-    <CodeBlock code={activeNode.snippet} lang={activeNode.id === "clients" || activeNode.id.includes("upstream") ? "bash" : "c"} path={activeNode.sourceFile} href={activeNode.sourceHref} showLineNumbers={false} />
-    <p>Static routes and primary upstream settings are loaded at startup. Managed client keys and stored pool replicas can change through guarded local administration; shared runtime state is protected by the configuration mutex.</p>
-    {activeNode.sourceAtlasId && <XmbRow to={`/source?file=${activeNode.sourceAtlasId}`} hint="Read this subsystem's source excerpt.">Open in Source Explorer</XmbRow>}
-    <XmbRow to="/lifecycle" hint="Step through a request from admission to socket close.">Trace request lifecycle</XmbRow>
-  </>;
-}
+            </div>
 
-export function ArchitecturePage() {
-  return <XmbScreen document={<p>YAG is one C17 process with six internal stages. It authenticates request headers before allocating bodies, applies bounded admission, adapts supported protocols and dispatches to an upstream. Select a subsystem below to inspect its responsibilities and source.</p>} initialSelected={2} subtitle="One binary, six internal stages, zero hidden runtimes." sections={[
-    { id: "subsystems", label: "Host topology", interactive: true, entries: ARCH_NODES.map((node) => ({ key: node.id, title: node.title, value: node.code, description: node.summary, panel: <NodeDetail activeNode={node} /> })) },
-    { id: "boundaries", label: "Boundaries", entries: [
-      { key: "execution", title: "Zero model or tool execution", value: "Permanent non-goal", description: "Tool definitions and calls are relayed or translated. Execution stays on the client." },
-      { key: "memory", title: "Request-scoped buffers", value: "Memory ownership", description: "Workers allocate bodies after authentication and free them when connections close. No payload outlives its socket." },
-      { key: "admission", title: "Adaptive admission and replica budgets", description: "The optional FIFO scheduler uses available Linux DRM/sysfs or NVIDIA NVML sensors to adjust its static ceiling. Missing sensors retain the static cap. Pool replicas separately use operator-estimated reservations; neither mechanism guarantees model-specific VRAM safety.", panel: <><p>The optional FIFO scheduler can adjust concurrency from available GPU sensors while respecting configured and per-key limits. Missing VRAM readings retain the static cap.</p><p>Pool replicas separately enforce declared concurrency, model allowlists and estimated VRAM reservations. These are distinct mechanisms, not automatic model sizing.</p><XmbRow to="/source?file=adaptive-scheduler">Read adaptive admission</XmbRow><XmbRow to="/source?file=pool-admission">Read pool admission</XmbRow></> },
-      { key: "network", title: "POSIX foundation", value: "Network boundary", description: "One HTTP/1.x request per connection. No native TLS, keep-alive or chunked request bodies. Remote exposure requires a trusted TLS proxy and firewall." },
-    ] },
-  ]} />;
+            {/* Quick Node Selector Strip for Mobile / Keyboard */}
+            <div className="flex flex-wrap gap-1.5 px-4 py-3">
+              {ARCH_NODES.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setSelectedId(n.id)}
+                  className={cn(
+                    "px-2.5 py-1 font-xmb text-[11.5px] transition-colors cursor-pointer",
+                    n.id === selectedId
+                      ? "bg-amber/15 text-paper"
+                      : "text-faint hover:text-paper",
+                  )}
+                >
+                  <span className="text-amber">{n.code}</span> · {n.title}
+                </button>
+              ))}
+            </div>
+
+            {/* Synchronized Component Inspector */}
+            <div className="grid @3xl:grid-cols-12" aria-live="polite">
+              <div className="p-5 @lg:p-6 @3xl:col-span-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="label text-amber">
+                    Node {activeNode.code} · {activeNode.layer}
+                  </span>
+                  <a
+                    href={activeNode.sourceHref}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-xmb text-[11px] text-muted transition-colors hover:text-amber"
+                  >
+                    {activeNode.sourceFile} ↗
+                  </a>
+                </div>
+                <h2 className="display mt-2.5 text-2xl text-paper @lg:text-3xl">{activeNode.title}</h2>
+                <p className="mt-3 text-[14.5px] leading-[1.74] text-muted">{activeNode.summary}</p>
+
+                <div className="mt-5 pt-4">
+                  <p className="label text-faint">Implementation Invariants</p>
+                  <ul className="mt-2.5 space-y-2">
+                    {activeNode.invariants.map((inv) => (
+                      <li key={inv} className="flex items-baseline gap-2.5 text-[13px] leading-relaxed text-paper/90">
+                        <span aria-hidden="true" className="font-xmb text-amber">▪</span>
+                        <span>{inv}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-2.5">
+                  {activeNode.sourceAtlasId && (
+                    <RouteLink to={`/source?file=${activeNode.sourceAtlasId}`} className="btn btn-amber">
+                      Open in Source Explorer →
+                    </RouteLink>
+                  )}
+                  <RouteLink to="/lifecycle" className="btn btn-outline">
+                    Trace Request Lifecycle →
+                  </RouteLink>
+                </div>
+              </div>
+
+              <div className="p-5 @lg:p-6 @3xl:col-span-6">
+                <p className="label mb-3 text-faint">Corresponding Source / Wire Excerpt</p>
+                <CodeBlock
+                  code={activeNode.snippet}
+                  lang={activeNode.id === "clients" || activeNode.id.includes("upstream") ? "bash" : "c"}
+                  path={activeNode.sourceFile}
+                  href={activeNode.sourceHref}
+                  showLineNumbers={false}
+                />
+                <p className="mt-4 font-xmb text-[11px] leading-relaxed text-faint">
+                  State model: configuration is immutable after <code className="text-paper">config_load()</code> except
+                  in-memory provider/client counters guarded by <code className="text-paper">pthread_mutex_t lock</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Architectural Non-Goals Bar */}
+          <div className="mt-10 grid gap-6 pt-8 @2xl:grid-cols-3">
+            <div>
+              <StatusBadge tone="scope">Permanent Non-Goal</StatusBadge>
+              <h3 className="mt-3 font-serif text-xl text-paper">Zero model or tool execution</h3>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
+                YAG never loads weights, runs tokenizers, or executes client function tools. Tool definitions and tool
+                call structures are relayed or translated; execution stays strictly on the client.
+              </p>
+            </div>
+            <div>
+              <StatusBadge tone="implemented">Memory Ownership</StatusBadge>
+              <h3 className="mt-3 font-serif text-xl text-paper">Request-scoped buffers</h3>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
+                Each worker allocates its request buffer only after header authentication succeeds and frees it when the
+                connection closes. No prompt or completion payload outlives the socket.
+              </p>
+            </div>
+            <div>
+              <StatusBadge tone="absent">Network Boundary</StatusBadge>
+              <h3 className="mt-3 font-serif text-xl text-paper">POSIX foundation, not a fortress</h3>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
+                The listener uses one HTTP/1.x request per connection without native TLS, keep-alive, or chunked request
+                bodies. Remote exposure requires a trusted TLS reverse proxy and firewall.
+              </p>
+            </div>
+          </div>
+        </Container>
+      </section>
+    </div>
+  );
 }

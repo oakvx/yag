@@ -15,9 +15,9 @@ export default defineConfig({
     name: "yag-original-public-assets",
     apply: "build",
     generateBundle() {
-      // Keep user files on disk, but do not publish the old proprietary media slots.
+      // Keep legacy media slots on disk, but do not publish the excluded files.
       const publicRoot = path.join(__dirname, "public");
-      const excluded = /^(?:fonts\/(?:PS4-Logo\.otf|SCE-PS3-Rodin-LATIN\.(?:ttf|woff2))|audio\/(?:start|cursor|select|cancel|trophy)\.mp3)$/i;
+      const excluded = /^(?:fonts\/SCE-PS3-Rodin-LATIN\.(?:ttf|woff2)|audio\/(?:start|cursor|select|cancel|trophy)\.mp3)$/i;
       const emit = (directory: string) => {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
           const absolute = path.join(directory, entry.name);

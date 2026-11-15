@@ -1,7 +1,10 @@
-import { XmbScreen, XmbSectionLabel, type XmbScreenSection } from "@/components/XmbScreen";
+import { useState } from "react";
+import { StatusBadge } from "@/components/Primitives";
 import { REPO_LINKS } from "@/data/repository";
-import { PROJECT_REVIEW } from "@/data/projectKnowledge";
+import { RouteLink } from "@/router/RouterContext";
+import { Glyph } from "@/xmb/Glyphs";
 import type { GlyphName } from "@/xmb/categories";
+import { cn } from "@/utils/cn";
 
 type CaseId = "chat" | "responses" | "messages" | "routed";
 
@@ -50,11 +53,10 @@ const CASES: Array<{
 const SYSTEM_INFO: Array<[string, string]> = [
   ["Binary", "yag · C17 · one process"],
   ["Listener", "127.0.0.1:8080 default"],
-  ["Limits", "1 MiB body by default · 16 KiB headers · 32 connections"],
+  ["Limits", "1 MiB · 16 KiB · 32 conns"],
   ["Keys", "1 primary + ≤ 16 scoped"],
   ["Routes", "≤ 16 exact model IDs"],
-  ["Stage", `Experimental · reviewed main @ ${PROJECT_REVIEW.revision.slice(0, 7)}`],
-  ["Replica pool", "Up to 8 backends · declared model and resource policies"],
+  ["Stage", "Experimental · v0.1.0"],
 ];
 
 const LAUNCH: Array<{ to: string; glyph: GlyphName; label: string; sub: string }> = [
@@ -68,23 +70,100 @@ const LAUNCH: Array<{ to: string; glyph: GlyphName; label: string; sub: string }
 const CLIENT_Y = [58, 126, 194, 262];
 const DEST_Y = [96, 226];
 
-function Topology({ activeIdx }: { activeIdx: number }) {
-  const active = CASES[activeIdx];
-  const sel = active.id;
-  return <><XmbSectionLabel>Gateway signal topology</XmbSectionLabel>
+export function HomePage() {
+  const [sel, setSel] = useState<CaseId>("chat");
+  const active = CASES.find((c) => c.id === sel) ?? CASES[0];
+  const activeIdx = CASES.findIndex((c) => c.id === sel);
+
+  return (
+    <div className="grid gap-5 p-5 @lg:p-7 @3xl:grid-cols-12">
+      {/* Identity */}
+      <section className="flex flex-col justify-between gap-6 @3xl:col-span-5" aria-labelledby="home-title">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone="mock">Experimental</StatusBadge>
+            <span className="px-2.5 py-0.5 font-xmb text-[11.5px] text-muted">
+              MIT
+            </span>
+            <span className="px-2.5 py-0.5 font-xmb text-[11.5px] text-muted">
+              C17 host
+            </span>
+          </div>
+
+          <h1 id="home-title" className="display mt-4 text-[2.3rem] text-paper @2xl:text-[2.8rem]">
+            Your models. Your endpoints. <em>One gateway.</em>
+          </h1>
+
+          <p className="mt-4 text-[14px] leading-[1.7] text-muted">
+            YAG is a single C17 binary between your applications and the OpenAI-compatible servers you run. It
+            authenticates clients, selects exact-model routes, forwards Chat Completions, and translates bounded
+            Responses and Anthropic Messages subsets — keeping upstream credentials on the host. It never runs a
+            model or a tool.
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            <RouteLink to="/architecture" className="btn btn-primary">
+              Open Architecture <span aria-hidden="true">→</span>
+            </RouteLink>
+            <RouteLink to="/lifecycle" className="btn btn-amber">
+              Trace a request
+            </RouteLink>
+            <a href={REPO_LINKS.repo} target="_blank" rel="noreferrer noopener" className="btn btn-outline">
+              GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <p className="pl-3.5 font-xmb text-[11px] leading-relaxed text-faint">
+          <span className="text-rust">Foundation, not a fortress:</span> no native TLS, CORS
+          configuration, audit log or independent security audit. Automated suites run against a deterministic mock
+          upstream.
+        </p>
+      </section>
+
+      {/* Interactive topology */}
+      <section className="@3xl:col-span-7" aria-label="Gateway topology">
+        <div className="overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 font-xmb text-[11.5px]">
+            <span className="text-amber">Fig. 00 · Gateway signal topology</span>
+            <span className="text-faint">Select an entry path</span>
+          </div>
+
+          <div role="tablist" aria-label="Entry path" className="grid grid-cols-2 @2xl:grid-cols-4">
+            {CASES.map((c, i) => {
+              const on = c.id === sel;
+              return (
+                <button
+                  key={c.id}
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setSel(c.id)}
+                  className={cn(
+                    "cursor-pointer px-3 py-2 text-left font-xmb text-[11.5px] transition-colors",
+                    on ? "bg-amber/[0.14] text-paper" : "text-faint hover:bg-white/[0.04] hover:text-muted",
+                  )}
+                >
+                  <span className={on ? "text-amber" : "text-faint"}>0{i + 1}</span>
+                  <div className="mt-0.5 truncate text-[11px]">{c.endpoint.replace("POST ", "")}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="p-3 @lg:p-4">
             <svg
               viewBox="0 0 680 320"
-              className="xmb-diagram"
+              className="h-auto w-full"
               role="img"
               aria-label="Four client entry paths converge on the YAG host and are dispatched to the default upstream or a model-specific route"
             >
-              <g stroke="rgba(255,255,255,0.1)" strokeDasharray="3 5">
+              <g stroke="rgba(190,220,255,0.1)" strokeDasharray="3 5">
                 <line x1="215" y1="12" x2="215" y2="308" />
                 <line x1="455" y1="12" x2="455" y2="308" />
               </g>
-              <g fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#ffffff" letterSpacing="1.2">
+              <g fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#7F98BC" letterSpacing="1.2">
                 <text x="14" y="22">CLIENTS (GATEWAY KEY)</text>
-                <text x="275" y="22" fill="#ffffff">HOST BOUNDARY · :8080</text>
+                <text x="275" y="22" fill="#6CCBFF">HOST BOUNDARY · :8080</text>
                 <text x="486" y="22">UPSTREAMS (HOST SECRETS)</text>
               </g>
 
@@ -94,8 +173,8 @@ function Topology({ activeIdx }: { activeIdx: number }) {
                 const on = i === activeIdx;
                 return (
                   <g key={c.id}>
-                    <path d={d} fill="none" stroke={on ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.14)"} strokeWidth={on ? 1.6 : 1} />
-                    {on && <path d={d} fill="none" stroke="#ffffff" strokeWidth="2.2" className="signal-flow" />}
+                    <path d={d} fill="none" stroke={on ? "rgba(108,203,255,0.5)" : "rgba(190,220,255,0.14)"} strokeWidth={on ? 1.6 : 1} />
+                    {on && <path d={d} fill="none" stroke="#9fe1ff" strokeWidth="2.2" className="signal-flow" />}
                   </g>
                 );
               })}
@@ -104,8 +183,8 @@ function Topology({ activeIdx }: { activeIdx: number }) {
                 const on = active.dest === di;
                 return (
                   <g key={di}>
-                    <path d={d} fill="none" stroke={on ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.14)"} strokeWidth={on ? 1.6 : 1} />
-                    {on && <path d={d} fill="none" stroke="#ffffff" strokeWidth="2.2" className="signal-flow" />}
+                    <path d={d} fill="none" stroke={on ? "rgba(108,203,255,0.5)" : "rgba(190,220,255,0.14)"} strokeWidth={on ? 1.6 : 1} />
+                    {on && <path d={d} fill="none" stroke="#9fe1ff" strokeWidth="2.2" className="signal-flow" />}
                   </g>
                 );
               })}
@@ -114,17 +193,17 @@ function Topology({ activeIdx }: { activeIdx: number }) {
                 const y = CLIENT_Y[i];
                 const on = i === activeIdx;
                 return (
-                  <g key={c.id} >
-                    <rect x="14" y={y - 22} width="172" height="44" fill="none" stroke={on ? "#ffffff" : "rgba(255,255,255,0.22)"} strokeWidth={on ? 1.3 : 1} />
-                    <text x="24" y={y - 4} fontFamily="Inter, sans-serif" fontSize="11" fontWeight="400" fill="#ffffff">{c.client}</text>
-                    <text x="24" y={y + 12} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#ffffff">{c.endpoint}</text>
+                  <g key={c.id} className="cursor-pointer" onClick={() => setSel(c.id)}>
+                    <rect x="14" y={y - 22} width="172" height="44" rx="10" fill={on ? "rgba(60,140,230,0.3)" : "rgba(10,30,74,0.7)"} stroke={on ? "#6CCBFF" : "rgba(190,220,255,0.22)"} strokeWidth={on ? 1.3 : 1} />
+                    <text x="24" y={y - 4} fontFamily="Inter, sans-serif" fontSize="11" fontWeight="500" fill="#EAF4FF">{c.client}</text>
+                    <text x="24" y={y + 12} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#A9C1E0">{c.endpoint}</text>
                   </g>
                 );
               })}
 
               <g>
-                <rect x="268" y="56" width="136" height="208" fill="none" stroke="#ffffff" strokeWidth="1.4" />
-                <text x="280" y="76" fontFamily="JetBrains Mono, monospace" fontSize="10" fontWeight="400" fill="#ffffff">YAG · C17 HOST</text>
+                <rect x="268" y="56" width="136" height="208" rx="12" fill="rgba(14,40,96,0.8)" stroke="#6CCBFF" strokeWidth="1.4" />
+                <text x="280" y="76" fontFamily="JetBrains Mono, monospace" fontSize="10" fontWeight="600" fill="#EAF4FF">YAG · C17 HOST</text>
                 {[
                   ["01 AUTH", "Bearer / scopes"],
                   ["02 ADAPT", sel === "chat" || sel === "routed" ? "Passthrough" : "→ Chat JSON"],
@@ -134,9 +213,9 @@ function Topology({ activeIdx }: { activeIdx: number }) {
                   const sy = 96 + idx * 40;
                   return (
                     <g key={stage}>
-                      <line x1="278" y1={sy + 28} x2="394" y2={sy + 28} stroke="rgba(255,255,255,0.12)" />
-                      <text x="280" y={sy + 8} fontFamily="JetBrains Mono, monospace" fontSize="8" fill="#ffffff">{stage}</text>
-                      <text x="280" y={sy + 21} fontFamily="JetBrains Mono, monospace" fontSize="9" fill="#ffffff">{desc}</text>
+                      <line x1="278" y1={sy + 28} x2="394" y2={sy + 28} stroke="rgba(190,220,255,0.12)" />
+                      <text x="280" y={sy + 8} fontFamily="JetBrains Mono, monospace" fontSize="8" fill="#6CCBFF">{stage}</text>
+                      <text x="280" y={sy + 21} fontFamily="JetBrains Mono, monospace" fontSize="9" fill="#EAF4FF">{desc}</text>
                     </g>
                   );
                 })}
@@ -150,33 +229,56 @@ function Topology({ activeIdx }: { activeIdx: number }) {
                 const on = active.dest === di;
                 return (
                   <g key={b.title}>
-                    <rect x="486" y={y - 28} width="180" height="56" fill="none" stroke={on ? "#ffffff" : "rgba(255,255,255,0.22)"} strokeWidth={on ? 1.3 : 1} />
-                    <text x="496" y={y - 9} fontFamily="Inter, sans-serif" fontSize="11" fontWeight="400" fill="#ffffff">{b.title}</text>
-                    <text x="496" y={y + 6} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#ffffff">{b.sub}</text>
-                    <text x="496" y={y + 19} fontFamily="JetBrains Mono, monospace" fontSize="8" fill="#ffffff">{b.tag}</text>
+                    <rect x="486" y={y - 28} width="180" height="56" rx="10" fill={on ? "rgba(60,140,230,0.3)" : "rgba(10,30,74,0.7)"} stroke={on ? "#6CCBFF" : "rgba(190,220,255,0.22)"} strokeWidth={on ? 1.3 : 1} />
+                    <text x="496" y={y - 9} fontFamily="Inter, sans-serif" fontSize="11" fontWeight="500" fill="#EAF4FF">{b.title}</text>
+                    <text x="496" y={y + 6} fontFamily="JetBrains Mono, monospace" fontSize="8.5" fill="#6CCBFF">{b.sub}</text>
+                    <text x="496" y={y + 19} fontFamily="JetBrains Mono, monospace" fontSize="8" fill="#7F98BC">{b.tag}</text>
                   </g>
                 );
               })}
             </svg>
-    <p>{active.mode}</p><p>{active.note}</p></>;
-}
+          </div>
 
-export function HomePage() {
-  const sections: XmbScreenSection[] = [
-    { id: "gateway", label: "Gateway", entries: [
-      { key: "overview", title: "About YAG", value: "C17 gateway", description: "Authenticate, route and translate. Upstream credentials stay on the host.", panel: <>
-        <p>YAG is a single C17 binary between your applications and the OpenAI-compatible servers you run. It authenticates clients, selects exact-model routes, forwards Chat Completions, and translates bounded Responses and Anthropic Messages subsets. It never runs a model or a tool.</p>
-        <p>The project now includes an optional Desktop client, a local operator Console, managed client keys and provider pools. GPU-aware admission can use supported sensors; declared replica budgets remain estimates.</p>
-        <p>Experimental: no native TLS, configurable CORS or independent security audit. An optional private admin event trail exists; real-model compatibility remains unqualified.</p>
-        <p className="xmb-document-meta">Project knowledge reviewed {PROJECT_REVIEW.date} · main @ {PROJECT_REVIEW.revision.slice(0, 7)}</p>
-      </> },
-      { key: "architecture", title: "Open Architecture", value: "Host blueprint", to: "/architecture" },
-      { key: "trace", title: "Trace a request", value: "Lifecycle simulator", to: "/lifecycle" },
-      { key: "github", title: "GitHub", value: "oakvx/yag", href: REPO_LINKS.repo },
-    ] },
-    { id: "paths", label: "Signal paths", preview: true, entries: CASES.map((item, index) => ({ key: item.id, title: item.endpoint.replace("POST ", ""), value: item.client, description: item.note, panel: <Topology activeIdx={index} /> })) },
-    { id: "system", label: "System", entries: SYSTEM_INFO.map(([title, value]) => ({ key: title, title, value })) },
-    { id: "explore", label: "Explore", entries: LAUNCH.map((item) => ({ key: item.to, title: item.label, icon: item.glyph, value: item.sub, to: item.to })) },
-  ];
-  return <XmbScreen subtitle="Gateway overview" document={sections[0].entries[0].panel} sections={sections.map((section, index) => index === 0 ? { ...section, entries: section.entries.slice(1) } : section)} />;
+          <div className="grid gap-2 px-4 py-3 font-xmb text-[11px] @2xl:grid-cols-12" aria-live="polite">
+            <div className="@2xl:col-span-5">
+              <span className="text-amber">ACTIVE PATH:</span> <span className="text-paper">{active.mode}</span>
+            </div>
+            <div className="text-muted @2xl:col-span-7">{active.note}</div>
+          </div>
+        </div>
+      </section>
+
+      {/* System information */}
+      <section className="@3xl:col-span-12" aria-label="System information">
+        <dl className="grid grid-cols-2 gap-4 overflow-hidden @2xl:grid-cols-3 @4xl:grid-cols-6">
+          {SYSTEM_INFO.map(([k, v]) => (
+            <div key={k} className="px-4 py-3">
+              <dt className="font-xmb text-[11px] text-faint">{k}</dt>
+              <dd className="mt-1 font-xmb text-[11.5px] text-paper">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      {/* Launcher */}
+      <nav className="@3xl:col-span-12" aria-label="Project areas">
+        <ul className="grid gap-2 @lg:grid-cols-2 @3xl:grid-cols-5">
+          {LAUNCH.map((l) => (
+            <li key={l.to}>
+              <RouteLink
+                to={l.to}
+                className="group flex items-center gap-3 px-3.5 py-2.5 transition-all duration-300 hover:bg-amber/[0.1]"
+              >
+                <Glyph name={l.glyph} className="h-6 w-6 text-muted transition-colors group-hover:text-white" />
+                <span className="min-w-0">
+                  <span className="block font-serif text-[15px] text-paper">{l.label}</span>
+                  <span className="block truncate text-[11.5px] text-faint">{l.sub}</span>
+                </span>
+              </RouteLink>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  );
 }

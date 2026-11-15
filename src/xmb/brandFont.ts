@@ -11,6 +11,7 @@ interface BrandCandidate {
 
 /** Optional user-supplied display faces, most specific first. */
 const CANDIDATES: BrandCandidate[] = [
+  { path: "fonts/PS4-Logo.otf", format: "opentype" },
   { path: "fonts/YAG-Boot-Display.woff2", format: "woff2" },
   { path: "fonts/YAG-Boot-Display.ttf", format: "truetype" },
 ];
@@ -39,7 +40,7 @@ export function loadBrandFont(): void {
   void (async () => {
     for (const candidate of candidates) {
       try {
-        const face = new FontFace(BRAND_FONT, `url("${publicAsset(candidate.path)}")`, {
+        const face = new FontFace(BRAND_FONT, `url("${publicAsset(candidate.path)}") format("${candidate.format}")`, {
           weight: "400",
           style: "normal",
         });

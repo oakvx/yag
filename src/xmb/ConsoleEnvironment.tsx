@@ -19,6 +19,7 @@ import { useDpadNavigation, type DpadDirection } from "./useDpadNavigation";
 import { XmbStatusBar } from "./XmbStatusBar";
 import { useIdleChrome } from "./useIdleChrome";
 import { ScrollEdges } from "@/components/XmbScreen";
+import { CardPageInfoContext } from "@/components/CardPage";
 import { ApplicationHints, sendApplicationInput } from "./ApplicationControls";
 
 /* Pointer sensitivity: one deliberate input = one step, as with the PS3 D-pad. */
@@ -57,6 +58,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   } = useRouter();
   const [direction, setDirection] = useState<"right" | "left">("right");
   const [screenTitle, setScreenTitle] = useState("");
+  const [pageInfo, setPageInfo] = useState("");
   useLayoutEffect(() => {
     const title = (event: Event) => setScreenTitle((event as CustomEvent<string>).detail);
     window.addEventListener("yag:screen-title", title);
@@ -493,13 +495,18 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const key = (e: globalThis.KeyboardEvent) => {
-      if (e.defaultPrevented || !bootReady || paletteOpen || dialogRef.current || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!bootReady || paletteOpen || dialogRef.current || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       const editing = el && (el.matches("input, textarea, select") || el.isContentEditable);
       if (editing && e.key !== "Escape") return;
       if (noticesOpen || optionsOpen || easterOpen) return;
       if (isApp) {
-        if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); back(); }
+        if (e.key === "Escape" || e.key === "Backspace") {
+          e.preventDefault();
+          back();
+          return;
+        }
+        if (e.defaultPrevented) return;
         return;
       }
       if (e.defaultPrevented) return;
@@ -772,13 +779,15 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
               <h1>{screenTitle || appTitle}</h1>
             </div>
           </header>
-          <div className="console-app-body">
-            <main ref={appRef} id="main-content" tabIndex={-1} className="console-application-content @container">
-              <div key={path} className="console-app-content-enter">{children}</div>
-            </main>
-            <ScrollEdges targetRef={appRef} />
-          </div>
-          <ApplicationHints rootRef={appRef} onBack={() => { if (sendApplicationInput(appRef.current, "Escape") !== false) back(); }} backGlyph={<ControllerGlyph kind="circle" />} selectGlyph={<ControllerGlyph kind="select" />} navigateGlyph={<span aria-hidden="true">↕</span>} />
+          <CardPageInfoContext.Provider value={setPageInfo}>
+            <div className="console-app-body">
+              <main ref={appRef} id="main-content" tabIndex={-1} className="console-application-content @container">
+                <div key={path} className="console-app-content-enter">{children}</div>
+              </main>
+              <ScrollEdges targetRef={appRef} />
+            </div>
+            <ApplicationHints rootRef={appRef} onBack={() => { if (sendApplicationInput(appRef.current, "Escape") !== false) back(); }} backGlyph={<ControllerGlyph kind="circle" />} selectGlyph={<ControllerGlyph kind="select" />} navigateGlyph={<span aria-hidden="true">↕</span>} info={pageInfo} />
+          </CardPageInfoContext.Provider>
         </section>
       )}
 

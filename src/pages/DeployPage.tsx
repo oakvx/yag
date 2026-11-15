@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { CodeBlock } from "@/components/CodeBlock";
-import { XmbRow } from "@/components/XmbRow";
-import { XmbScreen } from "@/components/XmbScreen";
+import { CodeBlock } from "@/components/CodeCard";
+import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
 import { REPO_LINKS } from "@/data/repository";
-import { useRouter } from "@/router/RouterContext";
+import { RouteLink, useRouter } from "@/router/RouterContext";
+import { cn } from "@/utils/cn";
 
 type DeployTarget = "openai-local" | "ollama" | "lan-colibri";
 
@@ -26,7 +26,7 @@ curl http://127.0.0.1:8080/v1/models \\
   -H "Authorization: Bearer $YAG_API_KEY"`;
 
 export function DeployPage() {
-  const { query } = useRouter();
+  const { query, navigate } = useRouter();
   const view = query.view === "quickstart" ? "quickstart" : "runbook";
   const [target, setTarget] = useState<DeployTarget>("ollama");
   const [withConsole, setWithConsole] = useState(true);
@@ -87,41 +87,252 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
   -H 'Content-Type: application/json' \\
   -d '{"model":"YOUR_MODEL_ID","messages":[{"role":"user","content":"Hello"}],"stream":false}'`;
 
-  const profiles: DeployTarget[] = ["ollama", "openai-local", "lan-colibri"];
-  return <XmbScreen document={<p>Build the native C17 host, choose an upstream, and keep the listener on loopback until its trust boundary is configured. The settings below assemble copyable commands for local servers or a private-CA LAN deployment.</p>} key={view} initialSection={view === "quickstart" ? 3 : undefined}
-    subtitle="Assemble copyable commands for a local host or private-CA LAN deployment." sections={[
-    { id: "configuration", label: "Deployment settings", entries: [
-      { key: "target", title: "Upstream profile", value: { ollama: "Local Ollama", "openai-local": "Local /v1 server", "lan-colibri": "Colibri LAN hub" }[target],
-        activate: () => setTarget(profiles[(profiles.indexOf(target) + 1) % profiles.length]), description: "Select to cycle the upstream topology. Commands below update immediately.",
-        panel: <p>Ollama uses 127.0.0.1:11434/v1. A local OpenAI-compatible server uses 127.0.0.1:8000/v1. Colibri provisions Compose, a Caddy reverse proxy and a private CA.</p> },
-      { key: "console", title: "Build React Console", value: withConsole ? "On" : "Off", activate: () => setWithConsole(!withConsole), description: "Requires Node and npm. API-only deployments can skip the browser bundle." },
-      { key: "tests", title: "Run CTest suites", value: withTests ? "On" : "Off", activate: () => setWithTests(!withTests), description: "Requires Python 3.9+. Tests run against deterministic mock upstreams." },
-      ...(target !== "lan-colibri" ? [{ key: "rate", title: "60 RPM rate limit", value: withRateLimit ? "On" : "Off", activate: () => setWithRateLimit(!withRateLimit), description: "A fixed 60-second rate window per authenticated key." }] : []),
-      { key: "bind", title: "Default bind", value: "127.0.0.1:8080" },
-      { key: "key", title: "Primary key", value: "At least 16 characters", description: "Read from the private environment. Static configuration changes require a restart." },
-    ] },
-    { id: "dependencies", label: "Dependencies", entries: [
-      { key: "host", title: "Native host", value: "Required", description: "Linux, POSIX sockets, pthreads, a C17 compiler, CMake 3.16+ and libcurl development headers." },
-      { key: "json", title: "yyjson 0.12.0", value: "Vendored", description: "Included under third_party/yyjson; no external C package manager is used." },
-      { key: "node", title: "Node & npm", value: "Optional", description: "Only required to compile console/dist." },
-      { key: "python", title: "Python 3.9+", value: "Optional", description: "Needed for contract tests and scripts/lan.py." },
-      { key: "docker", title: "Docker Compose v2", value: "Optional", description: "Needed for container and Colibri LAN hub modes." },
-    ] },
-    { id: "commands", label: "Guided runbook", entries: [
-      { key: "install", title: "Install packages", value: "Step 1", description: "Debian / Ubuntu toolchain.", panel: <CodeBlock code={depsCmd} lang="bash" path="Host dependencies" showLineNumbers={false} /> },
-      { key: "build", title: "Clone, compile & test", value: "Step 2", description: "Produces ./build/yag and optional console/dist.", panel: <CodeBlock code={buildCmd} lang="bash" path="CMake & optional Console" showLineNumbers={false} /> },
-      { key: "run", title: "Configure & start", value: "Step 3", description: "Keep secrets in a private environment; never commit them to public files.", panel: <CodeBlock code={envAndRunCmd} lang="bash" path={target === "lan-colibri" ? "scripts/lan.py" : "Runtime environment"} href={target === "lan-colibri" ? REPO_LINKS.lanHubDoc : REPO_LINKS.run} showLineNumbers={false} /> },
-      { key: "verify", title: "Verify the gateway", value: "Step 4", description: "Check liveness, model discovery and the first inference call.", panel: <CodeBlock code={verifyCmd} lang="bash" path="Verification commands" showLineNumbers={false} /> },
-    ] },
-    { id: "quickstart", label: "Quickstart", entries: [
-      { key: "quickstart", title: "Build & run on loopback", value: "Four steps", description: "Commands from the repository README, for a local Linux machine.", panel: <CodeBlock code={QUICKSTART} lang="bash" path="README · build / run" href={REPO_LINKS.build} showLineNumbers={false} /> },
-    ] },
-    { id: "guides", label: "Deployment guides", entries: [
-      { key: "releases", title: "Host and Desktop packages", description: "Release workflows build the Linux Host archive and native Windows, macOS and Linux Desktop installers. Verify checksums and provenance for the exact reviewed tag. A candidate package does not prove real-model compatibility.", panel: <><p>Host packages target Linux. Desktop packages are clients for Windows, macOS and Linux; they do not turn those platforms into native Host servers.</p><p>Reviewed releases include SHA-256 checksums and build provenance. Candidate acceptance, real-model qualification and stable publication are separate steps.</p><XmbRow href={REPO_LINKS.releasesDoc}>Read release and verification instructions</XmbRow></> },
-      { key: "docker-doc", title: "Docker deployment", href: REPO_LINKS.dockerDoc },
-      { key: "lan-doc", title: "LAN hub guide", href: REPO_LINKS.lanHubDoc },
-      { key: "ollama-doc", title: "Ollama integration", href: REPO_LINKS.ollamaDoc },
-      { key: "security", title: "Security boundaries", to: "/security", description: "Review the trust boundaries before exposing a listener beyond loopback." },
-    ] },
-  ]} />;
+  return (
+    <div>
+      <PageMasthead
+        path="/deploy"
+        eyebrow={view === "quickstart" ? "Quickstart · four steps" : "Guided runbook"}
+        title={
+          view === "quickstart" ? (
+            <>
+              Install, build, run, <em>verify.</em>
+            </>
+          ) : (
+            <>
+              Compile the host, set two variables, <em>verify on loopback.</em>
+            </>
+          )
+        }
+        lede={
+          view === "quickstart"
+            ? "The shortest documented path from a clean Linux machine to a verified gateway on loopback. Every command is taken from the repository README."
+            : "Configure your target environment below to assemble exact, copyable commands from the repository documentation. Mandatory C17 host dependencies are separated from optional test and Console toolchains."
+        }
+        meta={[
+          { k: "Default bind", v: "127.0.0.1:8080", tone: "moss" },
+          { k: "Required env", v: "YAG_API_KEY (≥ 16 chars)", tone: "amber" },
+          { k: "Config reload", v: "Read once at startup (restart)" },
+        ]}
+      />
+
+      <div className="px-5 pt-4 @lg:px-8">
+        <div role="group" aria-label="Deployment view" className="inline-flex p-1 font-xmb text-[12px]">
+          {[
+            { id: "runbook", label: "Guided runbook", to: "/deploy" },
+            { id: "quickstart", label: "Quickstart", to: "/deploy?view=quickstart" },
+          ].map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              aria-pressed={view === v.id}
+              onClick={() => navigate(v.to)}
+              className={cn("cursor-pointer px-3.5 py-1.5 transition-colors", view === v.id ? "bg-amber/20 text-white" : "text-faint hover:text-paper")}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === "quickstart" && (
+        <section className="py-6 @lg:py-8">
+          <Container>
+            <CodeBlock code={QUICKSTART} lang="bash" path="README · build / run" href={REPO_LINKS.build} showLineNumbers={false} />
+            <div className="mt-5 grid gap-4 @2xl:grid-cols-2">
+              <div className="p-4 text-[13px] leading-relaxed text-muted">
+                <StatusBadge tone="implemented">Required</StatusBadge>
+                <p className="mt-2">A C17 compiler, CMake 3.16+, libcurl headers and pthreads. <code className="font-xmb text-paper">YAG_API_KEY</code> must be at least 16 characters.</p>
+              </div>
+              <div className="p-4 text-[13px] leading-relaxed text-muted">
+                <StatusBadge tone="scope">Optional</StatusBadge>
+                <p className="mt-2">Node 18+ for the browser Console, Python 3 for the mock-upstream tests, Docker Compose for container and LAN-hub modes — see the guided runbook.</p>
+              </div>
+            </div>
+          </Container>
+        </section>
+      )}
+
+      {view === "runbook" && (
+      <section className="py-6 @lg:py-8">
+        <Container>
+          {/* Interactive Deployment Configurator */}
+          <div className="mb-8 p-4 @lg:p-6">
+            <div className="grid gap-6 @3xl:grid-cols-12">
+              <div className="@3xl:col-span-6">
+                <span className="label block text-amber">01 · Select Upstream / Topology Profile</span>
+                <div className="mt-2.5 grid gap-2 @lg:grid-cols-3 font-xmb text-[12px]">
+                  {[
+                    { id: "ollama", title: "Local Ollama", sub: "127.0.0.1:11434/v1" },
+                    { id: "openai-local", title: "Local /v1 Server", sub: "vLLM / llama.cpp :8000" },
+                    { id: "lan-colibri", title: "Colibri LAN Hub", sub: "Private CA + Compose" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setTarget(item.id as DeployTarget)}
+                      className={cn(
+                        "p-2.5 text-left transition-colors cursor-pointer",
+                        target === item.id
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
+                      )}
+                    >
+                      <div className="font-medium text-paper">{item.title}</div>
+                      <div className="mt-0.5 text-[9.5px] text-faint">{item.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="@3xl:col-span-6 @3xl:pl-6">
+                <span className="label block text-faint">02 · Optional Build & Runtime Steps</span>
+                <div className="mt-2.5 flex flex-wrap gap-4 font-xmb text-[11px] text-paper">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={withConsole}
+                      onChange={(e) => setWithConsole(e.target.checked)}
+                      className="accent-[#6ccbff]"
+                    />
+                    <span>Build React Console (Node 18+)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={withTests}
+                      onChange={(e) => setWithTests(e.target.checked)}
+                      className="accent-[#6ccbff]"
+                    />
+                    <span>Run CTest Suite (Python 3)</span>
+                  </label>
+                  {target !== "lan-colibri" && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={withRateLimit}
+                        onChange={(e) => setWithRateLimit(e.target.checked)}
+                        className="accent-[#6ccbff]"
+                      />
+                      <span>Enable 60 RPM Rate Limit</span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Mandatory vs Optional Dependency Breakdown */}
+          <div className="mb-10 grid gap-6 @2xl:grid-cols-2">
+            <div className="p-5">
+              <StatusBadge tone="implemented">Mandatory Host Dependencies</StatusBadge>
+              <ul className="mt-3 space-y-1.5 font-xmb text-[11.5px] text-paper">
+                <li>· Linux with POSIX sockets &amp; pthreads</li>
+                <li>· C17 compiler (GCC / Clang via build-essential)</li>
+                <li>· CMake 3.16+</li>
+                <li>· libcurl development headers (libcurl4-openssl-dev)</li>
+              </ul>
+              <p className="mt-2.5 text-[12.5px] text-muted">
+                <code className="font-xmb text-paper">yyjson 0.12.0</code> is vendored under{" "}
+                <code className="font-xmb text-paper">third_party/yyjson</code> — no external C package manager is
+                used.
+              </p>
+            </div>
+
+            <div className="p-5">
+              <StatusBadge tone="scope">Optional Toolchains</StatusBadge>
+              <ul className="mt-3 space-y-1.5 font-xmb text-[11.5px] text-muted">
+                <li>
+                  · <span className="text-paper">Node 18+ &amp; npm:</span> only required if compiling the browser
+                  Console (<code className="text-paper">console/dist</code>). API-only deployments can skip it.
+                </li>
+                <li>
+                  · <span className="text-paper">Python 3.9+:</span> only required to run the CTest mock-upstream suites
+                  or <code className="text-paper">scripts/lan.py</code>.
+                </li>
+                <li>
+                  · <span className="text-paper">Docker Compose v2:</span> only required for container / Colibri LAN hub
+                  mode.
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Step-by-Step Guided Terminal Runbook */}
+          <ol className="space-y-6">
+            <li className="pt-5">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="font-serif text-2xl text-paper">
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 01</span>
+                  Install packages
+                </h2>
+                <span className="font-xmb text-[12px] text-faint">Debian / Ubuntu example</span>
+              </div>
+              <CodeBlock code={depsCmd} lang="bash" path="Host dependencies" showLineNumbers={false} />
+            </li>
+
+            <li className="pt-5">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="font-serif text-2xl text-paper">
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 02</span>
+                  Clone, compile &amp; run mock contract tests
+                </h2>
+                <span className="font-xmb text-[12px] text-faint">Produces ./build/yag</span>
+              </div>
+              <CodeBlock code={buildCmd} lang="bash" path="CMake & optional Console" showLineNumbers={false} />
+            </li>
+
+            <li className="pt-5">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="font-serif text-2xl text-paper">
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 03</span>
+                  {target === "lan-colibri"
+                    ? "Provision the Colibri private-CA LAN stack"
+                    : "Configure environment & start the gateway"}
+                </h2>
+                <span className="font-xmb text-[12px] text-faint">
+                  {target === "lan-colibri" ? "HTTPS via Caddy + private CA" : "Localhost :8080"}
+                </span>
+              </div>
+              <CodeBlock
+                code={envAndRunCmd}
+                lang="bash"
+                path={target === "lan-colibri" ? "scripts/lan.py" : "Runtime environment"}
+                href={target === "lan-colibri" ? REPO_LINKS.lanHubDoc : REPO_LINKS.run}
+                showLineNumbers={false}
+              />
+            </li>
+
+            <li className="pt-5">
+              <div className="mb-3 flex items-baseline justify-between">
+                <h2 className="font-serif text-2xl text-paper">
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 04</span>
+                  Verify health, model discovery &amp; first inference call
+                </h2>
+                <span className="font-xmb text-[12px] text-faint">Client verification</span>
+              </div>
+              <CodeBlock code={verifyCmd} lang="bash" path="Verification commands" showLineNumbers={false} />
+            </li>
+          </ol>
+
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 pt-6 font-xmb text-[11px]">
+            <div className="flex flex-wrap gap-4">
+              <a href={REPO_LINKS.dockerDoc} target="_blank" rel="noreferrer noopener" className="text-amber hover:underline">
+                Docker Deployment Doc ↗
+              </a>
+              <a href={REPO_LINKS.lanHubDoc} target="_blank" rel="noreferrer noopener" className="text-amber hover:underline">
+                LAN Hub Guide ↗
+              </a>
+              <a href={REPO_LINKS.ollamaDoc} target="_blank" rel="noreferrer noopener" className="text-amber hover:underline">
+                Ollama Integration Guide ↗
+              </a>
+            </div>
+            <RouteLink to="/security" className="text-rust hover:underline">
+              Review Security Boundaries Before LAN Exposure →
+            </RouteLink>
+          </div>
+        </Container>
+      </section>
+      )}
+    </div>
+  );
 }

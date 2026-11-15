@@ -5,8 +5,7 @@ Boot, navigation, trophy and ambient sounds use original procedural synthesis.
 Optional replacements must be original or appropriately licensed for deployment.
 
 Wordmark:
-  public/brand/boot-logo.svg
-  public/brand/boot-subtitle.svg
+  public/fonts/PS4-Logo.otf
   public/fonts/YAG-Boot-Display.woff2
   public/fonts/YAG-Boot-Display.ttf
 
@@ -18,6 +17,8 @@ Audio:
   public/audio/yag-cancel.mp3
   public/audio/yag-trophy.mp3
 
-Legacy proprietary font and sample filenames are neither loaded by the app nor
-copied into production builds. Existing user files are left intact on disk.
+The optional PS4-Logo font is used for the YAG wordmark when present and is
+included in production builds. Deploy it only where you have the required rights.
+Other legacy font and sample filenames are not loaded or copied into production.
+Existing user files are left intact on disk.
 The built-in icon set is credited in third_party/xmb-icons.

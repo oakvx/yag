@@ -14,6 +14,7 @@ import { ConfigurationPage, OperationsPage, SystemInfoPage } from "./pages/Syste
 import { ProfilePage } from "./pages/ProfilePage";
 import { ThemeSettingsPage } from "./pages/ThemeSettings";
 import { TrophiesPage } from "./pages/TrophiesPage";
+import { CardPage } from "./components/CardPage";
 import { RouterProvider, useRouter } from "./router/RouterContext";
 import type { RoutePath } from "./router/routes";
 
@@ -42,7 +43,8 @@ function ActiveRouteView() {
   };
 
   const Component = views[path] ?? HomePage;
-  return <Component />;
+  const plain = path === "/theme" || path === "/trophies";
+  return plain ? <Component /> : <CardPage><Component /></CardPage>;
 }
 
 export default function App() {

@@ -19,5 +19,5 @@ AUDIO (all optional; missing files are skipped without console errors)
   public/audio/trophy.mp3        easter egg
 
 Use only media you have the rights to deploy. The referenced PlayStation 3
-system sounds and PS4 logo typeface are copyrighted third-party assets; this
-repository intentionally ships neither.
+system sounds and typeface remain excluded from production builds. PS4-Logo.otf
+is used and included only in deployments with the required rights.

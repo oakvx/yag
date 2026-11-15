@@ -20,6 +20,12 @@ export function sendApplicationInput(root: HTMLElement | null, key: string) {
     active.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
+  if (!root.querySelector(".xmb-screen") && ["ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(key)) {
+    // Card pages are plain scrolling documents: pad and on-screen controls scroll them.
+    const step = key.startsWith("Page") ? root.clientHeight * 0.8 : 96;
+    root.scrollBy({ top: key.endsWith("Up") ? -step : step, behavior: "smooth" });
+    return;
+  }
   if (key === "PageUp" || key === "PageDown") {
     (target ?? root).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
     return;
@@ -54,12 +60,13 @@ export function sendApplicationInput(root: HTMLElement | null, key: string) {
   controls[Math.max(0, Math.min(controls.length - 1, index + direction))]?.focus();
 }
 
-export function ApplicationHints({ rootRef, onBack, backGlyph, selectGlyph, navigateGlyph }: {
+export function ApplicationHints({ rootRef, onBack, backGlyph, selectGlyph, navigateGlyph, info }: {
   rootRef: RefObject<HTMLElement | null>;
   onBack: () => void;
   backGlyph: ReactNode;
   selectGlyph: ReactNode;
   navigateGlyph: ReactNode;
+  info?: string;
 }) {
   const [selectable, setSelectable] = useState(false);
   useEffect(() => {
@@ -89,6 +96,7 @@ export function ApplicationHints({ rootRef, onBack, backGlyph, selectGlyph, navi
     return () => { observer.disconnect(); root.removeEventListener("focusin", focus); window.removeEventListener("keydown", sections); };
   }, [rootRef]);
   return <nav className="console-app-hints" aria-label="Page controls">
+    {info && <span className="console-page-info xmb-info-line" aria-live="polite" aria-atomic="true">{info.length > 140 ? `${info.slice(0, 137)}…` : info}</span>}
     <button type="button" onClick={onBack}>{backGlyph}<span>Back</span></button>
     {selectable && <button type="button" onClick={() => sendApplicationInput(rootRef.current, "Enter")}>{selectGlyph}<span>Select</span></button>}
     <button type="button" onClick={() => sendApplicationInput(rootRef.current, "ArrowDown")}>{navigateGlyph}<span>Navigate</span></button>

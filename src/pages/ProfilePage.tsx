@@ -1,10 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { XmbScreen } from "@/components/XmbScreen";
-import type { XmbGlyph } from "@/xmb/XmbList";
+import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
+import { XmbAvatar, XmbColumn, XmbRow, XmbTile, type XmbGlyph } from "@/components/XmbSurface";
 import { REPO_LINKS } from "@/data/repository";
-import { useRouter } from "@/router/RouterContext";
+import { RouteLink, useRouter } from "@/router/RouterContext";
 import { AUDIO_STORAGE_KEY, xmbAudio } from "@/xmb/audio";
 import { CATEGORIES } from "@/xmb/categories";
+import { YagEmblem } from "@/xmb/Glyphs";
 
 /** Every fact carries the console glyph that stands for it. */
 const PROJECT_FACTS: Array<[XmbGlyph, string, string]> = [
@@ -113,20 +114,161 @@ export function ProfilePage() {
     ["shield", "Network activity", "None — this console is a static document"],
   ];
 
-  const rows = (facts: Array<[XmbGlyph, string, string]>) => facts.map(([icon, title, value]) => ({ key: title, icon, title, value, description: value }));
-  return <XmbScreen document={<p>YAG is maintained by oakvx. This page brings together the maintainer details, project specifications and facts about the current browser session. Nothing here identifies you or calls a gateway.</p>} subtitle="Maintainer, project identity and facts about this browser session." testId="profile" sections={[
-    { id: "maintainer", label: "Author & maintainer", entries: [
-      { key: "author", icon: "project", title: "Maintainer", value: "oakvx", description: "Author and maintainer of YAG. No account is required to use this console." },
-      ...rows(MAINTAINER_FACTS),
-      { key: "author-link", title: "GitHub profile", value: "oakvx", href: REPO_LINKS.author },
-      { key: "contribute", title: "How to contribute", to: "/project?view=contributing" },
-    ], panel: <p>“It never runs a model and never executes a tool — and never will. That’s not a limitation. That’s the scope.”</p> },
-    { id: "identity", label: "Project identity", entries: rows(PROJECT_FACTS), panel: <p>These values describe the repository: the CMake project definition, vendored dependencies and configuration reference. They do not describe a running instance. Architecture and implementation status is available in the repository.</p> },
-    { id: "session", label: "This session", entries: rows(session), panel: <p>Read from the live page and preferences stored in this browser. Nothing here identifies you, and nothing is sent anywhere.</p> },
-    { id: "console", label: "Console state", entries: CONSOLE_NOTES.map((text, i) => ({ key: String(i), title: ["Audio preferences", "Cursor memory", "Network activity", "Offline documentation"][i], value: "Local only", description: text, panel: <p>{text}</p> })) },
-    { id: "continue", label: "Continue", entries: [
-      ...NEXT_STEPS.map(([icon, title, sub, to]) => ({ key: to, icon, title, sub, description: sub, to: to })),
-      ...EXTERNAL_LINKS.map(([icon, title, sub, href]) => ({ key: href, icon, title, sub, href, description: sub })),
-    ] },
-  ]} />;
+  return (
+    <div>
+      <PageMasthead
+        className="xmb-masthead"
+        path="/profile"
+        eyebrow="Profile"
+        title={
+          <>
+            Who builds YAG, <em>and what this session is.</em>
+          </>
+        }
+        lede="YAG has no accounts and this console keeps no server-side state. The profile below is therefore honest about its two halves: the maintainer and the project identity that live in the repository, and the handful of facts this browser can prove about itself."
+        meta={[
+          { k: "Maintainer", v: "oakvx", tone: "amber" },
+          { k: "License", v: "MIT", tone: "moss" },
+          { k: "Stage", v: "Experimental" },
+          { k: "Telemetry", v: "None" },
+        ]}
+      />
+
+      {/* Maintainer and project identity */}
+      <section className="py-5 @lg:py-6">
+        <Container>
+          <div className="xmb-page-grid">
+            <div className="xmb-span-5">
+              <XmbColumn icon="project" title="Author & maintainer" note="oakvx">
+                <div className="px-4 py-4">
+                  <div className="flex items-center gap-4">
+                    <XmbAvatar />
+                    <div className="min-w-0">
+                      <p className="label text-amber">Maintainer</p>
+                      <h3 className="xmb-tile-title mt-1 text-[1.35rem]">oakvx</h3>
+                      <p className="mt-1 font-xmb text-[11px] text-faint">MIT · © 2026 YAG contributors</p>
+                    </div>
+                  </div>
+
+                  <p className="xmb-quote mt-5">
+                    “It never runs a model and never executes a tool — and never will. That’s not a limitation. That’s the
+                    scope.”
+                  </p>
+
+                  <dl className="mt-4">
+                    {MAINTAINER_FACTS.map(([icon, label, value]) => (
+                      <XmbRow key={label} icon={icon} label={label}>
+                        {value}
+                      </XmbRow>
+                    ))}
+                  </dl>
+
+                  <div className="mt-4 flex flex-wrap gap-2.5">
+                    <a href={REPO_LINKS.author} target="_blank" rel="noreferrer noopener" className="btn btn-outline">
+                      GitHub profile <span aria-hidden="true">↗</span>
+                    </a>
+                    <RouteLink to="/project?view=contributing" className="btn btn-amber">
+                      How to contribute
+                    </RouteLink>
+                  </div>
+                </div>
+              </XmbColumn>
+            </div>
+
+            <div className="xmb-span-7">
+              <XmbColumn
+                icon="information"
+                title="Project identity"
+                note={`${PROJECT_FACTS.length} facts`}
+                lede="The same identity the native host ships."
+              >
+                <div className="flex items-start gap-3 px-4 pt-4">
+                  <YagEmblem size={26} className="mt-0.5 shrink-0 opacity-80" />
+                  <p className="text-[13px] leading-[1.65] text-muted">
+                    These values are read from the repository — the CMake project definition, the vendored dependencies and
+                    the configuration reference. They describe the software, not a running instance.
+                  </p>
+                </div>
+                <dl className="mt-3 pb-1">
+                  {PROJECT_FACTS.map(([icon, label, value]) => (
+                    <XmbRow key={label} icon={icon} label={label}>
+                      {value}
+                    </XmbRow>
+                  ))}
+                </dl>
+                <p className="px-4 pb-4 pt-3 text-[12px] text-muted">
+                  Source:{" "}
+                  <a href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">
+                    Architecture and implementation status
+                  </a>
+                </p>
+              </XmbColumn>
+            </div>
+          </div>
+        </Container>
+      </section>
+
+      {/* Session profile */}
+      <section className="pb-5 @lg:pb-6">
+        <Container>
+          <div className="xmb-page-grid">
+            <div className="xmb-span-8">
+              <XmbColumn icon="monitor" title="This session" note="Live read" lede="What this browser can prove.">
+                <p className="px-4 pt-4 text-[13px] leading-[1.65] text-muted">
+                  Read from the live page: the position you left the crossbar in, the preferences this console stored, and
+                  the display it is running on. Nothing here identifies you, and nothing is sent anywhere.
+                </p>
+                <dl className="mt-3 pb-1">
+                  {session.map(([icon, label, value]) => (
+                    <XmbRow key={label} icon={icon} label={label}>
+                      {value}
+                    </XmbRow>
+                  ))}
+                </dl>
+              </XmbColumn>
+            </div>
+
+            <div className="xmb-span-4">
+              <XmbColumn icon="operations" title="Console state" note={<StatusBadge tone="mock">Local only</StatusBadge>}>
+                <div className="pb-1">
+                  {CONSOLE_NOTES.map((line) => (
+                    <p key={line} className="xmb-note">
+                      <span>{line}</span>
+                    </p>
+                  ))}
+                </div>
+              </XmbColumn>
+            </div>
+          </div>
+        </Container>
+      </section>
+
+      {/* Where to go next */}
+      <section className="pb-8">
+        <Container>
+          <div className="xmb-page-grid">
+            <div className="xmb-span-7">
+              <XmbColumn icon="quickstart" title="Continue from here" note="Internal" lede="Four doors, none of them locked.">
+                <div className="xmb-tile-grid p-3">
+                  {NEXT_STEPS.map(([icon, title, sub, to]) => (
+                    <XmbTile key={to} icon={icon} title={title} sub={sub} to={to} />
+                  ))}
+                </div>
+              </XmbColumn>
+            </div>
+
+            <div className="xmb-span-5">
+              <XmbColumn icon="link" title="Elsewhere" note="External">
+                <div className="xmb-tile-grid p-3">
+                  {EXTERNAL_LINKS.map(([icon, title, sub, href]) => (
+                    <XmbTile key={href} icon={icon} title={title} sub={sub} href={href} />
+                  ))}
+                </div>
+              </XmbColumn>
+            </div>
+          </div>
+        </Container>
+      </section>
+    </div>
+  );
 }

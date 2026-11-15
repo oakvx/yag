@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { XmbRow } from "@/components/XmbRow";
-import { XmbScreen, XmbSectionLabel } from "@/components/XmbScreen";
+import { Container, PageMasthead, StatusBadge } from "@/components/Primitives";
 import { BLOB_URL, REPO_LINKS } from "@/data/repository";
-import { PROJECT_FEATURES, PROJECT_REVIEW } from "@/data/projectKnowledge";
+import { cn } from "@/utils/cn";
 
 type MatrixStatus = "implemented" | "mock" | "unverified" | "absent" | "scope";
 
@@ -69,7 +68,7 @@ const STATUS_ENTRIES: StatusEntry[] = [
     subsystem: "Console",
     status: "implemented",
     statusText: "Implemented",
-    summary: "Session-only key storage, status/model inspection, text chat and a local operator Control page for managed clients, providers and available resource telemetry.",
+    summary: "Session-only key storage, status/model inspection, cancellable text chat, and copyable curl commands.",
     evidence: "console/src/main.tsx · tests/control_plane.py",
     evidenceHref: `${BLOB_URL}/console/src/main.tsx`,
     caveats: "Browser playground handles text chat only — API clients execute tools themselves.",
@@ -109,11 +108,11 @@ const STATUS_ENTRIES: StatusEntry[] = [
   },
   {
     id: "tls-audit",
-    component: "Native TLS, CORS & Encrypted Live Secret Store",
+    component: "Native TLS, CORS, Audit Logging & Encrypted Secret Store",
     subsystem: "Security",
     status: "absent",
     statusText: "Not Implemented",
-    summary: "Native transport encryption, configurable browser cross-origin policies and an encrypted live secret vault remain absent. A separate opt-in private administrative event trail is implemented.",
+    summary: "Transport encryption, browser cross-origin policies, persistent request audit trails, and secret vaults.",
     evidence: "docs/architecture/STATUS.md",
     evidenceHref: REPO_LINKS.statusDoc,
     caveats: "Must be supplied externally via a trusted reverse proxy (such as Caddy in the LAN stack) and host service manager.",
@@ -129,11 +128,10 @@ const STATUS_ENTRIES: StatusEntry[] = [
     evidenceHref: REPO_LINKS.readme,
     caveats: "Permanent architectural boundary: YAG will never run models or execute tools.",
   },
-  ...PROJECT_FEATURES.map(feature => ({ id: feature.id, component: feature.title, subsystem: feature.subsystem, status: "implemented" as const, statusText: "Implemented", summary: feature.summary, caveats: feature.boundary, evidence: feature.path, evidenceHref: feature.href })),
 ];
 
 const FILTERS: Array<{ id: "all" | MatrixStatus; label: string }> = [
-  { id: "all", label: `All entries (${STATUS_ENTRIES.length})` },
+  { id: "all", label: "All Entries (10)" },
   { id: "implemented", label: "Implemented" },
   { id: "mock", label: "Mock-Tested" },
   { id: "unverified", label: "Real-Model Unverified" },
@@ -142,15 +140,124 @@ const FILTERS: Array<{ id: "all" | MatrixStatus; label: string }> = [
 ];
 
 export function StatusPage() {
-  const [filterIndex, setFilterIndex] = useState(0);
-  return <XmbScreen document={<><p>The gateway is experimental. Automated contract tests use deterministic mock upstreams; real inference models remain unqualified. This ledger separates implemented behavior, test evidence and operational limits.</p><p className="xmb-document-meta">Reviewed {PROJECT_REVIEW.date} · main @ {PROJECT_REVIEW.revision.slice(0, 7)} · {PROJECT_REVIEW.ctestSuites} registered CTest suites</p><label className="xmb-field">Qualification filter<select value={filterIndex} onChange={event => setFilterIndex(Number(event.target.value))}>{FILTERS.map((filter,index) => <option key={filter.id} value={index}>{filter.label}</option>)}</select></label></>} subtitle="Experimental · mock-qualified protocol integrations · real-model compatibility unverified."
-    sections={[FILTERS[filterIndex]].map((filter) => ({
-      id: filter.id, label: filter.label,
-      entries: STATUS_ENTRIES.filter((row) => filter.id === "all" || row.status === filter.id).map((row) => ({
-        key: row.id, title: row.component, sub: row.subsystem, value: row.statusText, description: row.summary,
-        panel: <><XmbSectionLabel>Verified behavior</XmbSectionLabel><p>{row.summary}</p>
-          <XmbSectionLabel>Caveats & unverified boundaries</XmbSectionLabel><p>{row.caveats}</p>
-          <p>Evidence: {row.evidence}</p><XmbRow href={row.evidenceHref}>Inspect in repository</XmbRow></>,
-      })),
-    }))} />;
+  const [filter, setFilter] = useState<"all" | MatrixStatus>("all");
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({
+    "responses-mock": true,
+    "real-models": true,
+  });
+
+  const visible =
+    filter === "all" ? STATUS_ENTRIES : STATUS_ENTRIES.filter((e) => e.status === filter);
+
+  const toggle = (id: string) => {
+    setExpandedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  return (
+    <div>
+      <PageMasthead
+        path="/status"
+        eyebrow="Chapter 08 · Qualification Ledger"
+        title={
+          <>
+            Implemented, mock-tested, <em>and unverified — kept distinct.</em>
+          </>
+        }
+        lede="No arbitrary readiness percentages. Expand any row in the engineering ledger below to inspect the exact C source or Python test suite backing it, alongside its current operational caveats."
+        meta={[
+          { k: "Release stage", v: "0.1.0 Experimental", tone: "amber" },
+          { k: "Automated tests", v: "15 CTest suites (mock upstream)", tone: "moss" },
+          { k: "Live CLI proof", v: "Unverified on real models", tone: "rust" },
+        ]}
+      />
+
+      <section className="py-6 @lg:py-8">
+        <Container>
+          {/* Filter Bar */}
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div role="tablist" aria-label="Filter status rows" className="flex flex-wrap gap-1.5">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  role="tab"
+                  aria-selected={filter === f.id}
+                  onClick={() => setFilter(f.id)}
+                  className={cn(
+                    "px-2.5 py-1 font-xmb text-[11.5px] transition-colors cursor-pointer",
+                    filter === f.id
+                      ? "bg-amber/15 text-paper"
+                      : "text-faint hover:text-paper",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <a
+              href={REPO_LINKS.statusDoc}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="font-xmb text-[12px] text-amber hover:underline"
+            >
+              Read docs/architecture/STATUS.md ↗
+            </a>
+          </div>
+
+          {/* Expandable Ledger */}
+          <div className="">
+            {visible.map((row) => {
+              const isOpen = !!expandedIds[row.id];
+              return (
+                <div key={row.id} className="transition-colors hover:bg-paper/[0.015]">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => toggle(row.id)}
+                    className="grid w-full items-center gap-3 px-4 py-4 text-left @lg:grid-cols-12 @lg:px-6 cursor-pointer"
+                  >
+                    <div className="@lg:col-span-2 font-xmb text-[11.5px] text-faint">
+                      {row.subsystem}
+                    </div>
+                    <div className="@lg:col-span-6 text-[14.5px] font-medium text-paper">{row.component}</div>
+                    <div className="@lg:col-span-3">
+                      <StatusBadge tone={row.status}>{row.statusText}</StatusBadge>
+                    </div>
+                    <div className="@lg:col-span-1 text-right font-xmb text-[12px] text-amber">
+                      {isOpen ? "−" : "+"}
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-4 py-4 @lg:px-6">
+                      <div className="grid gap-6 @3xl:grid-cols-12">
+                        <div className="@3xl:col-span-6">
+                          <p className="label text-faint">Verified Behavior</p>
+                          <p className="mt-1.5 text-[13.5px] leading-relaxed text-paper/90">{row.summary}</p>
+                        </div>
+                        <div className="@3xl:col-span-6 @3xl:pl-6">
+                          <p className="label text-rust">Caveats & Unverified Boundaries</p>
+                          <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">{row.caveats}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 pt-3 font-xmb text-[12px]">
+                        <span className="text-faint">Evidence: {row.evidence}</span>
+                        <a
+                          href={row.evidenceHref}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-amber hover:underline"
+                        >
+                          Inspect in Repository ↗
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Container>
+      </section>
+    </div>
+  );
 }
