@@ -1,7 +1,8 @@
 name: Prepare first YAG release candidate
 
 on:
-  # Branch-create events execute the workflow from the default branch.
+  # A newly created dedicated candidate branch triggers the trusted
+  # default-branch workflow; no unreviewed source is checked out.
   create:
   workflow_dispatch:
     inputs:
@@ -23,7 +24,16 @@ jobs:
     name: Verify main and create a new candidate tag
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'create' && gi      - name: Verify a newly created candidate branch or explicitly dispatched main
+      (github.event_name == 'create' && github.event.ref_type == 'branch' && startsWith(github.event.ref, 'release-candidate/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    environment: release-candidate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Verify a newly created candidate branch or explicitly dispatched main
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,7 +62,7 @@ jobs:
             fi
             tag="$INPUT_TAG"
           fi
-          # Python validates the exact release tag again.
+          # The Python policy validates the exact release tag again.
           printf 'RC_TAG=%s\nREVIEWED_SHA=%s\n' "$tag" "$current" >> "$GITHUB_ENV"
       - name: Download exact main-commit CI/security run metadata
         shell: bash
@@ -65,7 +75,6 @@ jobs:
             > "$RUNNER_TEMP/yag-candidate-runs.json"
       - name: Fail closed unless newest CI and security reviews passed
         shell: bash
-        env:
         run: |
           set -euo pipefail
           python3 scripts/release_candidate.py \
