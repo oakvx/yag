@@ -24,3 +24,11 @@ desktop/src-tauri/gen/
 age-identity*
 yag-identity*
 provider-vault/
+
+# Recreated by the build and browser verification jobs; never commit artifacts.
+/dist/
+/.playwright-cli/
+/output/playwright/*.png
+/output/playwright/*.txt
+/output/playwright/*.yml
+/output/playwright/*.log
