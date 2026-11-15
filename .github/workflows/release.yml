@@ -286,7 +286,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --name yag-real-model-qualification \
             --dir "$evidence_dir"
           python3 scripts/release_gate.py \
-            --evidence "$evidence_dir/qualification.json" --commit "$GITHUB_SHA"
+            --evidence "$evidence_dir/qualification.json" --commit "$GITHUB_SHA" --require-model-digest
       - name: Publish reviewed tag assets (installers unsigned, build provenance attested)
         env:
           GH_TOKEN: ${{ github.token }}
