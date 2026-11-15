@@ -166,3 +166,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .update-actions{justify-content:flex-start;flex-wrap:wrap}
 .update-actions [hidden]{display:none}
 @media(max-width:820px){.update-banner{margin:8px 12px 0;flex-wrap:wrap}}
+
+/* First-run assistant: compact, keyboard-friendly and local-only. */
+.setup-panel{padding:5px 0 7px;color:#e7eee7}
+.setup-panel[hidden],#connectForm[hidden],#connectionCopy[hidden]{display:none!important}
+.setup-step{display:block;font-size:10px;font-weight:750;letter-spacing:.14em;color:#b8d995;margin-bottom:15px}
+.setup-brand{display:grid;place-items:center;width:65px;height:65px;border-radius:15px;background:#273629;border:1px solid #517357;color:#d5efbb;font-size:39px;font-weight:800;margin-bottom:16px}
+.setup-panel h3{font-size:22px;line-height:1.25;letter-spacing:-.03em;margin:8px 0 14px;max-width:340px}
+.setup-panel p{font-size:13px;line-height:1.6;color:#abb9bc}
+.setup-checks{display:grid;gap:10px;padding:14px 0 18px;border-top:1px solid #303942;border-bottom:1px solid #303942;margin:20px 0}
+.setup-checks span{font-size:12px;color:#dce8dd}
+.setup-ready-mark{display:grid;place-items:center;width:65px;height:65px;border-radius:50%;background:#28452b;color:#cdf3be;font-size:36px;margin-bottom:16px}
+.setup-model-name{padding:11px;border:1px solid #334938;border-radius:7px;overflow-wrap:anywhere}
+.setup-panel .modal-actions{margin-top:24px}
