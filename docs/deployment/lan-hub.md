@@ -22,6 +22,22 @@ Only `/v1/*`, `/api/*` and `/health` pass through the LAN proxy.
 YAG enforces bearer authentication and per-key request limits for API
 requests; the reverse proxy terminates TLS.
 
+## Optional real two-PC credential acceptance
+
+After the gateway is up and the local security preflight has passed, you can
+run `python3 scripts/lan_acceptance.py --model YOUR_INSTALLED_MODEL`
+from the central machine. It uses **two different** `inference+models`
+keys from the private LAN configuration and the exported trusted Caddy CA.
+It checks HTTPS isolation, two simultaneous real Chat requests, stream
+opening/client closing and one follow-up. This deliberately sends a small
+synthetic prompt to the configured inference service.
+
+The resulting optional private JSON report contains only pass/fail metadata
+and a model-ID fingerprint; it **cannot** prove two physical PCs, actual
+backend cancellation, GPU utilization or recovery from an unplugged/Ollama
+outage. Complete those hardware checks manually. Never use an unreviewed
+cloud model when doing this local acceptance.
+
 ## Production preflight (operator-run)
 
 Before inviting client PCs, run the private LAN preflight. The offline

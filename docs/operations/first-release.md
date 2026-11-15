@@ -66,10 +66,28 @@ Only on **Colibri**, using a trusted `yag-colibri` self-hosted Linux runner:
    This check requires 3 successful protocols, actual tool replay, SSE,
    matching commit, fresh evidence (30 days maximum) and NVIDIA GPU
    information measured with `nvidia-smi`.
-6. Test multiple physical PCs, scope revocation, cancellation, load,
+6. Run the opt-in two-credential acceptance harness on the **real**
+   running LAN gateway with a locally installed text model:
+
+   ```sh
+   python3 scripts/lan.py preflight
+   python3 scripts/lan_acceptance.py --model llama3.2:latest \
+     --report-json /private/path/new-lan-acceptance.json
+   ```
+
+   The selected model ID is illustrative. This executes up to four small
+   **real** inference requests: two simultaneous scoped client requests,
+   a streaming request closed on the client, and a follow-up request. It
+   verifies TLS trust, both clients' model discovery, refusal of anonymous
+   access, Caddy admin isolation and the gateway's response after stream
+   closure. No provider prompt/output/API key is written to the JSON.
+   Ensure Colibri has sufficient spare capacity; this is operator-triggered,
+   not an automatic public CI task.
+
+7. Test multiple **physical** PCs, actual upstream cancellation and GPU load, scope revocation, deliberate outage and recovery,
    device driver telemetry and actual fallback behavior. Rehearse backup
    decrypt/stage and verified Host rollback on a replacement machine.
-7. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
+8. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
    endpoint isolation, release artifacts and signing/notarization status.
    Confirm actual provider pricing, quotas and data-processing policies.
 
