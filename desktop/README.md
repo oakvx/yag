@@ -136,6 +136,20 @@ The relay forwards prompts to the configured central Host. It does not
 provide confidentiality against malware on the **same client OS** and
 should not be used to give untrusted local programs access to inference.
 
+**Paid-provider isolation:** By default the relay publishes and accepts only
+models not flagged by the Host as external HTTPS or dedicated. Its
+`/v1/models` response lists only these explicitly allowed IDs, and chat
+requests for other model IDs are rejected with HTTP 403 before contacting
+the Host. The list is a snapshot taken when the relay starts, not an
+automatically expanding inventory. Restart the relay after installing a
+new model. Preferences offers a **per-start, explicit confirmation** to
+include dedicated/external models when needed. This may incur charges or
+send content outside your LAN; the option is neither persisted nor
+implicitly enabled when reconnecting. The Host's scoped keys remain the
+final authority. **Older Hosts or unrestricted default routes may fail
+to label cloud models**, so operators must configure routing carefully
+and enforce provider billing limits independently.
+
 ## Conversation settings
 
 Preferences allow a system prompt (up to 4000 characters), a temperature
