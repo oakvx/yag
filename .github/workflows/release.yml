@@ -152,6 +152,10 @@ jobs:
       - name: Run Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Build unsigned native package
+        # Only tagged releases are regarded as installed stable/RC/weekly
+        # versions. Branch artifacts remain local builds eligible for updates.
+        env:
+          YAG_DESKTOP_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
         run: npm run build -- --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v7
         with:
