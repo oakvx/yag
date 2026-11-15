@@ -25,7 +25,10 @@ const state = {
   maxTokens: 1024,
   systemPrompt: '',
   relay: null,
-  cloudConsent: new Set() // In-memory only; no implicit cross-session consent.
+  cloudConsent: new Set(), // In-memory only; no implicit cross-session consent.
+  updateInfo: null,
+  updateDismissed: null,
+  updateChecking: false
 }
 
 
@@ -481,17 +484,83 @@ el('copyChatButton').addEventListener('click', async () => {
     showError('Clipboard access denied. Check operating-system permissions.')
   }
 })
-el('checkUpdates').addEventListener('click', async () => {
+const updateSetting = 'yag.desktop.autoUpdateCheck.v1'
+el('autoCheckUpdates').checked = localStorage.getItem(updateSetting) === 'true'
+
+function showUpdateResult(release) {
+  state.updateInfo = release
+  const newer = release.update_available
+  const supported = release.download_supported
+  el('updateStatus').textContent = 'Installed: ' + release.current +
+    ' · Latest published: ' + release.latest + ' (' + release.channel + ')' +
+    (newer ? (supported ? ' · Update available' : ' · Update available, but no compatible installer for this CPU') : ' · Up to date')
+  el('downloadUpdate').hidden = !newer || !supported
+  el('copyReleaseLink').hidden = false
+  const visible = newer && state.updateDismissed !== release.latest
+  el('updateBanner').hidden = !visible
+  if (visible) el('updateBannerText').textContent = 'YAG ' + release.latest + ' is available for review.'
+}
+
+async function checkForUpdates() {
+  if (state.updateChecking) return
+  state.updateChecking = true
   const button = el('checkUpdates')
   button.disabled = true
   el('updateStatus').textContent = 'Checking published GitHub Releases…'
   try {
     const release = await invoke('check_updates')
-    el('updateStatus').textContent = 'Installed: ' + release.current +
-      ' · Latest release: ' + release.latest + ' · ' + release.url
+    showUpdateResult(release)
   } catch (error) {
-    el('updateStatus').textContent = String(error)
-  } finally { button.disabled = false }
+    el('updateStatus').textContent = 'Update check failed: ' + String(error)
+  } finally {
+    button.disabled = false
+    state.updateChecking = false
+  }
+}
+
+el('checkUpdates').addEventListener('click', checkForUpdates)
+el('autoCheckUpdates').addEventListener('change', () => {
+  try {
+    if (el('autoCheckUpdates').checked) {
+      localStorage.setItem(updateSetting, 'true')
+      checkForUpdates()
+    } else {
+      localStorage.removeItem(updateSetting)
+    }
+  } catch {
+    el('autoCheckUpdates').checked = false
+    el('updateStatus').textContent = 'Could not save update preference.'
+  }
+})
+el('reviewUpdate').addEventListener('click', openSettings)
+el('dismissUpdate').addEventListener('click', () => {
+  state.updateDismissed = state.updateInfo?.latest || null
+  el('updateBanner').hidden = true
+})
+el('copyReleaseLink').addEventListener('click', async () => {
+  if (!state.updateInfo) return
+  try {
+    await navigator.clipboard.writeText(state.updateInfo.url)
+    el('updateStatus').textContent = 'Release page link copied. ' + state.updateInfo.url
+  } catch {
+    el('updateStatus').textContent = 'Clipboard unavailable. Release page: ' + state.updateInfo.url
+  }
+})
+el('downloadUpdate').addEventListener('click', async () => {
+  const release = state.updateInfo
+  if (!release?.update_available || !release.download_supported) return
+  const button = el('downloadUpdate')
+  button.disabled = true
+  el('updateStatus').textContent = 'Downloading and verifying SHA-256 integrity…'
+  try {
+    const location = await invoke('download_update', { tag: release.latest })
+    el('updateStatus').textContent = 'Verified installer saved to ' + location +
+      '. Verify GitHub Sigstore provenance before manually installing this unsigned package.'
+  } catch (error) {
+    el('updateStatus').textContent = 'Download blocked: ' + String(error)
+  } finally {
+    button.disabled = false
+  }
 })
 el('settingsButton').addEventListener('click', openSettings)
 el('closeSettingsButton').addEventListener('click', closeSettings)
@@ -570,3 +639,4 @@ renderMessages()
 setStatus(false)
 renderConversations()
 openDialog()
+if (el('autoCheckUpdates').checked) checkForUpdates()
