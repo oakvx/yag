@@ -45,7 +45,9 @@
           "English"
         ],
         "displayLanguageSelector": false,
-        "startMenuFolder": "YAG"
+        "startMenuFolder": "YAG",
+        "sidebarImage": "windows/sidebar.bmp",
+        "headerImage": "windows/header.bmp"
       }
     }
   }
