@@ -48,6 +48,8 @@ jobs:
       YAG_REAL_UPSTREAM_URL: ${{ vars.YAG_REAL_UPSTREAM_URL }}
       YAG_REAL_UPSTREAM_KEY: ${{ secrets.YAG_REAL_UPSTREAM_KEY }}
       YAG_REAL_MODEL: ${{ inputs.model }}
+      # Only loopback is allowed; the probe never follows proxies or redirects.
+      YAG_REAL_OLLAMA_NATIVE_URL: ${{ vars.YAG_REAL_OLLAMA_NATIVE_URL }}
       YAG_QUALIFICATION_PROTOCOL: ${{ inputs.protocol }}
       YAG_QUALIFICATION_STREAM: ${{ inputs.stream }}
       YAG_QUALIFICATION_TOOLS: ${{ inputs.tools }}
@@ -85,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/release_gate.py --evidence qualification.json --commit "$GITHUB_SHA"
+          python3 scripts/release_gate.py --evidence qualification.json --commit "$GITHUB_SHA" --require-model-digest
       - name: Upload redacted real-model qualification evidence
         if: always()
         uses: actions/upload-artifact@v7
