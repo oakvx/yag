@@ -36,6 +36,50 @@ static int reserved_model_locked(const yag_config *cfg,const char *id) {
     }
     return 0;
 }
+/* Security metadata belongs to YAG, never to the model provider.
+ * A loopback upstream is only a transport property: a proxy on loopback
+ * could still call an external service. This is NOT a billing guarantee. */
+static int endpoint_loopback(const char *raw) {
+    if(!raw || !*raw)return 0;
+    CURLU *url=curl_url();
+    if(!url)return 0;
+    char *host=NULL,*scheme=NULL;
+    int safe=curl_url_set(url,CURLUPART_URL,raw,0)==CURLUE_OK
+        && curl_url_get(url,CURLUPART_HOST,&host,0)==CURLUE_OK
+        && curl_url_get(url,CURLUPART_SCHEME,&scheme,0)==CURLUE_OK
+        && (!strcmp(scheme,"http") || !strcmp(scheme,"https"))
+        && (!strcmp(host,"localhost") || !strcmp(host,"127.0.0.1")
+            || !strcmp(host,"[::1]") || !strcmp(host,"::1"));
+    curl_free(host);curl_free(scheme);curl_url_cleanup(url);
+    return safe;
+}
+
+static int model_may_use_url(const yag_pool_backend *backend,const char *id) {
+    if(!backend->enabled)return 0;
+    if(!backend->model_count)return 1;
+    for(size_t i=0;i<backend->model_count;i++)
+        if(!strcmp(backend->models[i],id))return 1;
+    return 0;
+}
+
+/* Caller holds cfg->lock. Fail conservatively whenever any eligible route
+ * could take a model beyond the default loopback backend. */
+static void model_transport_locked(const yag_config *cfg,const char *id,
+                                   int *loopback_only,int *remote_https) {
+    *loopback_only=endpoint_loopback(cfg->upstream);
+    *remote_https=cfg->upstream && !strncmp(cfg->upstream,"https://",8);
+    for(size_t r=0;r<cfg->route_count;r++)if(!strcmp(cfg->routes[r].model,id)) {
+        if(!endpoint_loopback(cfg->routes[r].url))*loopback_only=0;
+        if(!strncmp(cfg->routes[r].url,"https://",8))*remote_https=1;
+    }
+    for(size_t p=0;p<cfg->pool_count;p++) {
+        const yag_pool_backend *backend=&cfg->pool[p];
+        if(!model_may_use_url(backend,id))continue;
+        if(!endpoint_loopback(backend->url))*loopback_only=0;
+        if(!strncmp(backend->url,"https://",8))*remote_https=1;
+    }
+}
+
 static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
     listing response={0};
     long status=0;
@@ -75,7 +119,24 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
                 good=0;break;
             }
             if(reserved_model_locked(cfg,yyjson_get_str(id)))continue;
-            if(!yyjson_mut_arr_add_val(items,yyjson_val_mut_copy(d,item))) {
+            /* Never copy provider-defined yag_* booleans: upstream services
+             * must not be able to counterfeit trusted egress classifications. */
+            const char *name=yyjson_get_str(id);
+            yyjson_val *owner=yyjson_obj_get(item,"owned_by");
+            yyjson_val *created=yyjson_obj_get(item,"created");
+            int loopback=0,https=0;
+            model_transport_locked(cfg,name,&loopback,&https);
+            yyjson_mut_val *entry=yyjson_mut_obj(d);
+            if(!entry || !yyjson_mut_obj_add_strcpy(d,entry,"id",name)
+                || !yyjson_mut_obj_add_str(d,entry,"object","model")
+                || !yyjson_mut_obj_add_strcpy(d,entry,"owned_by",
+                    yyjson_is_str(owner)?yyjson_get_str(owner):"yag-default-upstream")
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_loopback_only",loopback)
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_remote_https",https)
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_dedicated",0)
+                || (yyjson_is_uint(created) &&
+                    !yyjson_mut_obj_add_uint(d,entry,"created",yyjson_get_uint(created)))
+                || !yyjson_mut_arr_add_val(items,entry)) {
                 good=0;break;
             }
         }
@@ -96,6 +157,8 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
             || !yyjson_mut_obj_add_str(d,entry,"owned_by","yag-configured-route")
             || !yyjson_mut_obj_add_bool(d,entry,"yag_remote_https",
                 !strncmp(cfg->routes[r].url,"https://",8))
+            || !yyjson_mut_obj_add_bool(d,entry,"yag_loopback_only",
+                endpoint_loopback(cfg->routes[r].url))
             || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
     }
     /* Publish enabled managed-provider model IDs without probing remote APIs
@@ -122,6 +185,8 @@ static void models_respond(int fd,const yag_config *cfg,const char *model_id) {
                 || !yyjson_mut_obj_add_bool(d,entry,"yag_dedicated",1)
                 || !yyjson_mut_obj_add_bool(d,entry,"yag_remote_https",
                     !strncmp(backend->url,"https://",8))
+                || !yyjson_mut_obj_add_bool(d,entry,"yag_loopback_only",
+                    endpoint_loopback(backend->url))
                 || !yyjson_mut_arr_add_val(items,entry)){good=0;break;}
         }
     }
