@@ -14,6 +14,17 @@ reviewed commit.
 
 The weekly release is intended for **experimental testing only**, not deployment certification. It does not bypass the independent Colibri GPU/model acceptance, key-storage requirements, or stable-release approval. It never automatically creates a stable version and will not overwrite a published weekly tag. If the week's tag already points to another commit, the run fails instead of moving it. Manually rerunning the schedule workflow in the same week does not create another release. Other manual builds can still generate 14-day GitHub Actions artifacts without publishing.
 
+## Desktop update discovery
+
+YAG Desktop Preferences now includes optional startup checks for weekly,
+candidate and stable releases, and an explicit SHA-256-verified installer
+download. It does not auto-install unsigned packages or silently update the
+running app. It refuses incompatible architectures, duplicate Downloads
+filenames and releases missing any expected package or checksum manifest.
+Verify `gh attestation verify <downloaded-file> --repo oakvx/yag` before
+manual installation. The update setting is opt-in; no YAG Host API keys or
+chat content are sent to GitHub.
+
 ## Create a candidate from GitHub Actions
 
 With green CI/security checks on reviewed `main`, open **Actions →
