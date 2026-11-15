@@ -110,6 +110,14 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 
 /* Workspace and advanced settings: no remote fonts, no translucent surfaces. */
 .chats-heading{margin-top:21px}
+
+.model-search{width:calc(100% - 16px);margin:9px 8px 5px;padding:9px 11px;border:1px solid #303942;border-radius:7px;color:#e8eee8;background:#171d23;font-size:12px}
+.model-search:focus{outline:2px solid #a1c986;outline-offset:1px}
+.model-row{display:flex;align-items:stretch;gap:2px}
+.model-row .model-item{flex:1;min-width:0}
+.model-favorite{flex:0 0 30px;min-width:30px;border:0;background:transparent;color:#829197;font-size:19px;cursor:pointer;border-radius:6px}
+.model-favorite:hover,.model-favorite.pinned{color:#cfe3a2}
+.model-favorite:focus-visible{outline:2px solid #a1c986;outline-offset:1px}
 .chat-search{width:calc(100% - 16px);margin:10px 8px 6px;padding:10px 11px;border:1px solid #303942;border-radius:7px;color:#e8eee8;background:#171d23;font-size:12px}
 .conversation-list{flex:1;overflow-y:auto;margin:4px 0 12px;min-height:45px}
 .conversation-row{display:flex;align-items:center;gap:4px;border-radius:7px;margin:3px 4px;background:transparent}
