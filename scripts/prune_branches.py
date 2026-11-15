@@ -18,6 +18,23 @@ LEGACY_RELEASE_TRIGGERS = {
     "release-candidate/v0.1.0-rc.1",
     "release-candidate/v0.1.0-rc.2",
 }
+# Reviewed 2026-11-15: these remaining refs are fully subsumed by main or
+# belong to closed, abandoned/superseded PRs. Exact SHA guard prevents wiping
+# a branch if someone adds work after this review.
+LEGACY_OBSOLETE_HEADS = {
+    "chore/dependabot-pr-queue-cleanup": "0591a1affaddbe7fdce2d7b0da4cb9bbae635acb",
+    "ci/automated-release-quality-and-live-qualification": "c523ee496458f0be095d7327b288720da61297e1",
+    "dependabot/github_actions/actions/download-artifact-8": "c34d6d9732adc70c1425247f3caffb2221d5cf22",
+    "dependabot/npm_and_yarn/console/lucide-react-1.72.0": "9a2c02c1590423742d946518b178b261dcdc5e9d",
+    "dependabot/npm_and_yarn/console/typescript-7.0.2": "36bd8c8bea5a0379f56e19c3d13a4a68dd6afc23",
+    "dependabot/npm_and_yarn/console/vite-8.3.8": "4d392ee39632cc4eff099faea40e32787493ef2b",
+    "dependabot/npm_and_yarn/console/vitejs/plugin-react-6.3.0": "13f35b21c4bd4bf13372d394751e7afc262bd5a0",
+    "feat/adaptive-local-observability": "e80d970835de9e3fddf4d1caf3cbe50fd12d8cef",
+    "feat/console-private-node-wizard": "0f746f20e863b81da822bfb648396acc71977785",
+    "feat/desktop-workspace-local-relay": "b3e262ebff2e79743e6306ebdc79841fe4bdf9c2",
+    "feat/yag-desktop-client": "f21f2d818085b019f4a8cb9e372b1eceedc6e110",
+    "feature/work": "f0a15e85cd24539f78a70b5b3d63a138ffce67fe",
+}
 
 
 def planned_deletions(branches, pulls):
@@ -42,7 +59,9 @@ def planned_deletions(branches, pulls):
         sha = (branch.get("commit") or {}).get("sha")
         if not name or not sha or name == "main" or branch.get("protected") or name in open_heads:
             continue
-        if sha in closed_heads.get(name, set()) or name in LEGACY_RELEASE_TRIGGERS:
+        if (sha in closed_heads.get(name, set())
+                or name in LEGACY_RELEASE_TRIGGERS
+                or LEGACY_OBSOLETE_HEADS.get(name) == sha):
             result.append((name, sha))
     return sorted(result)
 

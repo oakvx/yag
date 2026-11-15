@@ -23,6 +23,16 @@ class PrunePolicy(unittest.TestCase):
              pr("feat/protected"),pr("feat/fork",repo="someone/fork")]
         self.assertEqual(mod.planned_deletions(branches,prs),[("feat/done","a")])
 
+    def test_reviewed_obsolete_shas_are_exact_and_never_delete_new_work(self):
+        name="feat/console-private-node-wizard"
+        reviewed=mod.LEGACY_OBSOLETE_HEADS[name]
+        self.assertEqual(mod.planned_deletions([branch(name,reviewed)],[]),
+                         [(name,reviewed)])
+        self.assertEqual(mod.planned_deletions([branch(name,"new-commit")],[]),[])
+        self.assertEqual(mod.planned_deletions([branch(name,reviewed,True)],[]),[])
+        self.assertEqual(mod.planned_deletions(
+            [branch(name,reviewed)],[pr(name,reviewed,state="open")]),[])
+
     def test_known_release_triggers_only_when_no_active_pr(self):
         branches=[branch("release-candidate/v0.1.0-rc.1"),
                   branch("release-candidate/v0.1.0-rc.2"),
