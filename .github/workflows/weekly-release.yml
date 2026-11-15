@@ -106,8 +106,8 @@ jobs:
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$WEEKLY_TAG"
           {
             echo "### Weekly YAG experimental prerelease queued"
-            echo "Tag: `$WEEKLY_TAG`"
-            echo "Reviewed main commit: `$REVIEWED_SHA`"
+            echo "Tag: $WEEKLY_TAG"
+            echo "Reviewed main commit: $REVIEWED_SHA"
             echo "The tagged workflow must build, verify SHA-256 and attest all packages."
             echo "Release publication is **not** production qualification."
           } >> "$GITHUB_STEP_SUMMARY"
