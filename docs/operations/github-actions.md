@@ -12,7 +12,8 @@ inference model supports an agent protocol. Those checks run only on a
 | `ci.yml` | PR + main/feature pushes | C17 host tests, address/undefined behavior sanitizers, Console build, Docker/LAN checks, mock CLI protocol probes |
 | `desktop.yml` | Desktop PRs + main changes | Native Linux .deb, Windows NSIS .exe, macOS .dmg build artifacts |
 | `security.yml` | PR + main + Wednesday + manual | actionlint, CodeQL C/C++ and JS/TS scans, Console and Desktop npm vulnerability audits |
-| `release.yml` | Monday + manual + `v*` tags | Host Linux package and all three Desktop installers. Attaches each to workflow artifacts. A reviewed tag also publishes a GitHub Release with SHA-256 checksums |
+| `release.yml` | Manual + `v*` tags | Host Linux package and all three Desktop installers. Attaches each to workflow artifacts. A reviewed tag publishes a GitHub Release with SHA-256 checksums and signed provenance |
+| `weekly-release.yml` | Monday 06:17 UTC + manual on `main` | Checks the exact main commit's latest CI/security runs, creates one immutable `vX.Y.Z-weekly.YYYYMMDD` tag per UTC week and dispatches signed prerelease packaging |
 | `live-model.yml` | Explicit manual dispatch on `main` only | Qualifies a **real** model with an isolated gateway on a self-hosted Linux runner |
 | `prepare-rc.yml` | Manual dispatch from reviewed `main` | Checks exact-commit CI/security runs, creates a new `-rc.N` tag without overwriting and explicitly dispatches tagged packaging |
 
@@ -32,11 +33,11 @@ ordinary tag-push workflows when it creates a tag. `prepare-rc.yml`
 therefore explicitly uses `workflow_dispatch` on the new tag reference
 to start `release.yml`. Manual dispatch against `main` only builds
 artifacts; tag dispatch publishes a prerelease after checks and attestations.
-Use protected `release-candidate` / `production-release` Environments.
+Use protected `release-candidate` / `production-release` Environments. Weekly snapshots publish through the separate `weekly-prerelease` Environment without production approval; the publishing job independently re-verifies exact-main CI/security evidence.
 
-The automated weekly packaging run **does not create tags or publish stable
-releases**. Build artifacts expire after 14 days. The Desktop packages are
-currently **unsigned**, so macOS/Windows can display trust warnings.
+`weekly-release.yml` now **publishes a public experimental GitHub prerelease each Monday**, not merely a 14-day workflow artifact. It uses the date of that week's UTC Monday in the immutable tag, including when manually dispatched. Re-running the same week skips an already published release from the same commit; it refuses a conflicting tag rather than moving it. If initial packaging fails after tag creation, a run may dispatch packaging against the original tag without moving it. CI/security failures block the tag. The tagged release job repeats that verification, then requires four packages, SHA-256 checks and Sigstore provenance before publication. GitHub may delay a scheduled run.
+
+No weekly run publishes a stable version or satisfies real Colibri acceptance. Unsigned Desktop packages may display macOS/Windows trust warnings. Non-release workflow artifacts still expire after 14 days.
 
 For first-release candidate qualification choose `release_candidate=true` together with `protocol=all`, `stream=true` and `tools=true`. The workflow validates a metadata-only report against the exact commit and measured GPU inventory. The gate does not authenticate the runner or independently certify the selected model. See [first-release acceptance](first-release.md).
 
