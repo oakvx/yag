@@ -148,3 +148,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px soli
 .code-block pre{margin:0;padding:14px;overflow-x:auto;white-space:pre;font-size:12px;line-height:1.55}
 .code-block pre code{font-family:ui-monospace,Consolas,monospace}
 @media(max-height:650px){.conversation-list{min-height:30px}.sidebar-bottom{padding-top:5px}}
+
+/* Release notifications never overlap the chat composer. */
+.update-banner{display:flex;align-items:center;gap:12px;justify-content:space-between;margin:12px 24px 0;padding:10px 14px;border:1px solid #46594a;border-radius:8px;background:#1d2c24;color:#d6edc6;font-size:12px}
+.update-banner[hidden]{display:none}
+.update-banner span{flex:1;min-width:0}
+.update-banner .secondary-button{padding:7px 11px;white-space:nowrap}
+.update-banner .icon-button{font-size:19px}
+.update-actions{justify-content:flex-start;flex-wrap:wrap}
+.update-actions [hidden]{display:none}
+@media(max-width:820px){.update-banner{margin:8px 12px 0;flex-wrap:wrap}}
