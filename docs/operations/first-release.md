@@ -87,7 +87,7 @@ Only on **Colibri**, using a trusted `yag-colibri` self-hosted Linux runner:
 7. Test multiple **physical** PCs, actual upstream cancellation and GPU load, scope revocation, deliberate outage and recovery,
    device driver telemetry and actual fallback behavior. Rehearse backup
    decrypt/stage and verified Host rollback on a replacement machine.
-7. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
+8. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
    endpoint isolation, release artifacts and signing/notarization status.
    Confirm actual provider pricing, quotas and data-processing policies.
 
