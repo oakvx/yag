@@ -1,5 +1,6 @@
 mod discovery;
 mod relay;
+mod updates;
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -353,43 +354,23 @@ async fn discover_hosts() -> Result<Vec<discovery::DiscoveredHost>, String> {
 }
 
 
-#[derive(Serialize)]
-struct VersionInfo {
-    current: String,
-    latest: String,
-    url: String,
-}
 #[tauri::command]
-async fn check_updates() -> Result<VersionInfo, String> {
-    // This explicit user-triggered check never transmits client API keys,
-    // conversation content or identifiable model names.
-    let response = client()?
-        .get("https://api.github.com/repos/oakvx/yag/releases/latest")
-        .header("User-Agent", "YAG-Desktop-Update-Check")
-        .timeout(Duration::from_secs(8))
-        .send().await.map_err(|_| "Could not reach GitHub Releases".to_string())?;
-    if !response.status().is_success() {
-        return Err("No published GitHub Release could be retrieved".into());
-    }
-    let release: serde_json::Value = response.json().await
-        .map_err(|_| "Invalid release metadata".to_string())?;
-    let latest = release.get("tag_name").and_then(|v| v.as_str()).unwrap_or("");
-    if latest.len() > 40 || !latest.starts_with('v') ||
-        !latest[1..].bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.') {
-        return Err("Unexpected version tag from GitHub".into());
-    }
-    Ok(VersionInfo {
-        current: env!("CARGO_PKG_VERSION").into(),
-        latest: latest.into(),
-        url: format!("https://github.com/oakvx/yag/releases/tag/{latest}"),
-    })
+async fn check_updates() -> Result<updates::VersionInfo, String> {
+    // Explicit or opt-in check. No client key, prompts or model IDs are sent.
+    updates::check().await
+}
+
+#[tauri::command]
+async fn download_update(app: tauri::AppHandle, tag: String) -> Result<String, String> {
+    // Never auto-execute downloaded installers; OS signing is not available yet.
+    updates::download(app, tag).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts, check_updates])
+        .invoke_handler(tauri::generate_handler![list_models, stream_chat, cancel_chat, start_relay, stop_relay, discover_hosts, check_updates, download_update])
         .run(tauri::generate_context!())
         .expect("failed to launch YAG Desktop");
 }
