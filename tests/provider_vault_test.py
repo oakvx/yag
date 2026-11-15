@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native encrypted provider vault regression suite; real age CLI is optional."""
+import base64
 import contextlib
 import io
 import os
@@ -34,9 +35,9 @@ class VaultTests(unittest.TestCase):
     @staticmethod
     def fake_age(cmd,input=None,**kwargs):
         if '--encrypt' in cmd:
-            return subprocess.CompletedProcess(cmd,0,stdout=b'AGE\x00'+input)
+            return subprocess.CompletedProcess(cmd,0,stdout=b'AGE\x00'+base64.b64encode(input))
         if '--decrypt' in cmd and input.startswith(b'AGE\x00'):
-            return subprocess.CompletedProcess(cmd,0,stdout=input[4:])
+            return subprocess.CompletedProcess(cmd,0,stdout=base64.b64decode(input[4:]))
         return subprocess.CompletedProcess(cmd,1,stdout=b'',stderr=b'')
 
     @contextlib.contextmanager
