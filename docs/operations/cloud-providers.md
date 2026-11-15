@@ -21,6 +21,15 @@ HTTP is accepted only for previously allowed private/local `/v1` backends.
 Never put API credentials into URL query strings, GitHub Actions variables
 or version-controlled configuration.
 
+## Alternative: encrypted native Host BYOK vault
+
+For a native POSIX Host (not Docker Compose), use
+[the age-encrypted provider vault](native-byok-vault.md) to store aliases
+encrypted at rest, rotate recipients and supply the secrets to the native
+YAG executable without an unencrypted credential file. The Host process
+still inherits keys in memory/environment; Compose deployment credentials
+are **not** encrypted by that workflow.
+
 ## Configure an individual private provider credential
 
 On the **central YAG Host**:
