@@ -84,8 +84,10 @@
    the blur never pulls the empty edge of the surface into the picture. */
 .console-environment[data-surface="app"] .console-wallpaper { filter: blur(clamp(16px, 1.9vw, 34px)) saturate(1.04) brightness(1.25); }
 .console-environment[data-surface="app"] .wallpaper-canvas { transform: scale(1.09); }
-/* The menu spans the viewport: fade its lower rows above the footer without
-   masking the zero-height list of absolutely positioned destinations. */
+/* The menu owns the whole screen, so the fade belongs to it: the rows
+   dissolve toward the footer, while the crossbar and every category stay in
+   the fully opaque top. A zero-height <ul> would clip them instead — the
+   mask must live on a box that really covers the column. */
 .console-menu { position: absolute; inset: 0; z-index: 10; outline: none; transform-origin: 38% 43%; transition: opacity 360ms ease, transform 480ms ease, visibility 0s; -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 78vh, transparent 92vh); mask-image: linear-gradient(to bottom, #000 0, #000 78vh, transparent 92vh); }
 .console-menu[data-hidden="true"] { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.13) translateX(-3vw); transition: opacity 280ms, transform 500ms, visibility 0s 400ms; }
 /* Opening: the menu clears away while the selected icon grows and fades; Back plays it in reverse. */
@@ -113,8 +115,10 @@
 .console-category.is-selected .console-category-label { opacity: 0.96; }
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
-/* Destination rows are absolutely positioned; do not apply a percentage
-   mask to their containing UL, whose intrinsic height is zero. */
+/* The rows are absolutely positioned, so this <ul> has zero height: a
+   mask-image on it would be measured against an empty box and clip the whole
+   column (that was the regression). The fade lives on .console-menu, which
+   really covers the screen, and keeps the footer line clear. */
 .console-destinations ul { list-style: none; padding: 0; margin: 0; }
 /* Size and opacity ride on --item-scale, set per row from the distance to
    the selection: the hardware interpolates continuously, not in two sizes. */
