@@ -379,6 +379,23 @@ mod tests {
     }
 
     #[test]
+    fn installer_publish_is_atomic_with_no_replace_and_exact_size() {
+        let root = std::env::temp_dir().join(format!("yag-update-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let staged = root.join("staged.part");
+        let target = root.join("desktop.exe");
+        fs::write(&staged, b"verified-package").unwrap();
+        assert!(publish_verified(&staged, &target, 15).is_err());
+        assert!(!target.exists(), "size mismatch must never publish an installer");
+        assert!(publish_verified(&staged, &target, 16).is_ok());
+        assert_eq!(fs::read(&target).unwrap(), b"verified-package");
+        assert!(publish_verified(&staged, &target, 16).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"verified-package",
+            "existing installer must not be replaced");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn checksum_manifest_rejects_duplicates_and_missing_files() {
         let tag = "v0.1.0-weekly.20261116";
         let names = filenames(tag);
