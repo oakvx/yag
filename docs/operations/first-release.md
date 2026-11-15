@@ -33,12 +33,21 @@ Dedicated model IDs require explicitly scoped workstation access.
    CodeQL/actionlint and Desktop Linux/macOS/Windows tests must pass.
 2. The packaging workflow must produce the Host and all three Desktop formats,
    verify SHA-256 and stage the Linux Host from a fresh directory on a tag.
-3. Tag a **reviewed** main commit using `v0.1.0-rc.1` (or a newer reviewed
-   candidate version). CMake builds numeric `0.1.0`; the Desktop versions
-   retain the prerelease suffix.
-4. On a tag, `release.yml` creates a **GitHub prerelease**, including
-   provenance attestations and checksum manifest. No unattended weekly
-   publication occurs. Never treat prerelease packaging as a production pass.
+3. After **CI** and **Security and dependency review** pass for the exact
+   current `main` commit, open **Actions → Prepare first YAG release
+   candidate → Run workflow** on `main`, and enter a new
+   `v0.1.0-rc.1`-style tag. The workflow checks the latest main CI/security
+   runs, rejects existing/unsafe tags and dispatches the tagged packaging.
+   Alternatively, an operator can create a reviewed tag manually.
+4. Tagged `release.yml` builds stamp the numeric CMake Host version and
+   Desktop prerelease version, check all SHA-256 assets, attest provenance
+   and publish a **GitHub prerelease**. Weekly packaging remains artifact-only
+   and no stable version is published automatically.
+
+   If tag creation succeeds but dispatch fails, keep the tag immutable:
+   run **Actions → Package and release YAG → Run workflow** against the
+   **existing tag reference** after fixing the failure. Configure the
+   `release-candidate` GitHub Environment with required reviewers.
 
 ## Mandatory production acceptance — cannot be simulated
 
