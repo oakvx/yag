@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="./styles.css">
   <script src="./workspace.js" defer></script>
   <script src="./models.js" defer></script>
+  <script src="./setup.js" defer></script>
   <script src="./markdown.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
@@ -76,7 +77,16 @@
   <div id="connectionDialog" class="modal-backdrop" hidden>
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="dialogTitle">
       <div class="modal-header"><div><div class="eyebrow">SERVER CONFIGURATION</div><h2 id="dialogTitle">Connect to YAG</h2></div><button id="closeDialogButton" type="button" class="icon-button" aria-label="Close connection dialog">×</button></div>
-      <p class="modal-copy">Enter the HTTPS address of your YAG Host and a client API key issued by its administrator. Your key stays in memory and is never saved to disk.</p>
+      <section id="setupWelcome" class="setup-panel" hidden aria-label="First-run setup">
+        <span class="setup-step">01 / 03 · WELCOME</span>
+        <div class="setup-brand">Y</div>
+        <h3>Your private AI workspace, ready in three steps.</h3>
+        <p>YAG Desktop connects this PC to your YAG Host. The AI models run on the Host; this PC only needs a trusted LAN connection and its own client API key.</p>
+        <div class="setup-checks"><span>01 · Find your Host on the LAN</span><span>02 · Authenticate with your client key</span><span>03 · Choose a model and start</span></div>
+        <p class="field-note">You may skip setup and connect later. No credentials are stored on disk.</p>
+        <div class="modal-actions"><button id="setupSkip" class="secondary-button" type="button">I'll do this later</button><button id="setupBegin" class="primary-button" type="button">Get started <span>→</span></button></div>
+      </section>
+      <p id="connectionCopy" class="modal-copy">Enter the HTTPS address of your YAG Host and a client API key issued by its administrator. Your key stays in memory and is never saved to disk.</p>
       <form id="connectForm">
         <label for="serverUrl">SERVER ADDRESS</label>
         <input id="serverUrl" type="url" required spellcheck="false" autocomplete="url" placeholder="https://192.168.1.50">
@@ -89,6 +99,15 @@
         <div id="connectionError" class="dialog-error" role="alert" hidden></div>
         <div class="modal-actions"><button id="disconnectButton" type="button" class="secondary-button">Disconnect</button><button id="connectButton" type="submit" class="primary-button">Connect & discover models <span>↗</span></button></div>
       </form>
+      <section id="setupFinish" class="setup-panel" hidden aria-label="Setup complete" role="status">
+        <span class="setup-step">03 / 03 · READY</span>
+        <div class="setup-ready-mark">✓</div>
+        <h3>You're connected.</h3>
+        <p>YAG Host <strong id="setupHostName"></strong> is responding. Your PC is authenticated and can now use the available models.</p>
+        <p class="setup-model-name">Selected model: <strong id="setupModelName"></strong></p>
+        <p class="field-note">Your client key remains in memory only. You can change servers or disconnect from the sidebar at any time.</p>
+        <div class="modal-actions"><span class="setup-step">SETUP COMPLETE</span><button id="setupDone" class="primary-button" type="button">Open workspace <span>→</span></button></div>
+      </section>
     </section>
   </div>
   <div id="settingsDialog" class="modal-backdrop" hidden>
