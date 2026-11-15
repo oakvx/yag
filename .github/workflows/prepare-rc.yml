@@ -1,6 +1,8 @@
 name: Prepare first YAG release candidate
 
 on:
+  # Branch-create events execute the workflow from the default branch.
+  create:
   workflow_dispatch:
     inputs:
       tag:
@@ -19,25 +21,39 @@ concurrency:
 jobs:
   prepare:
     name: Verify main and create a new candidate tag
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    environment: release-candidate
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Confirm this workflow still points at current main
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'create' && gi      - name: Verify a newly created candidate branch or explicitly dispatched main
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          CREATED_REF: ${{ github.event.ref }}
+          CREATED_REF_TYPE: ${{ github.event.ref_type }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          if [[ "$current" != "$GITHUB_SHA" ]]; then
-            echo "Main moved; re-run this review on the latest commit." >&2
-            exit 1
+          if [[ "$GITHUB_EVENT_NAME" == create ]]; then
+            if [[ "$CREATED_REF_TYPE" != branch ||
+                  ! "$CREATED_REF" =~ ^release-candidate/v[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]]; then
+              echo "Only an exact release-candidate/vMAJOR.MINOR.PATCH-rc.N branch may trigger a candidate." >&2
+              exit 1
+            fi
+            candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$CREATED_REF" --jq '.object.sha')"
+            if [[ "$candidate_commit" != "$current" ]]; then
+              echo "Candidate trigger must point to the current reviewed main commit." >&2
+              exit 1
+            fi
+            tag="${CREATED_REF#release-candidate/}"
+          else
+            if [[ "$GITHUB_REF" != refs/heads/main || "$current" != "$GITHUB_SHA" ]]; then
+              echo "Main moved; re-run this review on the latest commit." >&2
+              exit 1
+            fi
+            tag="$INPUT_TAG"
           fi
+          # Python validates the exact release tag again.
+          printf 'RC_TAG=%s\nREVIEWED_SHA=%s\n' "$tag" "$current" >> "$GITHUB_ENV"
       - name: Download exact main-commit CI/security run metadata
         shell: bash
         env:
@@ -45,23 +61,21 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$GITHUB_SHA&per_page=100" \
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$REVIEWED_SHA&per_page=100" \
             > "$RUNNER_TEMP/yag-candidate-runs.json"
       - name: Fail closed unless newest CI and security reviews passed
         shell: bash
         env:
-          RC_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           python3 scripts/release_candidate.py \
-            --tag "$RC_TAG" --commit "$GITHUB_SHA" \
+            --tag "$RC_TAG" --commit "$REVIEWED_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --runs-file "$RUNNER_TEMP/yag-candidate-runs.json"
       - name: Create immutable lightweight prerelease tag
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RC_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           # Never force, replace or re-sign an existing release tag.
@@ -70,12 +84,11 @@ jobs:
             exit 1
           fi
           gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
-            -f ref="refs/tags/$RC_TAG" -f sha="$GITHUB_SHA" >/dev/null
+            -f ref="refs/tags/$RC_TAG" -f sha="$REVIEWED_SHA" >/dev/null
       - name: Explicitly dispatch the packaged prerelease workflow
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RC_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           # GITHUB_TOKEN tag pushes intentionally do not trigger normal push
@@ -84,7 +97,7 @@ jobs:
           {
             echo "### Release candidate prepared"
             echo "Tag: \`$RC_TAG\`"
-            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Commit: \`$REVIEWED_SHA\`"
             echo "Packaging, checksum and Sigstore attestation run in the release workflow."
             echo "Only prerelease publication is authorized. No production certification."
           } >> "$GITHUB_STEP_SUMMARY"
