@@ -107,8 +107,8 @@ async fn chat(State(ctx): State<Arc<RelayContext>>, headers: HeaderMap, bytes: B
     forward_chat(ctx, headers, bytes).await
 }
 
-pub(crate) async fn start(upstream: String, upstream_key: String, models: Vec<String>) -> Result<(RelayInfo, RelayHandle), String> {
-    let allowed_models = models.into_iter().collect::<BTreeSet<_>>();
+pub(crate) async fn start(upstream: String, upstream_key: String, model_ids: Vec<String>) -> Result<(RelayInfo, RelayHandle), String> {
+    let allowed_models = model_ids.into_iter().collect::<BTreeSet<_>>();
     if allowed_models.is_empty() || allowed_models.len() > 512 {
         return Err("Relay requires 1–512 explicitly authorized model IDs".into());
     }
