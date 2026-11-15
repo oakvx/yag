@@ -2,6 +2,8 @@
 """Pure unit tests: real-provider probe URL and input policy (no network)."""
 import unittest
 import hashlib
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -9,7 +11,23 @@ import stat
 import tempfile
 from unittest import mock
 
-from real_provider_probe import validate_upstream_url, qualify, write_report
+from real_provider_probe import validate_upstream_url, qualify, write_report, probe_ollama_manifest
+
+class MockOllama(BaseHTTPRequestHandler):
+    digest='f'*64
+    def log_message(self,*_args): pass
+    def do_GET(self):
+        if self.path!='/api/tags':
+            self.send_error(404)
+            return
+        payload=json.dumps({'models':[
+            {'name':'qualified-model:latest','digest':'sha256:'+self.digest},
+            {'name':'other-model','digest':'2'*64},
+        ]}).encode()
+        self.send_response(200)
+        self.send_header('Content-Length',str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
 class RealProviderProbeConfiguration(unittest.TestCase):
     def test_loopback_http_and_remote_https(self):
@@ -66,6 +84,63 @@ class RealProviderProbeConfiguration(unittest.TestCase):
                 with self.assertRaises(OSError):
                     write_report(str(link),secret_model,"chat",False,False,[],False)
                 self.assertEqual(target.read_text(),"unchanged")
+
+    def test_only_exact_local_manifest_digest_is_accepted(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),MockOllama)
+        thread=threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        try:
+            address=f'http://127.0.0.1:{server.server_port}'
+            with mock.patch.dict(os.environ,{'HTTP_PROXY':'http://127.0.0.1:1',
+                                             'http_proxy':'http://127.0.0.1:1',
+                                             'NO_PROXY':'','no_proxy':''}):
+                self.assertEqual(probe_ollama_manifest('qualified-model:latest',address),
+                                 'f'*64)
+            self.assertIsNone(probe_ollama_manifest('qualified-model',address))
+            self.assertIsNone(probe_ollama_manifest('missing',address))
+            self.assertIsNone(probe_ollama_manifest('qualified-model:latest',
+                                                   'http://public.example.com'))
+            self.assertIsNone(probe_ollama_manifest('qualified-model:latest',
+                                                   address+'/api/tags'))
+            self.assertIsNone(probe_ollama_manifest('qualified-model:latest',
+                                                   'http://user:pass@127.0.0.1:11434'))
+            self.assertIsNone(probe_ollama_manifest('qualified-model:latest',
+                                                   'http://127.0.0.1:0'))
+            original=MockOllama.digest
+            try:
+                MockOllama.digest='not-a-sha'
+                self.assertIsNone(probe_ollama_manifest('qualified-model:latest',address))
+            finally:
+                MockOllama.digest=original
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+    def test_report_includes_digest_only_when_locally_measured(self):
+        server=ThreadingHTTPServer(('127.0.0.1',0),MockOllama)
+        thread=threading.Thread(target=server.serve_forever,daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                path=Path(folder)/'report.json'
+                with mock.patch.dict(os.environ,{
+                    'GITHUB_SHA':'a'*40,
+                    'YAG_REAL_OLLAMA_NATIVE_URL':f'http://127.0.0.1:{server.server_port}',
+                }):
+                    write_report(str(path),'qualified-model:latest','all',True,True,[],True)
+                report=json.loads(path.read_text())
+                self.assertEqual(report['schema_version'],3)
+                self.assertEqual(report['ollama_manifest_sha256'],'f'*64)
+                self.assertEqual(report['ollama_manifest_source'],'ollama_api_tags')
+                self.assertNotIn('qualified-model:latest',path.read_text())
+                with mock.patch.dict(os.environ,{'YAG_REAL_OLLAMA_NATIVE_URL':''}):
+                    write_report(str(path),'qualified-model:latest','all',True,True,[],True)
+                self.assertIsNone(json.loads(path.read_text())['ollama_manifest_sha256'])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
 
     def test_invalid_model_or_binary_rejected_without_network(self):
         with self.assertRaises(ValueError):

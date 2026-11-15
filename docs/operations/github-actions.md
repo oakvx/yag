@@ -49,6 +49,11 @@ GitHub Actions.
 Install Python 3, CMake, a C17 compiler, and the system libcurl development
 headers on this runner. Set:
 
+- **Repository variable:** `YAG_REAL_OLLAMA_NATIVE_URL` is the loopback
+  native Ollama API origin, e.g. `http://127.0.0.1:11434`. Stable
+  qualification requires an exact model digest from its `/api/tags` endpoint.
+  Verify the native API and OpenAI-compatible inference service are the
+  **same** Ollama instance; the CI cannot independently prove this mapping.
 - **Repository variable:** `YAG_REAL_UPSTREAM_URL` with the private Ollama
   OpenAI-compatible URL ending in `/v1`. The existing probe requires HTTPS
   when the upstream is not loopback.

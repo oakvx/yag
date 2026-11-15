@@ -49,6 +49,12 @@ You may also run locally with `tests/real_provider_probe.py
 --host ./build/yag --report-json qualification.json` after supplying the
 required `YAG_REAL_*` environment variables.
 
+Schema 3 additionally records the exact Ollama manifest digest read from
+an explicitly configured *loopback* `YAG_REAL_OLLAMA_NATIVE_URL` native
+`/api/tags` endpoint; no proxy, guessed digest or model output is used.
+Stable release qualification requires this digest. The operator must check
+that the native Ollama endpoint is the same server as the inference API.
+
 The report records a SHA-256 fingerprint of the exact model identifier,
 the reviewed Git commit (when available), requested protocols and whether
 text/tool replay and SSE terminal events succeeded or failed. It **never**

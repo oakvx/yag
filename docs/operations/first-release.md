@@ -44,34 +44,44 @@ Only on **Colibri**, using a trusted `yag-colibri` self-hosted Linux runner:
    explicitly trusted HTTPS backend). Set an upstream key only if required.
    Configure the protected `local-inference` environment and isolated,
    least-privileged runner account. Do not run PR code on this machine.
-2. Use **Actions → Qualify a real model on Colibri** on `main`, with
+2. Configure repository variable `YAG_REAL_OLLAMA_NATIVE_URL` for the exact
+   Ollama instance serving the OpenAI-compatible `YAG_REAL_UPSTREAM_URL`.
+   Use its **loopback** native origin, for example `http://127.0.0.1:11434`.
+   The script queries `/api/tags` directly with no proxy and records the
+   SHA-256 of the exact model manifest. Mismatched names, invalid digests,
+   non-loopback URLs and unavailable catalogs are **not** treated as verified.
+3. Use **Actions → Qualify a real model on Colibri** on `main`, with
    `protocol=all`, `tools=true`, `stream=true`, and
    `release_candidate=true`. The model must actually support those features.
-3. The probe creates a metadata-only `qualification.json` (schema 2):
+4. The probe creates a metadata-only `qualification.json` (schema 3):
    Git commit, model ID SHA-256, UTC timestamp, OS/architecture, optional
    Ollama CLI version, optional NVIDIA model/driver/VRAM and protocol results.
    It contains no prompts, model text, bearer keys or upstream URLs.
-4. Download the workflow artifact **from that trusted run** and review:
+5. Download the workflow artifact **from that trusted run** and review:
 
    ```sh
-   python3 scripts/release_gate.py --evidence qualification.json --commit FULL_40_CHARACTER_MAIN_COMMIT_SHA
+   python3 scripts/release_gate.py --evidence qualification.json --commit FULL_40_CHARACTER_MAIN_COMMIT_SHA --require-model-digest
    ```
 
    This check requires 3 successful protocols, actual tool replay, SSE,
    matching commit, fresh evidence (30 days maximum) and NVIDIA GPU
    information measured with `nvidia-smi`.
-5. Test multiple physical PCs, scope revocation, cancellation, load,
+6. Test multiple physical PCs, scope revocation, cancellation, load,
    device driver telemetry and actual fallback behavior. Rehearse backup
    decrypt/stage and verified Host rollback on a replacement machine.
-6. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
+7. Have an independent reviewer assess key storage, cloud egress, TLS/CORS,
    endpoint isolation, release artifacts and signing/notarization status.
    Confirm actual provider pricing, quotas and data-processing policies.
 
 The qualification JSON is **not a cryptographic attestation**. Check the
 workflow run identity and runner assignment, review the exact commit and
-retain the authenticated CI URL and non-secret operator notes. A SHA-256 of a
-model ID does **not** establish a pinned Ollama model revision. Record the
-actual runtime version and model digest in private deployment records.
+retain the authenticated CI URL and non-secret operator notes. The model ID hash is **not** a model revision. Schema 3 records an Ollama
+manifest SHA-256 from the native API, and stable releases require it. It
+identifies the observed manifest but is not a cryptographic attestation that
+the separately configured OpenAI-compatible endpoint uses exactly those
+weights. The operator must validate the endpoint/runtime pairing and the
+full model revision separately. Record the Ollama version, model digest and
+hardware in private deployment notes.
 
 ## Stable release protection
 
@@ -99,7 +109,8 @@ GitHub Environment variable). The stable publication job:
    `release_candidate` qualification step.
 3. Downloads the metadata-only artifact from that run and validates its
    SHA-256 model ID, protocol/tool/SSE pass results, same commit, fresh
-   UTC date and reported NVIDIA GPU/driver inventory.
+   UTC date, reported NVIDIA GPU/driver inventory and the exactly matched
+   Ollama model manifest SHA-256.
 4. Fails closed before publishing if any condition or artifact is missing.
 
 This keeps a stale, generic mocked or unqualified workflow artifact from
