@@ -41,8 +41,10 @@ Dedicated model IDs require explicitly scoped workstation access.
    Alternatively, an operator can create a reviewed tag manually.
 4. Tagged `release.yml` builds stamp the numeric CMake Host version and
    Desktop prerelease version, check all SHA-256 assets, attest provenance
-   and publish a **GitHub prerelease**. Weekly packaging remains artifact-only
-   and no stable version is published automatically.
+   and publish a **GitHub prerelease**. A separate Monday workflow also
+   publishes dated **weekly experimental prereleases** only after the exact
+   main commit's CI/security checks pass. No stable version is published
+   automatically; weekly builds do not replace physical Colibri acceptance.
 
    If tag creation succeeds but dispatch fails, keep the tag immutable:
    run **Actions → Package and release YAG → Run workflow** against the
