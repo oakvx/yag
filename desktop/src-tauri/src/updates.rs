@@ -273,9 +273,11 @@ async fn stream_verified_package(client: &reqwest::Client, url: &str, size: u64,
     let filename = destination.file_name().and_then(|name| name.to_str())
         .ok_or("Invalid installer filename")?;
     let temp = parent.join(format!(".{filename}-{}.partial", Uuid::new_v4().simple()));
+    // Declare the cleanup guard before the file so Windows closes the handle
+    // before attempting to delete an interrupted or corrupt temporary file.
+    let _cleanup = RemoveOnDrop(temp.clone());
     let mut file = OpenOptions::new().write(true).create_new(true).open(&temp)
         .map_err(|_| "Cannot create a private temporary installer file")?;
-    let _cleanup = RemoveOnDrop(temp.clone());
 
     let mut stream = response.bytes_stream();
     let mut hasher = Sha256::new();
