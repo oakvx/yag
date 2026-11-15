@@ -132,8 +132,8 @@ export function SecurityPage() {
         }
         lede="YAG's README opens with a warning before listing a single feature. Explore the six trust strata below to see exactly where credentials live, what the C17 listener enforces, and which production security controls do not exist."
         aside={
-          <div className="border border-rust/55 bg-rust/[0.08] p-4 font-mono text-[11px]">
-            <div className="uppercase tracking-[0.15em] text-rust font-semibold">
+          <div className="p-4 font-xmb text-[11px]">
+            <div className="text-rust font-semibold">
               ⚠ Do Not Deploy on Untrusted Networks
             </div>
             <p className="mt-2 leading-relaxed text-paper/90">
@@ -145,15 +145,15 @@ export function SecurityPage() {
       />
 
       {/* INTERACTIVE 6-STRATUM TRUST CROSS-SECTION */}
-      <section className="border-b border-line py-6 @lg:py-8">
+      <section className="py-6 @lg:py-8">
         <Container>
-          <div className="grid border border-line-strong bg-panel @3xl:grid-cols-12">
+          <div className="grid @3xl:grid-cols-12">
             {/* Left Stack: 6 Spatial Trust Layers */}
-            <div className="border-b border-line @3xl:col-span-5 @3xl:border-b-0 @3xl:border-r">
-              <div className="border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.15em] text-faint">
+            <div className="@3xl:col-span-5">
+              <div className="px-4 py-2.5 font-xmb text-[11.5px] text-faint">
                 Trust Cross-Section (Outer Edge → Upstream)
               </div>
-              <ol className="divide-y divide-line">
+              <ol className="">
                 {STRATA.map((st) => {
                   const selected = st.id === selectedId;
                   return (
@@ -165,10 +165,10 @@ export function SecurityPage() {
                           "w-full px-4 py-3.5 text-left transition-colors cursor-pointer",
                           selected
                             ? "border-l-2 border-l-amber bg-amber/[0.1]"
-                            : "border-l-2 border-l-transparent hover:bg-paper/[0.03]",
+                            : "hover:bg-paper/[0.03]",
                         )}
                       >
-                        <div className="flex items-center justify-between font-mono text-[10px]">
+                        <div className="flex items-center justify-between font-xmb text-[11.5px]">
                           <span className={selected ? "text-amber" : "text-faint"}>{st.layer}</span>
                           <span className="text-faint">{st.zone}</span>
                         </div>
@@ -183,8 +183,8 @@ export function SecurityPage() {
             {/* Right Inspector: Enforced Controls vs Residual Risk */}
             <div className="p-5 @lg:p-7 @3xl:col-span-7 flex flex-col justify-between" aria-live="polite">
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10.5px]">
-                  <span className="uppercase tracking-[0.15em] text-amber">
+                <div className="flex flex-wrap items-center justify-between gap-2 font-xmb text-[12px]">
+                  <span className="text-amber">
                     {active.layer} · {active.zone}
                   </span>
                   <StatusBadge tone="implemented">Enforced Boundary</StatusBadge>
@@ -192,7 +192,7 @@ export function SecurityPage() {
 
                 <h2 className="display mt-3 text-2xl text-paper @lg:text-3xl">{active.title}</h2>
 
-                <div className="mt-4 border border-line bg-ink px-3.5 py-2.5 font-mono text-[11px]">
+                <div className="mt-4 px-3.5 py-2.5 font-xmb text-[11px]">
                   <span className="text-faint">CREDENTIAL EXPOSURE AT THIS LAYER: </span>
                   <span className="text-paper">{active.credentialHeld}</span>
                 </div>
@@ -202,20 +202,20 @@ export function SecurityPage() {
                   <ul className="mt-2.5 space-y-2">
                     {active.enforced.map((item) => (
                       <li key={item} className="flex items-baseline gap-2.5 text-[13.5px] leading-relaxed text-paper/90">
-                        <span aria-hidden="true" className="font-mono text-moss">✓</span>
+                        <span aria-hidden="true" className="font-xmb text-moss">✓</span>
                         <span>{item}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div className="mt-6 border-t border-line pt-4">
+                <div className="mt-6 pt-4">
                   <p className="label text-rust">Residual Risk & Operator Responsibility</p>
                   <p className="mt-2 text-[13.5px] leading-relaxed text-muted">{active.residualRisk}</p>
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 font-mono text-[11px]">
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 pt-4 font-xmb text-[11px]">
                 <a
                   href={REPO_LINKS.security}
                   target="_blank"
@@ -243,13 +243,13 @@ export function SecurityPage() {
                 Security controls that are not implemented.
               </h2>
             </div>
-            <span className="font-mono text-[11px] text-faint">Plan around their absence before exposing a port</span>
+            <span className="font-xmb text-[11px] text-faint">Plan around their absence before exposing a port</span>
           </div>
 
-          <div className="grid gap-px border border-rust/35 bg-line @lg:grid-cols-2 @3xl:grid-cols-3">
+          <div className="grid gap-4 @lg:grid-cols-2 @3xl:grid-cols-3">
             {ABSENT_CONTROLS.map((item) => (
-              <div key={item.name} className="bg-ink p-5">
-                <div className="flex items-center justify-between font-mono text-[10px] text-rust">
+              <div key={item.name} className="p-5">
+                <div className="flex items-center justify-between font-xmb text-[11.5px] text-rust">
                   <span>NOT IMPLEMENTED</span>
                   <span aria-hidden="true">×</span>
                 </div>

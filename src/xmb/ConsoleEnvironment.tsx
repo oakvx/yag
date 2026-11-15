@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useRouter } from "@/router/RouterContext";
 import { cn } from "@/utils/cn";
 import { CATEGORIES, itemTarget, locate, type XmbItem } from "./categories";
@@ -10,7 +10,8 @@ import { AudioControls } from "./AudioControls";
 import { useBrandFont } from "./brandFont";
 import { BootScreen, useBootSequence } from "./BootScreen";
 import { EasterEgg, useEasterEgg } from "./EasterEgg";
-import { CommitNotifications } from "./CommitNotifications";
+import { CommitNotifications, NOTICE_COUNT, noticeHref } from "./CommitNotifications";
+import { useGamepad } from "./useGamepad";
 
 /* Pointer sensitivity: one deliberate input = one step, as with the PS3 D-pad. */
 /** px the pointer must travel over the same category/item before hover selects it. */
@@ -70,6 +71,12 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   const [hoverAnchor, setHoverAnchor] = useState<number | null>(null);
   const [easterOpen, setEasterOpen] = useState(false);
   const [noticesOpen, setNoticesOpen] = useState(false);
+  /** The information board's cursor, owned here so the gamepad can travel it. */
+  const [noticeCursor, setNoticeCursor] = useState(0);
+  /** The △ options panel on the selected destination. */
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [optionIndex, setOptionIndex] = useState(0);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const brandFont = useBrandFont();
   const wordmarkTaps = useRef(0);
   const memory = useRef(CATEGORIES.map(() => 0));
@@ -186,6 +193,179 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
 
   const back = useCallback(() => { blip("back"); returnToMenu(); }, [returnToMenu]);
 
+  // The △ options panel, the way the hardware's: a small list of actions
+  // anchored at the right edge, on the selected destination only.
+  const [copyState, setCopyState] = useState<"idle" | "done" | "failed">("idle");
+  const copyTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+  const shareUrl = (item: XmbItem): string => {
+    // The router reads the hash, so "#/path?query" is the shareable form.
+    const base = window.location.href.split("#")[0];
+    const query = item.query ? `?${new URLSearchParams(item.query).toString()}` : "";
+    return `${base}#/${item.to}${query}`;
+  };
+  const copyLink = async (item: XmbItem) => {
+    const url = item.href ?? shareUrl(item);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(url);
+      ok = true;
+    } catch {
+      try {
+        const area = document.createElement("textarea");
+        area.value = url;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        ok = document.execCommand("copy");
+        area.remove();
+      } catch {
+        ok = false;
+      }
+    }
+    setCopyState(ok ? "done" : "failed");
+    window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopyState("idle"), 2000);
+  };
+  const toggleOptions = useCallback(() => {
+    setOptionsOpen((open) => {
+      setOptionIndex(0);
+      blip(open ? "back" : "select");
+      return !open;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!optionsOpen) return;
+    const timer = window.setTimeout(() => optionRefs.current[0]?.focus({ preventScroll: true }), 30);
+    return () => window.clearTimeout(timer);
+  }, [optionsOpen]);
+
+  // ○/Esc close the panel on a capture listener, so the menu's own back
+  // handling does not run behind it.
+  useEffect(() => {
+    if (!optionsOpen) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape" || e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOptionsOpen(false);
+      setOptionIndex(0);
+      blip("back");
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [optionsOpen]);
+
+  // The panel follows the destination: moving the cross takes it with it.
+  useEffect(() => {
+    setOptionsOpen(false);
+    setOptionIndex(0);
+  }, [menuCursor]);
+
+  const optionActions = [
+    {
+      id: "open",
+      label: "Apri",
+      icon: "monitor" as const,
+      run: () => {
+        blip("select");
+        const target = itemTarget(selected);
+        if (target) navigate(target);
+        else if (selected.href) window.open(selected.href, "_blank", "noopener,noreferrer");
+      },
+    },
+    {
+      id: "tab",
+      label: "Apri in una nuova scheda",
+      icon: "link" as const,
+      run: () => window.open(selected.href ?? shareUrl(selected), "_blank", "noopener,noreferrer"),
+    },
+    {
+      id: "copy",
+      label: "Copia link",
+      icon: "download" as const,
+      run: () => { void copyLink(selected); },
+    },
+    {
+      id: "info",
+      label: "Informazioni",
+      icon: "information" as const,
+      run: () => { /* the row itself shows the destination's description */ },
+    },
+  ];
+
+  const onOptionsKey = (e: KeyboardEvent<HTMLUListElement>) => {
+    const move = (delta: number) => {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(optionActions.length - 1, optionIndex + delta));
+      setOptionIndex(next);
+      optionRefs.current[next]?.focus({ preventScroll: true });
+      blip("move");
+    };
+    if (e.key === "ArrowDown") move(1);
+    else if (e.key === "ArrowUp") move(-1);
+    else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const action = optionActions[optionIndex];
+      if (action.id === "info") return;
+      setOptionsOpen(false);
+      setOptionIndex(0);
+      action.run();
+    }
+  };
+
+  // The controller: the same verbs as the keyboard, one input = one step.
+  useGamepad({
+    enabled: () => bootReady && !paletteOpen && !easterOpen,
+    onStep: (axis) => {
+      if (phase === "cover") return;
+      if (noticesOpen) {
+        if (axis === "up") setNoticeCursor((value) => Math.max(0, value - 1));
+        else if (axis === "down") setNoticeCursor((value) => Math.min(NOTICE_COUNT - 1, value + 1));
+        else if (axis === "left") handleNoticesBack();
+        return;
+      }
+      if (isApp) return;
+      const c = cursorRef.current;
+      if (axis === "up") selectItem(c.item - 1);
+      else if (axis === "down") selectItem(c.item + 1);
+      else if (axis === "right") {
+        if (c.cat === CATEGORIES.length - 1) {
+          setOptionsOpen(false);
+          setOptionIndex(0);
+          setNoticesOpen(true);
+          blip("category");
+        } else {
+          selectCategory(c.cat + 1);
+        }
+      } else if (axis === "left") selectCategory(c.cat - 1);
+    },
+    onSelect: () => {
+      if (phase === "cover") return;
+      if (noticesOpen) {
+        window.open(noticeHref(noticeCursor), "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (isApp) return;
+      const c = cursorRef.current;
+      activate(CATEGORIES[c.cat].items[c.item]);
+    },
+    onBack: () => {
+      if (noticesOpen) {
+        handleNoticesBack();
+        return;
+      }
+      if (isApp) back();
+    },
+    onOptions: () => {
+      if (noticesOpen || isApp || phase === "cover") return;
+      toggleOptions();
+    },
+  });
+
   useEffect(() => {
     if (focusAfterMove.current) {
       itemRefs.current[menuCursor.item]?.focus({ preventScroll: true });
@@ -205,7 +385,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   }, [surface, path, bootReady]);
 
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
+    const key = (e: globalThis.KeyboardEvent) => {
       if (!bootReady || paletteOpen || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       const editing = el && (el.matches("input, textarea, select") || el.isContentEditable);
@@ -217,6 +397,13 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       if (phase === "cover") return;
       if (el?.closest("[data-console-action]") && (e.key === "Enter" || e.key === " ")) return;
       if (el?.closest("[data-console-action]") && e.key.startsWith("Arrow")) menuRef.current?.focus();
+      if (e.key === "t" || e.key === "T") {
+        // The △ button, on the keyboard. The board has no options of its own.
+        if (noticesOpen) return;
+        e.preventDefault();
+        toggleOptions();
+        return;
+      }
       const c = cursorRef.current;
       if (e.key.startsWith("Arrow")) resetHover();
       switch (e.key) {
@@ -227,6 +414,8 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           const step = e.key === "ArrowRight" ? 1 : -1;
           if (step > 0 && c.cat === CATEGORIES.length - 1 && !noticesOpen) {
             // One step past the last category is the information board, as on the console.
+            setOptionsOpen(false);
+            setOptionIndex(0);
             setNoticesOpen(true);
             blip("category");
             break;
@@ -255,7 +444,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [activate, back, bootReady, isApp, noticesOpen, paletteOpen, phase, resetHover, selectCategory, selectItem]);
+  }, [activate, back, bootReady, isApp, noticesOpen, paletteOpen, phase, resetHover, selectCategory, selectItem, toggleOptions]);
 
   const onItemClick = (e: MouseEvent<HTMLAnchorElement>, item: XmbItem) => {
     if (performance.now() - touch.current.swipeAt < 350) { e.preventDefault(); return; }
@@ -278,7 +467,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
     <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp} />
       <ConsoleClock />
-      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
+      <CommitNotifications active={!isApp} open={noticesOpen} booted={bootReady} cursor={noticeCursor} onCursorChange={setNoticeCursor} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
       {/* The menu itself is the home screen. No application is mounted underneath. */}
@@ -291,7 +480,7 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
         aria-label="YAG cross media menu"
         role="main"
         aria-hidden={isApp || !bootReady || undefined}
-        inert={isApp || paletteOpen || !bootReady || noticesOpen}
+        inert={isApp || paletteOpen || !bootReady || noticesOpen || optionsOpen}
         tabIndex={-1}
         onWheel={(e) => {
           if (isApp) return;
@@ -383,11 +572,11 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
               const on = i === menuCursor.item;
               // Size and brightness interpolate with the distance from the
               // selection, the way the hardware's list does: the selected
-              // label stands at full size, entries around it step down and
-              // dim, entries above the crossbar a little more.
+              // label stands at full size, the entries around it step down
+              // and dim, the ones above the crossbar a little more.
               const distance = Math.abs(i - menuCursor.item);
-              const scale = distance === 0 ? 1 : Math.max(0.46, 0.86 - distance * 0.13);
-              const opacity = (distance === 0 ? 1 : Math.max(0.68, 0.86 - distance * 0.09)) * (delta < 0 ? 0.62 : 1);
+              const scale = distance === 0 ? 1 : Math.max(0.46, 0.92 * Math.exp(-0.33 * distance));
+              const opacity = (distance === 0 ? 1 : Math.max(0.42, 0.8 * Math.exp(-0.3 * distance))) * (delta < 0 ? 0.85 : 1);
               return (
                 <li
                   key={item.id}
@@ -410,16 +599,19 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                     })}
                     onFocus={() => selectItem(i)}
                     onClick={(e) => onItemClick(e, item)}
+                    onContextMenu={(e) => {
+                      // Right-click on the destination: the △ panel.
+                      e.preventDefault();
+                      toggleOptions();
+                    }}
                   >
                     <span className="console-item-art"><ConsoleIcon name={item.icon} /></span>
-                    <span className="console-item-label">{item.label}{item.href && <span className="console-external">↗</span>}</span>
-                    {/* The description rides the selected row: beside its label, never over the next one. */}
-                    {on && (
-                      <span className="console-description">
-                        <span className="console-description-lead">{item.sub}</span>
-                        <span className="console-description-detail">{item.detail}</span>
-                      </span>
-                    )}
+                    {/* The destination stands in a column: the label, with the
+                        description beneath it, smaller and without a box. */}
+                    <span className="console-destination-body">
+                      <span className="console-item-label">{item.label}{item.href && <span className="console-external">↗</span>}</span>
+                      {on && <span className="console-description">{item.sub}</span>}
+                    </span>
                   </a>
                 </li>
               );
@@ -427,6 +619,48 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
           </ul>
         </nav>
       </div>
+
+      {/* The △ options panel: a small list anchored at the right edge, on
+          the selected destination only. */}
+      {!isApp && (
+        <div
+          className="console-options"
+          data-open={optionsOpen}
+          aria-hidden={!optionsOpen || undefined}
+          inert={!optionsOpen}
+        >
+          <ul aria-label={`Options, ${selected.label}`} onKeyDown={onOptionsKey}>
+            {optionActions.map((action, i) => (
+              <li key={action.id}>
+                <button
+                  ref={(node) => { optionRefs.current[i] = node; }}
+                  type="button"
+                  className={cn("console-option", i === optionIndex && "is-selected")}
+                  tabIndex={optionsOpen && i === optionIndex ? 0 : -1}
+                  onClick={() => {
+                    if (action.id === "info") return;
+                    setOptionsOpen(false);
+                    setOptionIndex(0);
+                    action.run();
+                  }}
+                  onMouseEnter={() => { if (i !== optionIndex) { setOptionIndex(i); blip("move"); } }}
+                  onFocus={() => setOptionIndex(i)}
+                >
+                  <span className="console-option-icon" aria-hidden="true"><ConsoleIcon name={action.icon} /></span>
+                  <span className="console-option-label">
+                    {action.id === "copy" && copyState !== "idle"
+                      ? (copyState === "done" ? "Copiato" : "Copia non riuscita")
+                      : action.label}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {optionIndex === optionActions.length - 1 && (
+            <p className="console-options-detail">{selected.detail}</p>
+          )}
+        </div>
+      )}
 
       {isApp && (
         <section
@@ -480,6 +714,13 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       {!isApp && (
         <div className="console-help" data-console-action inert={paletteOpen || !bootReady || noticesOpen}>
           <span className="console-help-arrows" aria-hidden="true">↔ ↕</span><span className="console-help-label">Navigate</span>
+          <button type="button" onClick={toggleOptions} aria-label="Options, triangle button">
+            <svg viewBox="0 0 24 24" className="controller-glyph" aria-hidden="true" fill="none">
+              <circle cx="12" cy="12" r="9.2" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M12 8.4l3.7 6.4H8.3z" fill="currentColor" />
+            </svg>
+            <span className="console-help-label">Options</span>
+          </button>
           <button type="button" onClick={() => activate(selected)}><ControllerGlyph kind="select" /><span className="console-help-label">Select</span></button>
           <button type="button" onClick={() => categoryRefs.current[menuCursor.cat]?.focus()}><ControllerGlyph kind="back" /><span className="console-help-label">Back</span></button>
         </div>

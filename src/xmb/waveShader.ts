@@ -16,6 +16,7 @@ uniform float uLayer;
 uniform int uPass;
 varying vec2 vUv;
 varying float vStar;
+varying float vHalo;
 varying float vCentre;
 varying float vInvHalf;
 varying float vHighlight;
@@ -27,16 +28,36 @@ float hash21(vec2 p) {
 void main() {
   vUv = vec2(0.0);
   vStar = 0.0;
+  vHalo = 0.0;
   vCentre = 0.0;
   vInvHalf = 1.0;
   vHighlight = 0.0;
   if (uPass == 2) {
     float x = fract(aPosition.x + uTime * 0.0012);
-    float y = 0.29 + aPosition.y * 0.37
-      + 0.011 * sin(uTime * 0.12 + aPosition.x * 29.0);
-    vStar = (0.3 + 0.7 * abs(sin(uTime * 0.35 + aPosition.x * 77.0)))
-      * mix(0.35, 1.0, smoothstep(0.28, 0.8, x));
-    gl_PointSize = mix(1.0, 2.6, hash21(aPosition)) * clamp(uResolution.x / 1200.0, 0.8, 1.7);
+    float t = uTime * 0.075;
+    float seed = hash21(aPosition);
+    // The centre the main ribbon solves on its home shape, so the motes ride
+    // the bands instead of sitting in a fixed stripe of the sky.
+    float travelling = x * 4.1 - t + 2.55;
+    float secondary = x * 8.0 - t * 0.39 + 4.08;
+    float twist = x * 3.8 - t * 0.72 + 2.55;
+    float homeCentre = 0.505
+      + 0.041 * sin(travelling) + 0.018 * sin(secondary) - (x - 0.5) * 0.037;
+    float homeWave = 0.5 + 0.5 * sin(twist);
+    float homeHalf = 0.030 + 0.082 * homeWave * homeWave;
+    float bootCentre = 0.36 - x * 0.065 + 0.012 * sin(x * 4.0 - t * 0.65);
+    float bootHalf = 0.008 + 0.115 * sqrt(max(0.0, sin(clamp(x, 0.0, 1.0) * 3.14159)))
+      * (0.6 + 0.4 * (0.5 + 0.5 * cos(twist * 2.0)));
+    float centre = mix(homeCentre, bootCentre, uBoot);
+    float halfWidth = mix(homeHalf, bootHalf, uBoot);
+    float y = centre + (seed - 0.5) * 2.0 * halfWidth * 3.4;
+    // A few motes run larger and carry a soft halo; the rest stay fine.
+    vHalo = step(0.88, hash21(aPosition + vec2(9.1, 3.7)));
+    gl_PointSize = mix(1.0, 2.8, hash21(aPosition + vec2(3.1, 7.3)))
+      * mix(1.0, 1.9, vHalo) * clamp(uResolution.x / 1200.0, 0.8, 1.7);
+    // Faster, uneven twinkle: every mote runs on its own clock and phase.
+    vStar = (0.35 + 0.65 * abs(sin(uTime * (0.8 + seed * 1.9) + aPosition.x * 77.0 + seed * 39.0)))
+      * mix(0.4, 1.0, smoothstep(0.28, 0.8, x));
     gl_Position = vec4(x * 2.0 - 1.0, 1.0 - y * 2.0, 0.0, 1.0);
   } else if (uPass == 1) {
     float x = aPosition.x * 0.5 + 0.5;
@@ -94,6 +115,7 @@ uniform vec3 uPalette[4];
 uniform int uPass;
 varying vec2 vUv;
 varying float vStar;
+varying float vHalo;
 varying float vCentre;
 varying float vInvHalf;
 varying float vHighlight;
@@ -146,8 +168,10 @@ void main() {
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
   } else {
     float radius = length(gl_PointCoord - vec2(0.5));
-    float point = 1.0 - smoothstep(0.1, 0.5, radius);
-    float alpha = point * vStar * mix(0.035, 0.23, uBoot) * uExposure
+    float core = 1.0 - smoothstep(0.1, 0.5, radius);
+    // The halo is a soft ring just outside the core, for the larger motes.
+    float halo = smoothstep(0.1, 0.28, radius) * (1.0 - smoothstep(0.26, 0.5, radius));
+    float alpha = (core + vHalo * halo * 0.6) * vStar * mix(0.14, 0.23, uBoot) * uExposure
       * mix(1.0, smoothstep(0.08, 0.85, uProgress), uBoot);
     gl_FragColor = vec4(0.84, 0.9, 1.0, alpha);
   }

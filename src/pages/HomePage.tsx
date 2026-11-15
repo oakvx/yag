@@ -82,10 +82,10 @@ export function HomePage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone="mock">Experimental</StatusBadge>
-            <span className="rounded-full border border-line px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.13em] text-muted">
+            <span className="px-2.5 py-0.5 font-xmb text-[11.5px] text-muted">
               MIT
             </span>
-            <span className="rounded-full border border-line px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.13em] text-muted">
+            <span className="px-2.5 py-0.5 font-xmb text-[11.5px] text-muted">
               C17 host
             </span>
           </div>
@@ -114,8 +114,8 @@ export function HomePage() {
           </div>
         </div>
 
-        <p className="border-l-2 border-rust/70 pl-3.5 font-mono text-[11px] leading-relaxed text-faint">
-          <span className="uppercase tracking-[0.13em] text-rust">Foundation, not a fortress:</span> no native TLS, CORS
+        <p className="pl-3.5 font-xmb text-[11px] leading-relaxed text-faint">
+          <span className="text-rust">Foundation, not a fortress:</span> no native TLS, CORS
           configuration, audit log or independent security audit. Automated suites run against a deterministic mock
           upstream.
         </p>
@@ -123,13 +123,13 @@ export function HomePage() {
 
       {/* Interactive topology */}
       <section className="@3xl:col-span-7" aria-label="Gateway topology">
-        <div className="overflow-hidden rounded-2xl border border-line-strong bg-ink">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.15em]">
+        <div className="overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 font-xmb text-[11.5px]">
             <span className="text-amber">Fig. 00 · Gateway signal topology</span>
             <span className="text-faint">Select an entry path</span>
           </div>
 
-          <div role="tablist" aria-label="Entry path" className="grid grid-cols-2 border-b border-line @2xl:grid-cols-4">
+          <div role="tablist" aria-label="Entry path" className="grid grid-cols-2 @2xl:grid-cols-4">
             {CASES.map((c, i) => {
               const on = c.id === sel;
               return (
@@ -139,7 +139,7 @@ export function HomePage() {
                   aria-selected={on}
                   onClick={() => setSel(c.id)}
                   className={cn(
-                    "cursor-pointer border-b border-r border-line px-3 py-2 text-left font-mono text-[10px] transition-colors @2xl:border-b-0 @2xl:last:border-r-0",
+                    "cursor-pointer px-3 py-2 text-left font-xmb text-[11.5px] transition-colors",
                     on ? "bg-amber/[0.14] text-paper" : "text-faint hover:bg-white/[0.04] hover:text-muted",
                   )}
                 >
@@ -239,7 +239,7 @@ export function HomePage() {
             </svg>
           </div>
 
-          <div className="grid gap-2 border-t border-line bg-black/20 px-4 py-3 font-mono text-[11px] @2xl:grid-cols-12" aria-live="polite">
+          <div className="grid gap-2 px-4 py-3 font-xmb text-[11px] @2xl:grid-cols-12" aria-live="polite">
             <div className="@2xl:col-span-5">
               <span className="text-amber">ACTIVE PATH:</span> <span className="text-paper">{active.mode}</span>
             </div>
@@ -250,11 +250,11 @@ export function HomePage() {
 
       {/* System information */}
       <section className="@3xl:col-span-12" aria-label="System information">
-        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line @2xl:grid-cols-3 @4xl:grid-cols-6">
+        <dl className="grid grid-cols-2 gap-4 overflow-hidden @2xl:grid-cols-3 @4xl:grid-cols-6">
           {SYSTEM_INFO.map(([k, v]) => (
-            <div key={k} className="bg-[rgba(6,20,54,0.7)] px-4 py-3">
-              <dt className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-faint">{k}</dt>
-              <dd className="mt-1 font-mono text-[11.5px] text-paper">{v}</dd>
+            <div key={k} className="px-4 py-3">
+              <dt className="font-xmb text-[11px] text-faint">{k}</dt>
+              <dd className="mt-1 font-xmb text-[11.5px] text-paper">{v}</dd>
             </div>
           ))}
         </dl>
@@ -267,7 +267,7 @@ export function HomePage() {
             <li key={l.to}>
               <RouteLink
                 to={l.to}
-                className="group flex items-center gap-3 rounded-2xl border border-line bg-white/[0.03] px-3.5 py-2.5 transition-all duration-300 hover:border-amber/60 hover:bg-amber/[0.1]"
+                className="group flex items-center gap-3 px-3.5 py-2.5 transition-all duration-300 hover:bg-amber/[0.1]"
               >
                 <Glyph name={l.glyph} className="h-6 w-6 text-muted transition-colors group-hover:text-white" />
                 <span className="min-w-0">

@@ -126,7 +126,7 @@ export function RoutingPage() {
         eyebrow="Chapter 05 · Interactive Routing Table"
         title={
           <>
-            Exact <code className="font-mono text-[0.82em] text-amber">strcmp()</code> matching. Secrets by reference.
+            Exact <code className="font-xmb text-[0.82em] text-amber">strcmp()</code> matching. Secrets by reference.
           </>
         }
         lede="Test how YAG selects an upstream server. Choose a preset model ID — or type your own — and simulate backend failures to see when YAG holds firm versus when opt-in connection fallback applies."
@@ -137,17 +137,17 @@ export function RoutingPage() {
         ]}
       />
 
-      <section className="border-b border-line py-6 @lg:py-8">
+      <section className="py-6 @lg:py-8">
         <Container>
           {/* Interactive Routing Bench */}
-          <div className="border border-line-strong bg-panel">
-            <div className="border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.15em] flex flex-wrap justify-between gap-2">
+          <div className="">
+            <div className="px-4 py-3 font-xmb text-[11.5px] flex flex-wrap justify-between gap-2">
               <span className="text-amber">Interactive Simulator · config_for_model() & upstream_for_model()</span>
               <span className="text-faint">Sample data in browser memory — zero network calls</span>
             </div>
 
             {/* Controls Row */}
-            <div className="grid gap-6 border-b border-line p-4 @lg:p-6 @3xl:grid-cols-12">
+            <div className="grid gap-6 p-4 @lg:p-6 @3xl:grid-cols-12">
               {/* Left: Model Selector & Custom Input */}
               <div className="@3xl:col-span-6">
                 <label htmlFor="model-selector-input" className="label block text-faint">
@@ -158,7 +158,7 @@ export function RoutingPage() {
                   type="text"
                   value={modelInput}
                   onChange={(e) => setModelInput(e.target.value)}
-                  className="mt-2 w-full border border-line-strong bg-ink px-3.5 py-2 font-mono text-[13px] text-paper focus:border-amber focus:outline-none"
+                  className="mt-2 w-full border border-line-strong bg-ink px-3.5 py-2 font-xmb text-[14px] text-paper focus:border-amber focus:outline-none"
                   placeholder="Type a model ID..."
                 />
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -168,26 +168,26 @@ export function RoutingPage() {
                       type="button"
                       onClick={() => setModelInput(preset)}
                       className={cn(
-                        "border px-2 py-1 font-mono text-[10px] transition-colors cursor-pointer",
+                        "px-2 py-1 font-xmb text-[11.5px] transition-colors cursor-pointer",
                         modelInput === preset
-                          ? "border-amber bg-amber/15 text-paper"
-                          : "border-line text-faint hover:text-paper",
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
                       )}
                     >
                       {preset}
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 font-mono text-[10.5px] text-faint">
+                <p className="mt-2 font-xmb text-[12px] text-faint">
                   Notice <code className="text-paper">qwen2.5-coder:latest</code> vs{" "}
                   <code className="text-paper">qwen2.5-coder</code>: there is no prefix or tag wildcarding.
                 </p>
               </div>
 
               {/* Right: Simulated Route Condition & Fallback Flag */}
-              <div className="@3xl:col-span-6 @3xl:border-l @3xl:border-line @3xl:pl-6">
+              <div className="@3xl:col-span-6 @3xl:pl-6">
                 <span className="label block text-faint">02 · Simulated Matched-Backend Condition</span>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 font-mono text-[10.5px]">
+                <div className="mt-2 grid grid-cols-2 gap-1.5 font-xmb text-[12px]">
                   {[
                     { id: "healthy", label: "Healthy (HTTP 200)" },
                     { id: "connect_error", label: "TCP Connect Refused" },
@@ -199,10 +199,10 @@ export function RoutingPage() {
                       type="button"
                       onClick={() => setOutcome(opt.id as BackendOutcome)}
                       className={cn(
-                        "border px-2.5 py-1.5 text-left transition-colors cursor-pointer",
+                        "px-2.5 py-1.5 text-left transition-colors cursor-pointer",
                         outcome === opt.id
-                          ? "border-amber bg-amber/15 text-paper"
-                          : "border-line text-faint hover:text-paper",
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
                       )}
                     >
                       {opt.label}
@@ -210,7 +210,7 @@ export function RoutingPage() {
                   ))}
                 </div>
 
-                <label className="mt-3 flex items-center gap-2.5 font-mono text-[11px] text-paper cursor-pointer">
+                <label className="mt-3 flex items-center gap-2.5 font-xmb text-[11px] text-paper cursor-pointer">
                   <input
                     type="checkbox"
                     checked={fallbackEnabled}
@@ -224,9 +224,9 @@ export function RoutingPage() {
 
             {/* Visual Routing Table Lookup */}
             <div className="grid @3xl:grid-cols-12">
-              <div className="border-b border-line p-4 @lg:p-6 @3xl:col-span-7 @3xl:border-b-0 @3xl:border-r">
+              <div className="p-4 @lg:p-6 @3xl:col-span-7">
                 <p className="label mb-3 text-faint">Startup-Validated Route Table (c-&gt;routes[0..2])</p>
-                <div className="divide-y divide-line border border-line bg-ink">
+                <div className="">
                   {SAMPLE_ROUTES.map((r) => {
                     const isMatch = matchedRoute?.index === r.index;
                     return (
@@ -234,7 +234,7 @@ export function RoutingPage() {
                         key={r.model}
                         onClick={() => setModelInput(r.model)}
                         className={cn(
-                          "grid grid-cols-12 items-center gap-2 px-3.5 py-3 font-mono text-[11px] transition-colors cursor-pointer",
+                          "grid grid-cols-12 items-center gap-2 px-3.5 py-3 font-xmb text-[11px] transition-colors cursor-pointer",
                           isMatch ? "bg-amber/[0.12]" : "hover:bg-paper/[0.02]",
                         )}
                       >
@@ -244,8 +244,8 @@ export function RoutingPage() {
                         <div className="col-span-3 text-right">
                           <span
                             className={cn(
-                              "border px-1.5 py-0.5 text-[9.5px]",
-                              isMatch ? "border-amber text-amber" : "border-line text-faint",
+                              "px-1.5 py-0.5 text-[11px]",
+                              isMatch ? "text-amber" : "text-faint",
                             )}
                           >
                             {isMatch ? "strcmp == 0" : "no match"}
@@ -258,7 +258,7 @@ export function RoutingPage() {
                   {/* Default Fallback Row */}
                   <div
                     className={cn(
-                      "grid grid-cols-12 items-center gap-2 px-3.5 py-3 font-mono text-[11px]",
+                      "grid grid-cols-12 items-center gap-2 px-3.5 py-3 font-xmb text-[11px]",
                       !matchedRoute ? "bg-moss/[0.12]" : "opacity-65",
                     )}
                   >
@@ -268,8 +268,8 @@ export function RoutingPage() {
                     <div className="col-span-3 text-right">
                       <span
                         className={cn(
-                          "border px-1.5 py-0.5 text-[9.5px]",
-                          !matchedRoute ? "border-moss text-moss" : "border-line text-faint",
+                          "px-1.5 py-0.5 text-[11px]",
+                          !matchedRoute ? "text-moss" : "text-faint",
                         )}
                       >
                         {!matchedRoute ? "selected" : "standby"}
@@ -280,39 +280,39 @@ export function RoutingPage() {
               </div>
 
               {/* Resulting Dispatch Readout */}
-              <div className="bg-[rgba(3,12,34,0.62)] p-4 @lg:p-6 @3xl:col-span-5" aria-live="polite">
+              <div className="p-4 @lg:p-6 @3xl:col-span-5" aria-live="polite">
                 <p className="label text-amber">Dispatch Resolution</p>
                 <div
                   className={cn(
-                    "mt-3 border p-3.5 font-mono text-[11.5px]",
+                    "mt-3 p-3.5 font-xmb text-[11.5px]",
                     statusTone === "moss"
-                      ? "border-moss/50 bg-moss/[0.07] text-moss"
+                      ? "bg-moss/[0.07] text-moss"
                       : statusTone === "amber"
-                        ? "border-amber/50 bg-amber/[0.07] text-amber"
-                        : "border-rust/50 bg-rust/[0.07] text-rust",
+                        ? "bg-amber/[0.07] text-amber"
+                        : "bg-rust/[0.07] text-rust",
                   )}
                 >
                   {finalStatus}
                 </div>
 
-                <dl className="mt-4 space-y-2.5 font-mono text-[11px]">
+                <dl className="mt-4 space-y-2.5 font-xmb text-[11px]">
                   <div>
-                    <dt className="text-faint uppercase text-[9.5px]">Selected Target URL</dt>
+                    <dt className="text-faint text-[11px]">Selected Target URL</dt>
                     <dd className="mt-0.5 text-paper">{finalDestination}</dd>
                   </div>
                   <div>
-                    <dt className="text-faint uppercase text-[9.5px]">Host-Attached Secret</dt>
+                    <dt className="text-faint text-[11px]">Host-Attached Secret</dt>
                     <dd className="mt-0.5 text-paper">{finalCredential}</dd>
                   </div>
                   <div>
-                    <dt className="text-faint uppercase text-[9.5px]">What GET /api/routes Returns to Clients</dt>
+                    <dt className="text-faint text-[11px]">What GET /api/routes Returns to Clients</dt>
                     <dd className="mt-0.5 text-muted">
                       {`{"object":"list","data":[{"model":"qwen2.5-coder"}, ...]}`} (no URLs, no key_env)
                     </dd>
                   </div>
                 </dl>
 
-                <p className="mt-4 border-t border-line pt-3 text-[12.5px] leading-relaxed text-muted">{explanation}</p>
+                <p className="mt-4 pt-3 text-[12.5px] leading-relaxed text-muted">{explanation}</p>
               </div>
             </div>
           </div>
@@ -326,7 +326,7 @@ export function RoutingPage() {
             <div className="@3xl:col-span-7">
               <p className="label text-amber">Startup Environment Definition</p>
               <h2 className="display mt-2 text-2xl text-paper @lg:text-3xl">
-                Secrets stay out of JSON via <code className="font-mono text-[0.82em] text-amber">key_env</code>.
+                Secrets stay out of JSON via <code className="font-xmb text-[0.82em] text-amber">key_env</code>.
               </h2>
               <div className="mt-4">
                 <CodeBlock
@@ -341,13 +341,13 @@ export function RoutingPage() {
             </div>
 
             <div className="@3xl:col-span-5 space-y-5">
-              <div className="border-t border-line-strong pt-4">
+              <div className="pt-4">
                 <StatusBadge tone="absent">What Model Routing Does Not Do</StatusBadge>
                 <ul className="mt-3 space-y-2.5 text-[13.5px] leading-relaxed text-muted">
                   <li>
                     <strong className="text-paper">No aggregate backend discovery:</strong>{" "}
-                    <code className="font-mono text-[12px]">GET /v1/models</code> queries only the default upstream and
-                    appends the static <code className="font-mono text-[12px]">YAG_MODEL_ROUTES</code> model strings.
+                    <code className="font-xmb text-[12px]">GET /v1/models</code> queries only the default upstream and
+                    appends the static <code className="font-xmb text-[12px]">YAG_MODEL_ROUTES</code> model strings.
                   </li>
                   <li>
                     <strong className="text-paper">No post-response replay:</strong> timeouts and HTTP 4xx/5xx responses
@@ -355,7 +355,7 @@ export function RoutingPage() {
                   </li>
                   <li>
                     <strong className="text-paper">No live route editing:</strong> routes are parsed once in{" "}
-                    <code className="font-mono text-[12px]">load_routes()</code> at startup; updates require restarting
+                    <code className="font-xmb text-[12px]">load_routes()</code> at startup; updates require restarting
                     the binary.
                   </li>
                 </ul>

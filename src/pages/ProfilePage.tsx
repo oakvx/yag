@@ -146,7 +146,7 @@ export function ProfilePage() {
                     <div className="min-w-0">
                       <p className="label text-amber">Maintainer</p>
                       <h3 className="xmb-tile-title mt-1 text-[1.35rem]">oakvx</h3>
-                      <p className="mt-1 font-mono text-[11px] text-faint">MIT · © 2026 YAG contributors</p>
+                      <p className="mt-1 font-xmb text-[11px] text-faint">MIT · © 2026 YAG contributors</p>
                     </div>
                   </div>
 

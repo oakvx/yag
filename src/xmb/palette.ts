@@ -20,8 +20,53 @@ const MONTHS = [
   ["#3f6793", "#0b1838", "#e0ebf5", "#779ec1"],
 ] as const;
 
+/** The twelve atmospheres by name, in month order, as the theme list reads them. */
+export const THEME_NAMES = [
+  "Zaffiro", "Indaco", "Azzurro", "Laguna", "Marea", "Oceano",
+  "Cielo", "Sera", "Nebbia", "Penombra", "Acqua", "Alba",
+] as const;
+
+/** localStorage key; the shape version is embedded so old states are ignored. */
+export const THEME_STORAGE_KEY = "yag-xmb-theme-v1";
+
+function readStoredTheme(): number | null {
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (raw === null || raw === "original") return null;
+    const month = Number(raw);
+    return Number.isInteger(month) && month >= 0 && month < 12 ? month : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The operator's fixed atmosphere, or null for the original monthly rotation. */
+export function selectedTheme(): number | null {
+  return readStoredTheme();
+}
+
+/** Fix one atmosphere by month index, or restore the original rotation with null. */
+export function setSelectedTheme(month: number | null): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, month === null ? "original" : String(month));
+  } catch {
+    /* Storage unavailable (private mode, file://): the choice simply does not persist. */
+  }
+}
+
+/** Tell the wallpaper a theme changed, so it blends to the new palette at once. */
+export function announceThemeChange(): void {
+  window.dispatchEvent(new Event("yag:theme"));
+}
+
+/** The raw colors of one atmosphere (top, bottom, silk, ambient light). */
+export function themeHex(month: number): readonly [string, string, string, string] {
+  return MONTHS[month % 12];
+}
+
 export function monthlyPalette(date = new Date()): Float32Array {
-  return new Float32Array(MONTHS[date.getMonth()].flatMap(rgb));
+  const month = readStoredTheme() ?? date.getMonth();
+  return new Float32Array(MONTHS[month].flatMap(rgb));
 }
 
 export function hourlyBrightness(date = new Date()): number {

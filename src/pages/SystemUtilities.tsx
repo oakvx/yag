@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { CodeBlock } from "@/components/CodeBlock";
-import { Container, PageMasthead } from "@/components/Primitives";
 import { BLOB_URL, REPO_LINKS } from "@/data/repository";
+import { XmbList, type XmbListEntry } from "@/xmb/XmbList";
 
-const SPECIFICATIONS = [
+/**
+ * The three System Screens, drawn the way the console draws its own
+ * Settings: a lede, the console's list (cursor row standing a size larger),
+ * a small note. No cards, no pills, no header panel — the wave shows
+ * through and monospace appears only where code does.
+ */
+
+const SPECIFICATIONS: Array<[string, string]> = [
   ["Project", "YAG - Yet Another Gateway"],
   ["Project version", "0.1.0 (CMake project definition)"],
   ["Qualification", "Experimental; real inference-model compatibility is unverified"],
@@ -20,25 +27,35 @@ const SPECIFICATIONS = [
 ];
 
 export function SystemInfoPage() {
+  const [cursor, setCursor] = useState(0);
+  const entries: XmbListEntry[] = SPECIFICATIONS.map(([label, value]) => ({
+    key: label,
+    title: label,
+    value,
+    ariaLabel: `${label}: ${value}`,
+  }));
   return (
-    <div>
-      <PageMasthead
-        path="/" eyebrow="System information" title="YAG system specifications"
-        lede="Specifications from the project repository. This website is not attached to a running YAG host and displays no live telemetry."
+    <div className="settings-screen" data-testid="system-info">
+      <p className="settings-lede">
+        Specifications from the project repository. This website is not attached to a running
+        YAG host and displays no live telemetry.
+      </p>
+      <XmbList
+        entries={entries}
+        selected={cursor}
+        onSelect={setCursor}
+        onHighlight={setCursor}
+        compact
+        focusOnMount
+        className="settings-list"
+        ariaLabel="System specifications"
       />
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <dl className="divide-y divide-line border-y border-line">
-            {SPECIFICATIONS.map(([label, value]) => (
-              <div key={label} className="grid gap-1 py-3 @2xl:grid-cols-[220px_1fr] @2xl:gap-6">
-                <dt className="text-[13px] text-faint">{label}</dt>
-                <dd className="text-[13px] leading-relaxed text-paper">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-5 text-[12px] text-muted">Source: <a href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener" className="underline underline-offset-4">Architecture and implementation status</a></p>
-        </Container>
-      </section>
+      <p className="settings-note">
+        Source:{" "}
+        <a href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener">
+          Architecture and implementation status
+        </a>
+      </p>
     </div>
   );
 }
@@ -64,40 +81,42 @@ const VARIABLES = [
 ];
 
 export function ConfigurationPage() {
-  const [selected, setSelected] = useState(VARIABLES[0].name);
-  const active = VARIABLES.find((v) => v.name === selected) ?? VARIABLES[0];
+  const [cursor, setCursor] = useState(0);
+  const entries: XmbListEntry[] = VARIABLES.map((v) => ({
+    key: v.name,
+    title: v.name,
+    value: v.value,
+    detail: (
+      <span className="xmb-config-detail">
+        <span>{v.text}</span>
+        <a className="xmb-code-link" href={`${BLOB_URL}/host/src/core/config.c`} target="_blank" rel="noreferrer noopener">
+          host/src/core/config.c
+        </a>
+        <span className="xmb-config-warn">
+          Never commit secrets to public files. Plain HTTP on an untrusted network exposes
+          gateway keys and request traffic.
+        </span>
+      </span>
+    ),
+    ariaLabel: `${v.name}, default ${v.value}`,
+  }));
   return (
-    <div>
-      <PageMasthead
-        path="/deploy" eyebrow="Configuration reference" title="Startup environment settings"
-        lede="The native host reads these values from its private environment at startup. This reference does not edit a running gateway or collect credentials. Restart the host to apply static configuration changes."
+    <div className="settings-screen" data-testid="configuration" aria-live="polite">
+      <p className="settings-lede">
+        The native host reads these values from its private environment at startup. This
+        reference does not edit a running gateway or collect credentials. Restart the host to
+        apply static configuration changes.
+      </p>
+      <XmbList
+        entries={entries}
+        selected={cursor}
+        onSelect={setCursor}
+        onHighlight={setCursor}
+        compact
+        focusOnMount
+        className="settings-list"
+        ariaLabel="Startup environment settings"
       />
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="grid gap-7 @3xl:grid-cols-12">
-            <div className="@3xl:col-span-7">
-              <ul className="divide-y divide-line border-y border-line">
-                {VARIABLES.map((v) => (
-                  <li key={v.name}>
-                    <button type="button" aria-pressed={v.name === selected} onClick={() => setSelected(v.name)} className={`grid w-full gap-1 px-3 py-3 text-left @2xl:grid-cols-[1.4fr_1fr] ${v.name === selected ? "bg-white/[0.07] text-paper" : "text-muted hover:bg-white/[0.03]"}`}>
-                      <span className="break-all font-mono text-[11px]">{v.name}</span>
-                      <span className="text-[12px] @2xl:text-right">{v.value}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="@3xl:col-span-5" aria-live="polite">
-              <p className="text-[12px] text-faint">Selected environment variable</p>
-              <h2 className="mt-3 break-all font-mono text-[16px] text-paper">{active.name}</h2>
-              <p className="mt-2 text-[13px] text-muted">Default: {active.value}</p>
-              <p className="mt-4 text-[14px] leading-relaxed text-paper">{active.text}</p>
-              <a href={`${BLOB_URL}/host/src/core/config.c`} target="_blank" rel="noreferrer noopener" className="mt-6 inline-block font-mono text-[11px] text-amber underline underline-offset-4">host/src/core/config.c</a>
-              <p className="mt-4 text-[12px] leading-relaxed text-faint">Never commit secrets to public files. Plain HTTP on an untrusted network exposes gateway keys and request traffic.</p>
-            </div>
-          </div>
-        </Container>
-      </section>
     </div>
   );
 }
@@ -113,37 +132,47 @@ const OPERATIONS = [
 ];
 
 export function OperationsPage() {
-  const [index, setIndex] = useState(0);
-  const active = OPERATIONS[index];
+  const [cursor, setCursor] = useState(0);
+  const entries: XmbListEntry[] = OPERATIONS.map((op, i) => ({
+    key: op.path,
+    title: `GET ${op.path}`,
+    sub: op.auth,
+    detail: (
+      <span className="xmb-config-detail">
+        <span>{op.description}</span>
+        <CodeBlock
+          code={`curl http://127.0.0.1:8080${op.path}${i > 0 ? ' \\\n  -H "Authorization: Bearer $YAG_API_KEY"' : ""}`}
+          lang="bash"
+          path="Operator command - not executed here"
+          showLineNumbers={false}
+        />
+        <span className="xmb-config-warn">
+          Counters are ephemeral and reset on restart. Reported token counts come from upstream
+          usage fields, not estimates. A successful /models probe only establishes reachability.
+        </span>
+        <a className="xmb-code-link" href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener">
+          Architecture and implementation status
+        </a>
+      </span>
+    ),
+    ariaLabel: `GET ${op.path}, ${op.auth}`,
+  }));
   return (
-    <div>
-      <PageMasthead
-        path="/deploy" eyebrow="Operations reference" title="Inspect the host. Do not infer model health."
-        lede="Select an inspection endpoint to see its purpose and a copyable request. This website performs no calls to a gateway; all examples are local instructions."
+    <div className="settings-screen" data-testid="operations" aria-live="polite">
+      <p className="settings-lede">
+        Select an inspection endpoint to see its purpose and a copyable request. This website
+        performs no calls to a gateway; all examples are local instructions.
+      </p>
+      <XmbList
+        entries={entries}
+        selected={cursor}
+        onSelect={setCursor}
+        onHighlight={setCursor}
+        compact
+        focusOnMount
+        className="settings-list"
+        ariaLabel="Inspection endpoints"
       />
-      <section className="py-6 @lg:py-8">
-        <Container>
-          <div className="grid gap-7 @3xl:grid-cols-12">
-            <ul className="divide-y divide-line border-y border-line @3xl:col-span-5">
-              {OPERATIONS.map((op, i) => (
-                <li key={op.path}>
-                  <button type="button" aria-pressed={index === i} onClick={() => setIndex(i)} className={`block w-full px-3 py-3 text-left ${index === i ? "bg-white/[0.07] text-paper" : "text-muted hover:bg-white/[0.03]"}`}>
-                    <span className="font-mono text-[12px]">GET {op.path}</span>
-                    <span className="mt-1 block text-[11px] text-faint">{op.auth}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <div className="@3xl:col-span-7" aria-live="polite">
-              <h2 className="font-mono text-[16px] text-paper">GET {active.path}</h2>
-              <p className="my-4 text-[14px] leading-relaxed text-muted">{active.description}</p>
-              <CodeBlock code={`curl http://127.0.0.1:8080${active.path}${index > 0 ? ' \\\n  -H "Authorization: Bearer $YAG_API_KEY"' : ''}`} lang="bash" path="Operator command - not executed here" showLineNumbers={false} />
-              <p className="mt-5 border-l border-line-strong pl-4 text-[12px] leading-relaxed text-faint">Counters are ephemeral and reset on restart. Reported token counts come from upstream usage fields, not estimates. A successful /models probe only establishes reachability.</p>
-              <a href={REPO_LINKS.statusDoc} target="_blank" rel="noreferrer noopener" className="mt-5 inline-block text-[12px] text-amber underline underline-offset-4">Architecture and implementation status</a>
-            </div>
-          </div>
-        </Container>
-      </section>
     </div>
   );
 }
