@@ -7,15 +7,17 @@
   const MAX_SERVERS = 8
   const MAX_MODELS = 20
 
-  function validOrigin(origin) {
-    if (typeof origin !== 'string' || origin.length > 256) return false
+  function canonicalOrigin(origin) {
+    if (typeof origin !== 'string' || origin.length > 256) return null
     try {
       const parsed = new URL(origin)
-      return ['https:', 'http:'].includes(parsed.protocol) &&
-        parsed.username === '' && parsed.password === '' &&
-        parsed.pathname === '/' && parsed.search === '' && parsed.hash === '' &&
-        parsed.origin === origin
-    } catch { return false }
+      if (!['https:', 'http:'].includes(parsed.protocol) ||
+          (parsed.protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) ||
+          parsed.username !== '' || parsed.password !== '' ||
+          parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') return null
+      if (origin !== parsed.origin && origin !== parsed.origin + '/') return null
+      return parsed.origin
+    } catch { return null }
   }
 
   function validId(id) {
@@ -29,22 +31,25 @@
       if (parsed.version !== 1 || !Array.isArray(parsed.servers)) return []
       const seen = new Set()
       return parsed.servers.slice(0, MAX_SERVERS).flatMap(record => {
-        if (!record || !validOrigin(record.origin) || seen.has(record.origin) ||
-            !Array.isArray(record.models)) return []
-        seen.add(record.origin)
-        return [{origin: record.origin, models: [...new Set(record.models
+        const canonical = record && canonicalOrigin(record.origin)
+        if (!canonical || seen.has(canonical) || !Array.isArray(record.models)) return []
+        seen.add(canonical)
+        return [{origin: canonical, models: [...new Set(record.models
           .filter(validId))].slice(0, MAX_MODELS)}]
       })
     } catch { return [] }
   }
 
   function favorites(origin, storage = localStorage) {
-    if (!validOrigin(origin)) return []
-    return read(storage).find(record => record.origin === origin)?.models || []
+    const canonical = canonicalOrigin(origin)
+    if (!canonical) return []
+    return read(storage).find(record => record.origin === canonical)?.models || []
   }
 
   function toggle(origin, id, storage = localStorage) {
-    if (!validOrigin(origin) || !validId(id)) return false
+    const canonical = canonicalOrigin(origin)
+    if (!canonical || !validId(id)) return false
+    origin = canonical
     const servers = read(storage)
     let record = servers.find(entry => entry.origin === origin)
     if (!record) {
