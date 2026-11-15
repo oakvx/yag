@@ -328,11 +328,11 @@ Content-Type: application/json
 ];
 
 const ACTION_COLOR: Record<FieldRule["action"], string> = {
-  PASSTHROUGH: "border-moss/50 text-moss bg-moss/10",
-  TRANSLATED: "border-amber/50 text-amber bg-amber/10",
-  FLATTENED: "border-amber/50 text-paper bg-amber/15",
-  "NO-OP": "border-line-strong text-muted bg-panel",
-  REJECTED: "border-rust/50 text-rust bg-rust/10",
+  PASSTHROUGH: "text-moss bg-moss/10",
+  TRANSLATED: "text-amber bg-amber/10",
+  FLATTENED: "text-paper bg-amber/15",
+  "NO-OP": "text-muted",
+  REJECTED: "text-rust bg-rust/10",
 };
 
 export function ProtocolsPage() {
@@ -360,11 +360,11 @@ export function ProtocolsPage() {
       />
 
       {/* SIGNATURE INTERACTIVE C: PROTOCOL TRANSFORMATION WORKBENCH */}
-      <section className="border-b border-line py-6 @lg:py-8">
+      <section className="py-6 @lg:py-8">
         <Container>
-          <div className="border border-line-strong bg-panel">
+          <div className="">
             {/* Case Selector Tabs */}
-            <div className="border-b border-line px-4 py-3">
+            <div className="px-4 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5">
                 <span className="label text-amber">Interactive Wire Transformation Inspector</span>
                 <StatusBadge tone={activeCase.qualification}>{activeCase.qualificationLabel}</StatusBadge>
@@ -382,10 +382,10 @@ export function ProtocolsPage() {
                         setSelectedRuleIdx(0);
                       }}
                       className={cn(
-                        "border px-3 py-1.5 font-mono text-[10.5px] transition-colors cursor-pointer",
+                        "px-3 py-1.5 font-xmb text-[12px] transition-colors cursor-pointer",
                         selected
-                          ? "border-amber bg-amber/15 text-paper"
-                          : "border-line text-faint hover:text-paper",
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
                       )}
                     >
                       {wc.title}
@@ -398,8 +398,8 @@ export function ProtocolsPage() {
             {/* 3-Column Wire Transformation Stage */}
             <div className="grid @3xl:grid-cols-12">
               {/* Column 1: Client Wire Payload */}
-              <div className="border-b border-line p-4 @lg:p-5 @3xl:col-span-5 @3xl:border-b-0 @3xl:border-r">
-                <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em]">
+              <div className="p-4 @lg:p-5 @3xl:col-span-5">
+                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
                   <span className="text-paper">01 · Client Wire Input</span>
                   <span className="text-faint">{activeCase.protocol}</span>
                 </div>
@@ -407,8 +407,8 @@ export function ProtocolsPage() {
               </div>
 
               {/* Column 2: Adapter Mapping Rules */}
-              <div className="border-b border-line bg-[rgba(3,12,34,0.5)] p-4 @lg:p-5 @3xl:col-span-3 @3xl:border-b-0 @3xl:border-r">
-                <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em]">
+              <div className="p-4 @lg:p-5 @3xl:col-span-3">
+                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
                   <span className="text-amber">02 · Adapter Rules</span>
                   <a
                     href={activeCase.sourceHref}
@@ -429,15 +429,15 @@ export function ProtocolsPage() {
                           type="button"
                           onClick={() => setSelectedRuleIdx(idx)}
                           className={cn(
-                            "w-full border p-2.5 text-left transition-colors cursor-pointer",
-                            isFocused ? "border-amber/70 bg-amber/[0.07]" : "border-line bg-panel hover:border-line-strong",
+                            "w-full p-2.5 text-left transition-colors cursor-pointer",
+                            isFocused ? "bg-amber/[0.07]" : "hover:bg-white/[0.04]",
                           )}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-mono text-[11px] text-paper">{rule.field}</span>
+                            <span className="truncate font-xmb text-[11px] text-paper">{rule.field}</span>
                             <span
                               className={cn(
-                                "shrink-0 border px-1.5 py-0.5 font-mono text-[8.5px] uppercase tracking-[0.12em]",
+                                "shrink-0 px-1.5 py-0.5 font-xmb text-[11px]",
                                 ACTION_COLOR[rule.action],
                               )}
                             >
@@ -454,18 +454,18 @@ export function ProtocolsPage() {
 
               {/* Column 3: Resulting Upstream Payload / Rejection */}
               <div className="p-4 @lg:p-5 @3xl:col-span-4">
-                <div className="mb-2.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em]">
+                <div className="mb-2.5 flex items-center justify-between font-xmb text-[11.5px]">
                   <span className="text-paper">03 · {activeCase.outputLabel}</span>
                 </div>
                 <CodeBlock code={activeCase.upstreamOutput} lang="json" showLineNumbers={false} />
 
-                <div className="mt-4 border-t border-line pt-3">
+                <div className="mt-4 pt-3">
                   <p className="label text-faint">Return Stream / Event Frame Order</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {activeCase.sseSequence.map((ev) => (
                       <span
                         key={ev}
-                        className="border border-line bg-ink px-2 py-1 font-mono text-[10px] text-muted"
+                        className="px-2 py-1 font-xmb text-[11.5px] text-muted"
                       >
                         {ev}
                       </span>
@@ -488,16 +488,16 @@ export function ProtocolsPage() {
                 Every HTTP path implemented by the host.
               </h2>
 
-              <div className="mt-5 overflow-x-auto border border-line">
-                <table className="w-full min-w-[560px] border-collapse text-left font-mono text-[11.5px]">
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[560px] border-collapse text-left font-xmb text-[11.5px]">
                   <thead>
-                    <tr className="border-b border-line-strong bg-panel text-[10px] uppercase tracking-[0.14em] text-faint">
+                    <tr className="text-[11.5px] text-faint">
                       <th className="px-3.5 py-2.5">Method & Path</th>
                       <th className="px-3.5 py-2.5">Mode</th>
                       <th className="px-3.5 py-2.5">Notes</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-line">
+                  <tbody className="">
                     {[
                       ["GET /health", "Public", "Liveness probe; no key required"],
                       ["GET /v1/models", "Discovery", "Merges default upstream /models + static route IDs"],
@@ -534,14 +534,14 @@ export function ProtocolsPage() {
             </div>
 
             <div className="@3xl:col-span-5 space-y-5">
-              <div className="border border-rust/40 bg-rust/[0.05] p-5">
+              <div className="p-5">
                 <p className="label text-rust">CLI Compatibility Warning</p>
                 <h3 className="mt-2 font-serif text-2xl text-paper">
                   Mock qualification ≠ real-model certification.
                 </h3>
                 <p className="mt-2.5 text-[13.5px] leading-relaxed text-muted">
                   Pinned <strong className="text-paper">Codex CLI 0.167.0</strong> (text + local{" "}
-                  <code className="font-mono text-[12px]">exec_command</code>) and{" "}
+                  <code className="font-xmb text-[12px]">exec_command</code>) and{" "}
                   <strong className="text-paper">Claude Code CLI</strong> (streaming text + local Read tool) passed
                   isolated tests against a deterministic mock backend. Compatibility with real inference models and
                   full CLI toolchains remains <strong className="text-rust">unverified</strong>.
@@ -553,13 +553,13 @@ export function ProtocolsPage() {
                 </div>
               </div>
 
-              <div className="border border-line bg-panel p-5">
+              <div className="p-5">
                 <p className="label text-faint">Explicitly Unsupported Across Adapters</p>
                 <ul className="mt-3 space-y-2 text-[13px] text-muted">
-                  <li className="flex gap-2"><span className="font-mono text-rust">×</span> Hosted server tools (<code className="font-mono text-paper">web_search</code>, server-side execution)</li>
-                  <li className="flex gap-2"><span className="font-mono text-rust">×</span> Multimodal image, audio, or document inputs in Messages/Responses</li>
-                  <li className="flex gap-2"><span className="font-mono text-rust">×</span> Stateful Responses (<code className="font-mono text-paper">store: true</code>, <code className="font-mono text-paper">previous_response_id</code>)</li>
-                  <li className="flex gap-2"><span className="font-mono text-rust">×</span> Native Anthropic thinking blocks, prompt caching, and token counting</li>
+                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Hosted server tools (<code className="font-xmb text-paper">web_search</code>, server-side execution)</li>
+                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Multimodal image, audio, or document inputs in Messages/Responses</li>
+                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Stateful Responses (<code className="font-xmb text-paper">store: true</code>, <code className="font-xmb text-paper">previous_response_id</code>)</li>
+                  <li className="flex gap-2"><span className="font-xmb text-rust">×</span> Native Anthropic thinking blocks, prompt caching, and token counting</li>
                 </ul>
               </div>
             </div>

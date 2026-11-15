@@ -35,6 +35,7 @@ export const CATEGORIES: XmbCategory[] = [
     { id: "configuration", code: "CFG", label: "Configuration", icon: "configuration", sub: "Inspect startup variables and host-side credentials.", detail: "A reference, not a connection to a running gateway.", to: "/deploy", query: "view=configuration" },
     { id: "operations", code: "OPS", label: "Operations", icon: "monitor", sub: "Know where to check health and provider state.", detail: "Authenticated inspection endpoints and operational boundaries.", to: "/deploy", query: "view=operations" },
     { id: "quickstart", code: "QS", label: "Quickstart", icon: "quickstart", sub: "Install, compile, start and verify on loopback.", detail: "Four documented steps. No credentials required by this website.", to: "/deploy", query: "view=quickstart" },
+    { id: "theme", code: "THE", label: "Theme Settings", icon: "status", sub: "Twelve atmospheres, or the original monthly rotation.", detail: "Fix the wallpaper palette for the console; the choice is stored in this browser.", to: "/theme" },
   ]},
   { id: "users", label: "Users", glyph: "project", tagline: "Open source", items: [
     { id: "profile", code: "PRF", label: "Profile", icon: "profile", sub: "Maintainer, project identity and this session.", detail: "Who builds YAG, and what this browser can prove.", to: "/profile" },

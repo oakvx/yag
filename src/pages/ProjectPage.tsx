@@ -69,7 +69,7 @@ export function ProjectPage() {
       />
 
       <div className="px-5 pt-4 @lg:px-8">
-        <div role="group" aria-label="Project view" className="inline-flex rounded-full border border-line-strong p-1 font-mono text-[10.5px] uppercase tracking-[0.12em]">
+        <div role="group" aria-label="Project view" className="inline-flex p-1 font-xmb text-[12px]">
           {[
             { id: "about", label: "About", to: "/project" },
             { id: "contributing", label: "Contributing", to: "/project?view=contributing" },
@@ -79,7 +79,7 @@ export function ProjectPage() {
               type="button"
               aria-pressed={view === v.id}
               onClick={() => navigate(v.to)}
-              className={cn("cursor-pointer rounded-full px-3.5 py-1.5 transition-colors", view === v.id ? "bg-amber/20 text-white" : "text-faint hover:text-paper")}
+              className={cn("cursor-pointer px-3.5 py-1.5 transition-colors", view === v.id ? "bg-amber/20 text-white" : "text-faint hover:text-paper")}
             >
               {v.label}
             </button>
@@ -94,10 +94,10 @@ export function ProjectPage() {
               <div className="@3xl:col-span-7">
                 <p className="label text-amber">Repository anatomy</p>
                 <h2 className="display mt-2 text-2xl text-paper">Small enough to read in an afternoon.</h2>
-                <ul className="mt-4 divide-y divide-line border-y border-line">
+                <ul className="mt-4">
                   {REPO_LAYOUT.map((item) => (
                     <li key={item.dir} className="py-3">
-                      <a href={`${TREE_URL}/${item.dir.replace(/\/$/, "")}`} target="_blank" rel="noreferrer noopener" className="font-mono text-[13px] text-amber hover:underline">
+                      <a href={`${TREE_URL}/${item.dir.replace(/\/$/, "")}`} target="_blank" rel="noreferrer noopener" className="font-xmb text-[13px] text-amber hover:underline">
                         {item.dir} ↗
                       </a>
                       <p className="mt-1 text-[13px] leading-relaxed text-muted">{item.desc}</p>
@@ -120,10 +120,10 @@ export function ProjectPage() {
                   </a>
                 </div>
                 <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2">
-                  <RouteLink to="/status" className="font-mono text-[11px] text-amber hover:underline">
+                  <RouteLink to="/status" className="font-xmb text-[11px] text-amber hover:underline">
                     See what is implemented and what is not →
                   </RouteLink>
-                  <RouteLink to="/profile" className="font-mono text-[11px] text-amber hover:underline">
+                  <RouteLink to="/profile" className="font-xmb text-[11px] text-amber hover:underline">
                     Open the maintainer profile →
                   </RouteLink>
                 </div>
@@ -132,11 +132,11 @@ export function ProjectPage() {
           ) : (
             <div className="grid gap-4 @3xl:grid-cols-3">
               {CONTRIBUTIONS.map((c) => (
-                <div key={c.title} className="flex flex-col rounded-2xl border border-line bg-panel/60 p-4">
+                <div key={c.title} className="flex flex-col p-4">
                   <StatusBadge tone="mock">{c.badge}</StatusBadge>
                   <h3 className="mt-3 text-[15.5px] font-medium text-paper">{c.title}</h3>
                   <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-muted">{c.body}</p>
-                  <a href={c.href} target="_blank" rel="noreferrer noopener" className="mt-3 font-mono text-[11px] text-amber hover:underline">
+                  <a href={c.href} target="_blank" rel="noreferrer noopener" className="mt-3 font-xmb text-[11px] text-amber hover:underline">
                     {c.link}
                   </a>
                 </div>

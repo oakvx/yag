@@ -10,7 +10,8 @@ export type RoutePath =
   | "/status"
   | "/deploy"
   | "/project"
-  | "/profile";
+  | "/profile"
+  | "/theme";
 
 export type SubsystemGroup = "Thesis" | "System Core" | "Wire & Routing" | "Trust & Operations";
 
@@ -217,6 +218,20 @@ export const ROUTES: RouteDefinition[] = [
     seoTitle: "Profile · YAG — Yet Another Gateway",
     seoDescription:
       "Who maintains YAG, the project identity card, and the browser-local facts of this console session — no accounts, no telemetry, no network calls.",
+  },
+  {
+    path: "/theme",
+    order: 12,
+    index: "12",
+    label: "Theme Settings",
+    shortLabel: "Theme",
+    group: "Trust & Operations",
+    signalMode: "open",
+    packetTag: "THEME · 12 ATMOSPHERES · LOCAL",
+    summary: "Fix one of the twelve monthly atmospheres for the console wallpaper, or return to the original rotation.",
+    seoTitle: "Theme Settings · YAG — Yet Another Gateway",
+    seoDescription:
+      "Choose the console's wallpaper atmosphere from the twelve monthly palettes or the original rotation; the choice is stored only in this browser.",
   },
 ];
 

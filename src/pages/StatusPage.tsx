@@ -174,7 +174,7 @@ export function StatusPage() {
       <section className="py-6 @lg:py-8">
         <Container>
           {/* Filter Bar */}
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-line bg-panel px-4 py-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
             <div role="tablist" aria-label="Filter status rows" className="flex flex-wrap gap-1.5">
               {FILTERS.map((f) => (
                 <button
@@ -183,10 +183,10 @@ export function StatusPage() {
                   aria-selected={filter === f.id}
                   onClick={() => setFilter(f.id)}
                   className={cn(
-                    "border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.13em] transition-colors cursor-pointer",
+                    "px-2.5 py-1 font-xmb text-[11.5px] transition-colors cursor-pointer",
                     filter === f.id
-                      ? "border-amber bg-amber/15 text-paper"
-                      : "border-line text-faint hover:text-paper",
+                      ? "bg-amber/15 text-paper"
+                      : "text-faint hover:text-paper",
                   )}
                 >
                   {f.label}
@@ -197,14 +197,14 @@ export function StatusPage() {
               href={REPO_LINKS.statusDoc}
               target="_blank"
               rel="noreferrer noopener"
-              className="font-mono text-[10.5px] text-amber hover:underline"
+              className="font-xmb text-[12px] text-amber hover:underline"
             >
               Read docs/architecture/STATUS.md ↗
             </a>
           </div>
 
           {/* Expandable Ledger */}
-          <div className="divide-y divide-line border border-line-strong bg-panel">
+          <div className="">
             {visible.map((row) => {
               const isOpen = !!expandedIds[row.id];
               return (
@@ -215,31 +215,31 @@ export function StatusPage() {
                     onClick={() => toggle(row.id)}
                     className="grid w-full items-center gap-3 px-4 py-4 text-left @lg:grid-cols-12 @lg:px-6 cursor-pointer"
                   >
-                    <div className="@lg:col-span-2 font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+                    <div className="@lg:col-span-2 font-xmb text-[11.5px] text-faint">
                       {row.subsystem}
                     </div>
                     <div className="@lg:col-span-6 text-[14.5px] font-medium text-paper">{row.component}</div>
                     <div className="@lg:col-span-3">
                       <StatusBadge tone={row.status}>{row.statusText}</StatusBadge>
                     </div>
-                    <div className="@lg:col-span-1 text-right font-mono text-[12px] text-amber">
+                    <div className="@lg:col-span-1 text-right font-xmb text-[12px] text-amber">
                       {isOpen ? "−" : "+"}
                     </div>
                   </button>
 
                   {isOpen && (
-                    <div className="border-t border-line bg-[rgba(3,12,34,0.62)] px-4 py-4 @lg:px-6">
+                    <div className="px-4 py-4 @lg:px-6">
                       <div className="grid gap-6 @3xl:grid-cols-12">
                         <div className="@3xl:col-span-6">
                           <p className="label text-faint">Verified Behavior</p>
                           <p className="mt-1.5 text-[13.5px] leading-relaxed text-paper/90">{row.summary}</p>
                         </div>
-                        <div className="@3xl:col-span-6 @3xl:border-l @3xl:border-line @3xl:pl-6">
+                        <div className="@3xl:col-span-6 @3xl:pl-6">
                           <p className="label text-rust">Caveats & Unverified Boundaries</p>
                           <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">{row.caveats}</p>
                         </div>
                       </div>
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3 font-mono text-[10.5px]">
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 pt-3 font-xmb text-[12px]">
                         <span className="text-faint">Evidence: {row.evidence}</span>
                         <a
                           href={row.evidenceHref}

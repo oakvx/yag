@@ -116,7 +116,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
       />
 
       <div className="px-5 pt-4 @lg:px-8">
-        <div role="group" aria-label="Deployment view" className="inline-flex rounded-full border border-line-strong p-1 font-mono text-[10.5px] uppercase tracking-[0.12em]">
+        <div role="group" aria-label="Deployment view" className="inline-flex p-1 font-xmb text-[12px]">
           {[
             { id: "runbook", label: "Guided runbook", to: "/deploy" },
             { id: "quickstart", label: "Quickstart", to: "/deploy?view=quickstart" },
@@ -126,7 +126,7 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
               type="button"
               aria-pressed={view === v.id}
               onClick={() => navigate(v.to)}
-              className={cn("cursor-pointer rounded-full px-3.5 py-1.5 transition-colors", view === v.id ? "bg-amber/20 text-white" : "text-faint hover:text-paper")}
+              className={cn("cursor-pointer px-3.5 py-1.5 transition-colors", view === v.id ? "bg-amber/20 text-white" : "text-faint hover:text-paper")}
             >
               {v.label}
             </button>
@@ -139,11 +139,11 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
           <Container>
             <CodeBlock code={QUICKSTART} lang="bash" path="README · build / run" href={REPO_LINKS.build} showLineNumbers={false} />
             <div className="mt-5 grid gap-4 @2xl:grid-cols-2">
-              <div className="rounded-2xl border border-line bg-panel/60 p-4 text-[13px] leading-relaxed text-muted">
+              <div className="p-4 text-[13px] leading-relaxed text-muted">
                 <StatusBadge tone="implemented">Required</StatusBadge>
-                <p className="mt-2">A C17 compiler, CMake 3.16+, libcurl headers and pthreads. <code className="font-mono text-paper">YAG_API_KEY</code> must be at least 16 characters.</p>
+                <p className="mt-2">A C17 compiler, CMake 3.16+, libcurl headers and pthreads. <code className="font-xmb text-paper">YAG_API_KEY</code> must be at least 16 characters.</p>
               </div>
-              <div className="rounded-2xl border border-line bg-panel/60 p-4 text-[13px] leading-relaxed text-muted">
+              <div className="p-4 text-[13px] leading-relaxed text-muted">
                 <StatusBadge tone="scope">Optional</StatusBadge>
                 <p className="mt-2">Node 18+ for the browser Console, Python 3 for the mock-upstream tests, Docker Compose for container and LAN-hub modes — see the guided runbook.</p>
               </div>
@@ -156,11 +156,11 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
       <section className="py-6 @lg:py-8">
         <Container>
           {/* Interactive Deployment Configurator */}
-          <div className="mb-8 border border-line-strong bg-panel p-4 @lg:p-6">
+          <div className="mb-8 p-4 @lg:p-6">
             <div className="grid gap-6 @3xl:grid-cols-12">
               <div className="@3xl:col-span-6">
                 <span className="label block text-amber">01 · Select Upstream / Topology Profile</span>
-                <div className="mt-2.5 grid gap-2 @lg:grid-cols-3 font-mono text-[10.5px]">
+                <div className="mt-2.5 grid gap-2 @lg:grid-cols-3 font-xmb text-[12px]">
                   {[
                     { id: "ollama", title: "Local Ollama", sub: "127.0.0.1:11434/v1" },
                     { id: "openai-local", title: "Local /v1 Server", sub: "vLLM / llama.cpp :8000" },
@@ -171,10 +171,10 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
                       type="button"
                       onClick={() => setTarget(item.id as DeployTarget)}
                       className={cn(
-                        "border p-2.5 text-left transition-colors cursor-pointer",
+                        "p-2.5 text-left transition-colors cursor-pointer",
                         target === item.id
-                          ? "border-amber bg-amber/15 text-paper"
-                          : "border-line text-faint hover:text-paper",
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
                       )}
                     >
                       <div className="font-medium text-paper">{item.title}</div>
@@ -184,9 +184,9 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
                 </div>
               </div>
 
-              <div className="@3xl:col-span-6 @3xl:border-l @3xl:border-line @3xl:pl-6">
+              <div className="@3xl:col-span-6 @3xl:pl-6">
                 <span className="label block text-faint">02 · Optional Build & Runtime Steps</span>
-                <div className="mt-2.5 flex flex-wrap gap-4 font-mono text-[11px] text-paper">
+                <div className="mt-2.5 flex flex-wrap gap-4 font-xmb text-[11px] text-paper">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -223,24 +223,24 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
 
           {/* Mandatory vs Optional Dependency Breakdown */}
           <div className="mb-10 grid gap-6 @2xl:grid-cols-2">
-            <div className="border border-line bg-panel/60 p-5">
+            <div className="p-5">
               <StatusBadge tone="implemented">Mandatory Host Dependencies</StatusBadge>
-              <ul className="mt-3 space-y-1.5 font-mono text-[11.5px] text-paper">
+              <ul className="mt-3 space-y-1.5 font-xmb text-[11.5px] text-paper">
                 <li>· Linux with POSIX sockets &amp; pthreads</li>
                 <li>· C17 compiler (GCC / Clang via build-essential)</li>
                 <li>· CMake 3.16+</li>
                 <li>· libcurl development headers (libcurl4-openssl-dev)</li>
               </ul>
               <p className="mt-2.5 text-[12.5px] text-muted">
-                <code className="font-mono text-paper">yyjson 0.12.0</code> is vendored under{" "}
-                <code className="font-mono text-paper">third_party/yyjson</code> — no external C package manager is
+                <code className="font-xmb text-paper">yyjson 0.12.0</code> is vendored under{" "}
+                <code className="font-xmb text-paper">third_party/yyjson</code> — no external C package manager is
                 used.
               </p>
             </div>
 
-            <div className="border border-line bg-panel/60 p-5">
+            <div className="p-5">
               <StatusBadge tone="scope">Optional Toolchains</StatusBadge>
-              <ul className="mt-3 space-y-1.5 font-mono text-[11.5px] text-muted">
+              <ul className="mt-3 space-y-1.5 font-xmb text-[11.5px] text-muted">
                 <li>
                   · <span className="text-paper">Node 18+ &amp; npm:</span> only required if compiling the browser
                   Console (<code className="text-paper">console/dist</code>). API-only deployments can skip it.
@@ -259,37 +259,37 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
 
           {/* Step-by-Step Guided Terminal Runbook */}
           <ol className="space-y-6">
-            <li className="border-t border-line-strong pt-5">
+            <li className="pt-5">
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-2xl text-paper">
-                  <span className="mr-3 font-mono text-[12px] text-amber">STEP 01</span>
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 01</span>
                   Install packages
                 </h2>
-                <span className="font-mono text-[10.5px] text-faint">Debian / Ubuntu example</span>
+                <span className="font-xmb text-[12px] text-faint">Debian / Ubuntu example</span>
               </div>
               <CodeBlock code={depsCmd} lang="bash" path="Host dependencies" showLineNumbers={false} />
             </li>
 
-            <li className="border-t border-line-strong pt-5">
+            <li className="pt-5">
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-2xl text-paper">
-                  <span className="mr-3 font-mono text-[12px] text-amber">STEP 02</span>
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 02</span>
                   Clone, compile &amp; run mock contract tests
                 </h2>
-                <span className="font-mono text-[10.5px] text-faint">Produces ./build/yag</span>
+                <span className="font-xmb text-[12px] text-faint">Produces ./build/yag</span>
               </div>
               <CodeBlock code={buildCmd} lang="bash" path="CMake & optional Console" showLineNumbers={false} />
             </li>
 
-            <li className="border-t border-line-strong pt-5">
+            <li className="pt-5">
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-2xl text-paper">
-                  <span className="mr-3 font-mono text-[12px] text-amber">STEP 03</span>
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 03</span>
                   {target === "lan-colibri"
                     ? "Provision the Colibri private-CA LAN stack"
                     : "Configure environment & start the gateway"}
                 </h2>
-                <span className="font-mono text-[10.5px] text-faint">
+                <span className="font-xmb text-[12px] text-faint">
                   {target === "lan-colibri" ? "HTTPS via Caddy + private CA" : "Localhost :8080"}
                 </span>
               </div>
@@ -302,19 +302,19 @@ curl http://127.0.0.1:8080/v1/chat/completions \\
               />
             </li>
 
-            <li className="border-t border-line-strong pt-5">
+            <li className="pt-5">
               <div className="mb-3 flex items-baseline justify-between">
                 <h2 className="font-serif text-2xl text-paper">
-                  <span className="mr-3 font-mono text-[12px] text-amber">STEP 04</span>
+                  <span className="mr-3 font-xmb text-[12px] text-amber">STEP 04</span>
                   Verify health, model discovery &amp; first inference call
                 </h2>
-                <span className="font-mono text-[10.5px] text-faint">Client verification</span>
+                <span className="font-xmb text-[12px] text-faint">Client verification</span>
               </div>
               <CodeBlock code={verifyCmd} lang="bash" path="Verification commands" showLineNumbers={false} />
             </li>
           </ol>
 
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6 font-mono text-[11px]">
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4 pt-6 font-xmb text-[11px]">
             <div className="flex flex-wrap gap-4">
               <a href={REPO_LINKS.dockerDoc} target="_blank" rel="noreferrer noopener" className="text-amber hover:underline">
                 Docker Deployment Doc ↗

@@ -315,14 +315,14 @@ export function ArchitecturePage() {
       <section className="py-6 @lg:py-8">
         <Container>
           {/* Interactive Blueprint Frame */}
-          <div className="border border-line-strong bg-panel">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.15em]">
+          <div className="">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 font-xmb text-[11.5px]">
               <span className="text-amber">Schematic 02.A · Navigable Host Topology</span>
               <span className="text-faint">Click any subsystem block [C1..U2] to inspect</span>
             </div>
 
             {/* SVG Blueprint */}
-            <div className="overflow-x-auto bg-[rgba(3,12,34,0.55)] p-4 @lg:p-6">
+            <div className="overflow-x-auto p-4 @lg:p-6">
               <svg
                 viewBox="0 0 920 310"
                 className="min-w-[740px] w-full h-auto"
@@ -450,17 +450,17 @@ export function ArchitecturePage() {
             </div>
 
             {/* Quick Node Selector Strip for Mobile / Keyboard */}
-            <div className="flex flex-wrap gap-1.5 border-t border-line bg-panel px-4 py-3">
+            <div className="flex flex-wrap gap-1.5 px-4 py-3">
               {ARCH_NODES.map((n) => (
                 <button
                   key={n.id}
                   type="button"
                   onClick={() => setSelectedId(n.id)}
                   className={cn(
-                    "border px-2.5 py-1 font-mono text-[10px] transition-colors cursor-pointer",
+                    "px-2.5 py-1 font-xmb text-[11.5px] transition-colors cursor-pointer",
                     n.id === selectedId
-                      ? "border-amber bg-amber/15 text-paper"
-                      : "border-line text-faint hover:text-paper",
+                      ? "bg-amber/15 text-paper"
+                      : "text-faint hover:text-paper",
                   )}
                 >
                   <span className="text-amber">{n.code}</span> · {n.title}
@@ -469,8 +469,8 @@ export function ArchitecturePage() {
             </div>
 
             {/* Synchronized Component Inspector */}
-            <div className="grid border-t border-line-strong @3xl:grid-cols-12" aria-live="polite">
-              <div className="border-b border-line p-5 @lg:p-6 @3xl:col-span-6 @3xl:border-b-0 @3xl:border-r">
+            <div className="grid @3xl:grid-cols-12" aria-live="polite">
+              <div className="p-5 @lg:p-6 @3xl:col-span-6">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="label text-amber">
                     Node {activeNode.code} · {activeNode.layer}
@@ -479,7 +479,7 @@ export function ArchitecturePage() {
                     href={activeNode.sourceHref}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="font-mono text-[11px] text-muted transition-colors hover:text-amber"
+                    className="font-xmb text-[11px] text-muted transition-colors hover:text-amber"
                   >
                     {activeNode.sourceFile} ↗
                   </a>
@@ -487,12 +487,12 @@ export function ArchitecturePage() {
                 <h2 className="display mt-2.5 text-2xl text-paper @lg:text-3xl">{activeNode.title}</h2>
                 <p className="mt-3 text-[14.5px] leading-[1.74] text-muted">{activeNode.summary}</p>
 
-                <div className="mt-5 border-t border-line pt-4">
+                <div className="mt-5 pt-4">
                   <p className="label text-faint">Implementation Invariants</p>
                   <ul className="mt-2.5 space-y-2">
                     {activeNode.invariants.map((inv) => (
                       <li key={inv} className="flex items-baseline gap-2.5 text-[13px] leading-relaxed text-paper/90">
-                        <span aria-hidden="true" className="font-mono text-amber">▪</span>
+                        <span aria-hidden="true" className="font-xmb text-amber">▪</span>
                         <span>{inv}</span>
                       </li>
                     ))}
@@ -511,7 +511,7 @@ export function ArchitecturePage() {
                 </div>
               </div>
 
-              <div className="bg-[rgba(3,12,34,0.62)] p-5 @lg:p-6 @3xl:col-span-6">
+              <div className="p-5 @lg:p-6 @3xl:col-span-6">
                 <p className="label mb-3 text-faint">Corresponding Source / Wire Excerpt</p>
                 <CodeBlock
                   code={activeNode.snippet}
@@ -520,7 +520,7 @@ export function ArchitecturePage() {
                   href={activeNode.sourceHref}
                   showLineNumbers={false}
                 />
-                <p className="mt-4 font-mono text-[11px] leading-relaxed text-faint">
+                <p className="mt-4 font-xmb text-[11px] leading-relaxed text-faint">
                   State model: configuration is immutable after <code className="text-paper">config_load()</code> except
                   in-memory provider/client counters guarded by <code className="text-paper">pthread_mutex_t lock</code>.
                 </p>
@@ -529,7 +529,7 @@ export function ArchitecturePage() {
           </div>
 
           {/* Architectural Non-Goals Bar */}
-          <div className="mt-10 grid gap-6 border-t border-line pt-8 @2xl:grid-cols-3">
+          <div className="mt-10 grid gap-6 pt-8 @2xl:grid-cols-3">
             <div>
               <StatusBadge tone="scope">Permanent Non-Goal</StatusBadge>
               <h3 className="mt-3 font-serif text-xl text-paper">Zero model or tool execution</h3>

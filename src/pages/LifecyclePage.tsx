@@ -600,12 +600,12 @@ export function LifecyclePage() {
         eyebrow="Chapter 03 · Deterministic Request Tracer"
         title={
           <>
-            Seven stages from <code className="font-mono text-[0.82em] text-amber">accept()</code> to socket close.
+            Seven stages from <code className="font-xmb text-[0.82em] text-amber">accept()</code> to socket close.
           </>
         }
         lede="Select a request shape and step the signal through YAG's seven execution stages — or run the deterministic trace to watch how admission, pre-body header authentication, adaptation, and upstream polling interact."
         aside={
-          <div className="border border-line-strong bg-panel p-4 font-mono text-[11px]">
+          <div className="p-4 font-xmb text-[11px]">
             <StatusBadge tone="mock">Educational Simulation</StatusBadge>
             <p className="mt-2.5 leading-relaxed text-muted">
               This tracer steps through deterministic state transitions derived directly from{" "}
@@ -618,8 +618,8 @@ export function LifecyclePage() {
       <section className="py-6 @lg:py-8">
         <Container>
           {/* Scenario Selector + Playback Controls */}
-          <div className="border border-line-strong bg-panel">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <div className="">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div role="tablist" aria-label="Request shape scenarios" className="flex flex-wrap gap-1.5">
                 {SCENARIOS.map((sc) => {
                   const selected = sc.id === scenarioId;
@@ -630,10 +630,10 @@ export function LifecyclePage() {
                       aria-selected={selected}
                       onClick={() => selectScenario(sc.id)}
                       className={cn(
-                        "border px-3 py-1.5 font-mono text-[10.5px] transition-colors cursor-pointer",
+                        "px-3 py-1.5 font-xmb text-[12px] transition-colors cursor-pointer",
                         selected
-                          ? "border-amber bg-amber/15 text-paper"
-                          : "border-line text-faint hover:text-paper",
+                          ? "bg-amber/15 text-paper"
+                          : "text-faint hover:text-paper",
                       )}
                     >
                       {sc.label}
@@ -650,7 +650,7 @@ export function LifecyclePage() {
                     setStageIdx((i) => Math.max(0, i - 1));
                   }}
                   disabled={stageIdx === 0}
-                  className="border border-line px-2.5 py-1 font-mono text-[10.5px] text-muted hover:border-paper hover:text-paper disabled:opacity-35 cursor-pointer"
+                  className="px-2.5 py-1 font-xmb text-[12px] text-muted hover:text-paper disabled:opacity-35 cursor-pointer"
                 >
                   ◀ Prev
                 </button>
@@ -664,7 +664,7 @@ export function LifecyclePage() {
                       setPlaying(true);
                     }
                   }}
-                  className="border border-amber bg-amber/15 px-3.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.13em] text-paper hover:bg-amber/25 cursor-pointer"
+                  className="bg-amber/15 px-3.5 py-1 font-xmb text-[12px] text-paper hover:bg-amber/25 cursor-pointer"
                 >
                   {playing ? "❚❚ Pause Trace" : "▶ Run Signal Trace"}
                 </button>
@@ -675,7 +675,7 @@ export function LifecyclePage() {
                     setStageIdx((i) => Math.min(scenario.stages.length - 1, i + 1));
                   }}
                   disabled={stageIdx === scenario.stages.length - 1}
-                  className="border border-line px-2.5 py-1 font-mono text-[10.5px] text-muted hover:border-paper hover:text-paper disabled:opacity-35 cursor-pointer"
+                  className="px-2.5 py-1 font-xmb text-[12px] text-muted hover:text-paper disabled:opacity-35 cursor-pointer"
                 >
                   Next ▶
                 </button>
@@ -683,7 +683,7 @@ export function LifecyclePage() {
             </div>
 
             {/* Active Scenario Wire Header */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-ink/70 px-4 py-2.5 font-mono text-[11px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 font-xmb text-[11px]">
               <div>
                 <span className="text-amber">WIRE:</span> <span className="text-paper">{scenario.requestLine}</span>
               </div>
@@ -691,7 +691,7 @@ export function LifecyclePage() {
             </div>
 
             {/* 7-Stage Spatial Signal Bus */}
-            <div className="overflow-x-auto bg-[rgba(3,12,34,0.55)] px-4 py-6 @lg:px-6">
+            <div className="overflow-x-auto px-4 py-6 @lg:px-6">
               <ol className="grid min-w-[780px] grid-cols-7 gap-2">
                 {scenario.stages.map((st, idx) => {
                   const isCurrent = idx === stageIdx;
@@ -707,19 +707,19 @@ export function LifecyclePage() {
                           setStageIdx(idx);
                         }}
                         className={cn(
-                          "w-full border p-3 text-left transition-all cursor-pointer",
+                          "w-full p-3 text-left transition-all cursor-pointer",
                           isCurrent && st.haltedHere
-                            ? "border-rust bg-rust/15"
+                            ? "bg-rust/15"
                             : isCurrent
-                              ? "border-amber bg-amber/[0.12]"
+                              ? "bg-amber/[0.12]"
                               : isPassed
-                                ? "border-moss/50 bg-moss/[0.06]"
+                                ? "bg-moss/[0.06]"
                                 : isUnreached
-                                  ? "hatch-rust border-line opacity-50"
-                                  : "border-line bg-panel hover:border-line-strong",
+                                  ? "hatch-rust opacity-50"
+                                  : "hover:bg-white/[0.04]",
                         )}
                       >
-                        <div className="flex items-center justify-between font-mono text-[10px]">
+                        <div className="flex items-center justify-between font-xmb text-[11.5px]">
                           <span
                             className={cn(
                               isCurrent && st.haltedHere
@@ -747,7 +747,7 @@ export function LifecyclePage() {
                           />
                         </div>
                         <div className="mt-2 truncate text-[12.5px] font-medium text-paper">{st.name}</div>
-                        <div className="mt-1 truncate font-mono text-[9.5px] text-faint">
+                        <div className="mt-1 truncate font-xmb text-[11px] text-faint">
                           {st.haltedHere ? "HALT · 401/429" : isUnreached ? "unreached" : st.file.split("/").pop()}
                         </div>
                       </button>
@@ -758,11 +758,11 @@ export function LifecyclePage() {
             </div>
 
             {/* Synchronized 3-Pane Stage Readout */}
-            <div className="grid border-t border-line-strong @3xl:grid-cols-12" aria-live="polite">
+            <div className="grid @3xl:grid-cols-12" aria-live="polite">
               {/* Pane 1: Stage Contract */}
-              <div className="border-b border-line p-5 @lg:p-6 @3xl:col-span-5 @3xl:border-b-0 @3xl:border-r">
-                <div className="flex items-center justify-between font-mono text-[10.5px]">
-                  <span className="uppercase tracking-[0.15em] text-amber">
+              <div className="p-5 @lg:p-6 @3xl:col-span-5">
+                <div className="flex items-center justify-between font-xmb text-[12px]">
+                  <span className="text-amber">
                     Stage {stage.num} · {stage.name}
                   </span>
                   <a
@@ -777,24 +777,24 @@ export function LifecyclePage() {
 
                 <p className="mt-3 text-[14.5px] leading-[1.74] text-paper/95">{stage.whatHappens}</p>
 
-                <dl className="mt-5 space-y-3 border-t border-line pt-4 font-mono text-[11px]">
+                <dl className="mt-5 space-y-3 pt-4 font-xmb text-[11px]">
                   <div>
-                    <dt className="uppercase tracking-[0.13em] text-faint">Stage Input</dt>
+                    <dt className="text-faint">Stage Input</dt>
                     <dd className="mt-1 text-paper">{stage.input}</dd>
                   </div>
                   <div>
-                    <dt className="uppercase tracking-[0.13em] text-faint">Stage Output</dt>
+                    <dt className="text-faint">Stage Output</dt>
                     <dd className="mt-1 text-amber">{stage.output}</dd>
                   </div>
-                  <div className="border-t border-line pt-3">
-                    <dt className="uppercase tracking-[0.13em] text-rust">Failure Conditions & Boundaries</dt>
+                  <div className="pt-3">
+                    <dt className="text-rust">Failure Conditions & Boundaries</dt>
                     <dd className="mt-1 leading-relaxed text-muted">{stage.failureModes}</dd>
                   </div>
                 </dl>
               </div>
 
               {/* Pane 2 & 3: Implementation Code + Architectural Cross-links */}
-              <div className="bg-[rgba(3,12,34,0.62)] p-5 @lg:p-6 @3xl:col-span-7 flex flex-col justify-between">
+              <div className="p-5 @lg:p-6 @3xl:col-span-7 flex flex-col justify-between">
                 <div>
                   <p className="label mb-3 text-faint">Implementation Excerpt ({stage.file})</p>
                   <CodeBlock
@@ -806,7 +806,7 @@ export function LifecyclePage() {
                   />
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 font-mono text-[11px]">
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 font-xmb text-[11px]">
                   <span className="text-faint">
                     Stage {stageIdx + 1} of {scenario.stages.length}
                   </span>

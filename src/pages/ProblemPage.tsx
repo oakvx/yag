@@ -60,20 +60,20 @@ export function ProblemPage() {
       />
 
       {/* INTERACTIVE TOPOLOGY TRANSFORMATION STAGE */}
-      <section className="border-b border-line py-6 @lg:py-8">
+      <section className="py-6 @lg:py-8">
         <Container>
           {/* Control Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border border-line-strong bg-panel p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 p-4">
             <div role="group" aria-label="Select architecture topology" className="flex flex-wrap gap-2">
               <button
                 type="button"
                 aria-pressed={!centralized}
                 onClick={() => setCentralized(false)}
                 className={cn(
-                  "px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer",
+                  "px-4 py-2 font-xmb text-[11px] transition-colors cursor-pointer",
                   !centralized
-                    ? "border-rust bg-rust/15 text-paper"
-                    : "border-line text-faint hover:text-paper",
+                    ? "bg-rust/15 text-paper"
+                    : "text-faint hover:text-paper",
                 )}
               >
                 01 · Before YAG (Fragmented N×M)
@@ -83,10 +83,10 @@ export function ProblemPage() {
                 aria-pressed={centralized}
                 onClick={() => setCentralized(true)}
                 className={cn(
-                  "px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] border transition-colors cursor-pointer",
+                  "px-4 py-2 font-xmb text-[11px] transition-colors cursor-pointer",
                   centralized
-                    ? "border-amber bg-amber/15 text-paper"
-                    : "border-line text-faint hover:text-paper",
+                    ? "bg-amber/15 text-paper"
+                    : "text-faint hover:text-paper",
                 )}
               >
                 02 · With YAG (Centralized Boundary)
@@ -94,7 +94,7 @@ export function ProblemPage() {
             </div>
 
             {/* Scale controls */}
-            <div className="flex flex-wrap items-center gap-6 font-mono text-[11px]">
+            <div className="flex flex-wrap items-center gap-6 font-xmb text-[11px]">
               <label className="flex items-center gap-2.5 text-muted">
                 <span>CLIENTS: {clientCount}</span>
                 <input
@@ -121,7 +121,7 @@ export function ProblemPage() {
           </div>
 
           {/* Animated SVG Topology Canvas */}
-          <div className="border-x border-b border-line-strong bg-[rgba(3,12,34,0.55)] p-4 @lg:p-6">
+          <div className="p-4 @lg:p-6">
             <svg
               viewBox="0 0 860 370"
               className="w-full h-auto"
@@ -292,7 +292,7 @@ export function ProblemPage() {
             </svg>
 
             {/* Structural Metrics Comparison Strip */}
-            <div className="mt-4 grid gap-px bg-line @lg:grid-cols-4">
+            <div className="mt-4 grid gap-4 @lg:grid-cols-4">
               {[
                 {
                   k: "Configuration Edges",
@@ -315,9 +315,9 @@ export function ProblemPage() {
                   accent: "text-paper",
                 },
               ].map((cell) => (
-                <div key={cell.k} className="bg-panel p-3.5">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{cell.k}</div>
-                  <div className={cn("mt-1.5 font-mono text-[12.5px] font-medium", cell.accent)}>{cell.v}</div>
+                <div key={cell.k} className="p-3.5">
+                  <div className="font-xmb text-[11.5px] text-faint">{cell.k}</div>
+                  <div className={cn("mt-1.5 font-xmb text-[12.5px]", cell.accent)}>{cell.v}</div>
                 </div>
               ))}
             </div>
@@ -372,18 +372,18 @@ export function ProblemPage() {
                   after: "YAG enforces 16 KiB header caps, 1 MiB body caps, 32 concurrent connections, monotonic deadlines, and fixed-window 429 Retry-After limits.",
                 },
               ].map((item, i) => (
-                <Reveal key={item.idx} delay={i * 50} className="border-t border-line-strong pt-4">
-                  <div className="flex items-baseline justify-between font-mono text-[10.5px]">
+                <Reveal key={item.idx} delay={i * 50} className="pt-4">
+                  <div className="flex items-baseline justify-between font-xmb text-[12px]">
                     <span className="text-amber">{item.idx}</span>
-                    <span className="uppercase tracking-[0.14em] text-faint">Before → With YAG</span>
+                    <span className="text-faint">Before → With YAG</span>
                   </div>
                   <h3 className="mt-2 font-serif text-2xl text-paper">{item.title}</h3>
-                  <p className="mt-3 border-l border-rust/50 pl-3 text-[13px] leading-relaxed text-faint">
-                    <strong className="font-mono text-[10px] uppercase text-rust">Without: </strong>
+                  <p className="mt-3 pl-3 text-[13px] leading-relaxed text-faint">
+                    <strong className="font-xmb text-[11.5px] text-rust">Without: </strong>
                     {item.before}
                   </p>
-                  <p className="mt-2.5 border-l border-amber/60 pl-3 text-[13.5px] leading-relaxed text-muted">
-                    <strong className="font-mono text-[10px] uppercase text-amber">With YAG: </strong>
+                  <p className="mt-2.5 pl-3 text-[13.5px] leading-relaxed text-muted">
+                    <strong className="font-xmb text-[11.5px] text-amber">With YAG: </strong>
                     {item.after}
                   </p>
                 </Reveal>

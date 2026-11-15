@@ -80,7 +80,7 @@ function createRenderer(canvas: HTMLCanvasElement): GpuRenderer | null {
   // Deterministic dust: stable across context restoration and renderer resets.
   let seed = 7173;
   const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  const dustCount = 145;
+  const dustCount = 290;
   const points = new Float32Array(dustCount * 2);
   for (let i = 0; i < points.length; i++) points[i] = random();
   gl.bindBuffer(gl.ARRAY_BUFFER, dust);
@@ -292,6 +292,10 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
         wake();
       }
     };
+    const themeChanged = () => {
+      targetPalette = monthlyPalette();
+      wake();
+    };
     const bootChanged = () => wake();
     const focusChanged = () => wake();
     const visibility = () => {
@@ -326,6 +330,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
     resize();
     window.addEventListener("resize", resize);
     window.addEventListener("yag:wave", wave);
+    window.addEventListener("yag:theme", themeChanged);
     window.addEventListener("yag:boot", bootChanged);
     window.addEventListener("yag:focus", focusChanged);
     document.addEventListener("visibilitychange", visibility);
@@ -338,6 +343,7 @@ export const RibbonWallpaper = memo(function RibbonWallpaper({
       window.clearInterval(calendar);
       window.removeEventListener("resize", resize);
       window.removeEventListener("yag:wave", wave);
+      window.removeEventListener("yag:theme", themeChanged);
       window.removeEventListener("yag:boot", bootChanged);
       window.removeEventListener("yag:focus", focusChanged);
       document.removeEventListener("visibilitychange", visibility);

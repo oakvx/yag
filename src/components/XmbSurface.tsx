@@ -8,9 +8,10 @@ import type { GlyphName, ItemIcon } from "@/xmb/categories";
 export type XmbGlyph = GlyphName | ItemIcon;
 
 /**
- * A console column: square glass, a translucent head carrying the column's
- * glyph and title, and the body underneath. The crossbar shows columns; the
- * documents show them too, so a page reads like the menu that opened it.
+ * A console column: a frameless head carrying the column's glyph and title,
+ * and the body underneath — no box, no border, drawn on the wave. The
+ * crossbar shows columns; the documents show them too, so a page reads like
+ * the menu that opened it.
  */
 export function XmbColumn({
   icon,

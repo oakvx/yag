@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { COMMIT_NOTICES, type CommitNotice } from "@/data/commits.generated";
 import { REPO_LINKS } from "@/data/repository";
 import { ConsoleIcon } from "./ConsoleIcons";
 import { blip } from "./audio";
+import { XmbList, type XmbListEntry } from "./XmbList";
 import type { ItemIcon } from "./categories";
 
 /**
@@ -10,20 +11,20 @@ import type { ItemIcon } from "./categories";
  *
  * The hardware keeps a circular information button in the top-right corner;
  * pressing it opens the pending items as a Settings-style list over the
- * waves — the same behaviour as the menu's own lists. The selected entry
- * sits on the console's central axis, enlarged and fully opaque; the entries
- * around it step away, shrink and fade; the list slides with ease-out when
- * the selection moves. Every entry carries its kind icon, a one-line title
- * (merges read "Merged PR #n" with the branch beneath), and the commit's
- * date and time at the right edge in a fixed, tabular column. Unread
- * entries carry a small bright dot that disappears once the cursor selects
- * them; the button's own dot lights only while something is unread, on
- * every screen.
+ * waves. The list is the console's own list (XmbList): the selected entry
+ * stands on the centre line, enlarged and fully opaque; the entries around
+ * it step away, shrink and fade; every entry carries its kind icon, a
+ * one-line title (merges read "Merged PR #n" with the branch beneath) and
+ * the commit's date and time at the right edge in a fixed tabular column.
+ * Unread entries carry a small bright dot that disappears once the cursor
+ * selects them; the button's own dot lights only while something is unread,
+ * on every screen.
  *
  * New commits announce themselves the way the hardware announces anything:
- * a dark rounded bar slides in at the top right, holds for a moment, fades
- * out. Several announcements queue up and play one at a time. The toast
- * never takes focus and never touches the navigation.
+ * an icon and one line of text, in the menu's own shadow, slide in at the
+ * top right, hold for a moment, fade out. Several announcements queue up
+ * and play one at a time. The toast never takes focus and never touches
+ * the navigation.
  *
  * The pending items are the repository's own commits: the history that
  * produced this build, read once at build time so the page stays a static
@@ -144,6 +145,13 @@ const VIEWS: NoticeView[] = [...COMMIT_NOTICES.map(viewFor), {
 
 const VIEW_BY_SHA: Map<string, NoticeView> = new Map(COMMIT_NOTICES.map((commit, i) => [commit.sha, VIEWS[i]]));
 
+/** The URL of a board entry, for the gamepad's ✕: open in a new tab. */
+export function noticeHref(index: number): string {
+  return VIEWS[Math.max(0, Math.min(VIEWS.length - 1, index))].href;
+}
+
+export const NOTICE_COUNT = VIEWS.length;
+
 /** First visit: everything is read except the newest commit — the one that
     produced this build, the only one the console announces on arrival. */
 function computeBoot(): { unread: Set<string>; pending: NoticeView[] } {
@@ -186,6 +194,8 @@ export function CommitNotifications({
   active,
   open,
   booted,
+  cursor,
+  onCursorChange,
   onOpenChange,
   onBack,
 }: {
@@ -194,18 +204,17 @@ export function CommitNotifications({
   open: boolean;
   /** The boot sequence has finished; toasts wait for it. */
   booted: boolean;
+  /** The keyboard cursor: the entry the list is anchored on. It is owned by
+      the shell, so the gamepad can travel the board with the console's own
+      verbs. Hovering does not move it — the highlight travels to the hovered
+      entry instead, so the rows stay put under the pointer, as in the menu. */
+  cursor: number;
+  onCursorChange: (index: number) => void;
   onOpenChange: (open: boolean) => void;
   /** Close the board and hand the keyboard back to the last category. */
   onBack: () => void;
 }) {
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
   const wasActive = useRef(active);
-  // The keyboard cursor: the entry the list is anchored on. Hovering does
-  // not move it — the highlight travels to the hovered entry instead, so
-  // the rows stay put under the pointer, as in the main menu.
-  const [cursor, setCursor] = useState(0);
-  const [hover, setHover] = useState<{ anchor: number; index: number } | null>(null);
   const boot = useRef<{ unread: Set<string>; pending: NoticeView[] } | null>(null);
   if (boot.current === null) boot.current = computeBoot();
   const [unread, setUnread] = useState<Set<string>>(() => boot.current!.unread);
@@ -218,16 +227,6 @@ export function CommitNotifications({
     if (wasActive.current && !active) onOpenChange(false);
     wasActive.current = active;
   }, [active, onOpenChange]);
-
-  // Every summoning starts on the newest commit, as the hardware does; the
-  // keyboard moves into the list with it, wherever it was opened from.
-  useEffect(() => {
-    if (!open) return;
-    setCursor(0);
-    setHover(null);
-    const first = listRef.current?.querySelector<HTMLAnchorElement>(".console-notice-link");
-    first?.focus({ preventScroll: true });
-  }, [open]);
 
   // Announcements wait for the boot to finish, then queue up and play one
   // at a time. The storage flag keeps the announcement from repeating.
@@ -259,35 +258,28 @@ export function CommitNotifications({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  // The console's keys, while the board is open: the arrows travel the
-  // list, Home and End jump, and Back — Esc, Backspace, the left arrow or
-  // the chevron — plays the same slide backwards and hands the keyboard to
-  // the last category, exactly as on the console.
+  const markRead = (view: NoticeView) => {
+    if (view.history || !unread.has(view.sha)) return;
+    const next = new Set(unread);
+    next.delete(view.sha);
+    setUnread(next);
+    const state = loadState();
+    if (state) saveState({ lastSeen: state.lastSeen, read: COMMIT_NOTICES.map((c) => c.sha).filter((sha) => !next.has(sha)), pending: state.pending });
+  };
+  const markReadRef = useRef(markRead);
+  markReadRef.current = markRead;
+
+  // Back while the board is open: Esc, Backspace or the left arrow plays the
+  // same slide backwards and hands the keyboard to the last category,
+  // exactly as on the console.
   useEffect(() => {
     if (!open) return;
-    const back = (e: KeyboardEvent) => {
-      e.preventDefault();
-      blip("back");
-      onBack();
-    };
     const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape" || e.key === "Backspace" || e.key === "ArrowLeft") {
-        back(e);
-        return;
-      }
-      if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") {
         e.preventDefault();
-        if (e.key === "ArrowRight") return;
-        const rows = Array.from(listRef.current?.querySelectorAll<HTMLAnchorElement>(".console-notice-link") ?? []);
-        if (rows.length === 0) return;
-        const at = rows.indexOf(document.activeElement as HTMLAnchorElement);
-        const next = e.key === "ArrowDown" ? at + 1 : e.key === "ArrowUp" ? at - 1 : e.key === "Home" ? 0 : rows.length - 1;
-        const clamped = Math.max(0, Math.min(rows.length - 1, next));
-        setHover(null);
-        setCursor(clamped);
-        rows[clamped]?.focus({ preventScroll: true });
-        if (at !== clamped) blip("move");
-        return;
+        blip("back");
+        onBack();
       }
     };
     window.addEventListener("keydown", onKey, true);
@@ -304,27 +296,39 @@ export function CommitNotifications({
     onBack();
   };
 
-  const markRead = (view: NoticeView) => {
-    if (view.history || !unread.has(view.sha)) return;
-    const next = new Set(unread);
-    next.delete(view.sha);
-    setUnread(next);
-    const state = loadState();
-    if (state) saveState({ lastSeen: state.lastSeen, read: COMMIT_NOTICES.map((c) => c.sha).filter((sha) => !next.has(sha)), pending: state.pending });
-  };
-
-  const highlighted = hover?.index ?? cursor;
-  useEffect(() => {
-    if (open) markRead(VIEWS[highlighted]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, highlighted]);
+  const entries: XmbListEntry[] = VIEWS.map((view) => ({
+    key: view.history ? "history" : view.sha,
+    icon: view.icon,
+    title: view.title,
+    sub: view.subtitle,
+    meta: view.history ? null : stamp(view.date, now),
+    detail: view.history
+      ? "Every commit that produced this build, and the rest."
+      : (
+        <>
+          {view.author}
+          <span aria-hidden="true"> · </span>
+          <span className="console-notice-sha">{view.short}</span>
+          {view.category && (
+            <>
+              <span aria-hidden="true"> · </span>
+              {view.category}
+            </>
+          )}
+        </>
+      ),
+    fresh: !view.history && unread.has(view.sha),
+    href: view.href,
+    ariaLabel: view.history
+      ? "Full history on GitHub, opens in a new tab."
+      : `${view.title}. ${view.author}, ${view.short}, ${stamp(view.date, now)}.${!view.history && unread.has(view.sha) ? " Unread." : ""}`,
+  }));
 
   const unreadCount = unread.size;
 
   return (
     <>
       <button
-        ref={toggleRef}
         type="button"
         className="console-notice-toggle"
         data-console-action
@@ -381,79 +385,19 @@ export function CommitNotifications({
           </span>
         </div>
 
-        <ul className="console-notice-list" ref={listRef} onMouseLeave={() => setHover(null)}>
-          {VIEWS.map((view, index) => {
-            // While hovering, the rows keep the anchor they had when the
-            // pointer arrived; only the highlight moves. Otherwise the
-            // cursor entry sits on the anchor line, as on the hardware.
-            const anchor = hover?.anchor ?? cursor;
-            const offset = index - anchor;
-            const on = index === highlighted;
-            const distance = Math.abs(index - highlighted);
-            // Size and brightness interpolate with the distance from the
-            // selection, the way the hardware's list dissolves toward the
-            // edges of the screen.
-            const scale = distance === 0 ? 1 : Math.max(0.68, 0.85 - distance * 0.06);
-            const opacity = distance === 0 ? 1 : Math.max(0.2, 0.8 - distance * 0.16);
-            const fresh = !view.history && unread.has(view.sha);
-            return (
-              <li
-                key={view.history ? "history" : view.sha}
-                className={on ? "console-notice-item is-selected" : "console-notice-item"}
-                style={{ "--notice-offset": offset, "--item-scale": scale, opacity } as CSSProperties}
-              >
-                <a
-                  className="console-notice-link"
-                  href={view.href}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  aria-label={view.history
-                    ? "Full history on GitHub, opens in a new tab."
-                    : `${view.title}. ${view.author}, ${view.short}, ${stamp(view.date, now)}.${fresh ? " Unread." : ""}`}
-                  aria-current={on ? "true" : undefined}
-                  onMouseEnter={() => {
-                    setHover((h) => (h ? h : { anchor: cursor, index }));
-                    blip("move");
-                  }}
-                  onFocus={() => { setHover(null); setCursor(index); }}
-                >
-                  <span className="console-notice-icon" aria-hidden="true">
-                    <ConsoleIcon name={view.icon} />
-                  </span>
-                  <span className="console-notice-body">
-                    <span className="console-notice-top">
-                      {fresh && <span className="console-notice-new" aria-hidden="true" />}
-                      <span className="console-notice-subject">
-                        {view.title}
-                        {view.subtitle && <span className="console-notice-subtitle">{view.subtitle}</span>}
-                      </span>
-                      <span className="console-notice-time">{view.history ? "" : stamp(view.date, now)}</span>
-                    </span>
-                    {on && (
-                      <span className="console-notice-detail">
-                        {view.history
-                          ? "Every commit that produced this build, and the rest."
-                          : (
-                            <>
-                              {view.author}
-                              <span aria-hidden="true"> · </span>
-                              <span className="console-notice-sha">{view.short}</span>
-                              {view.category && (
-                                <>
-                                  <span aria-hidden="true"> · </span>
-                                  {view.category}
-                                </>
-                              )}
-                            </>
-                          )}
-                      </span>
-                    )}
-                  </span>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+        <XmbList
+          entries={entries}
+          selected={cursor}
+          onSelect={onCursorChange}
+          onActivate={(index) => {
+            // ✕ on the hardware opens the commit; here it opens in a new tab.
+            window.open(VIEWS[index].href, "_blank", "noopener,noreferrer");
+          }}
+          onHighlight={(index) => { if (open) markReadRef.current(VIEWS[index]); }}
+          focusOnMount={open}
+          className="console-notice-list"
+          ariaLabel="Commit notifications"
+        />
       </aside>
     </>
   );

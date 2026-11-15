@@ -111,7 +111,10 @@
 .console-category.is-selected .console-category-label { opacity: 0.96; }
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
-.console-destinations ul { list-style: none; padding: 0; margin: 0; }
+/* The list may grow past the visible column only by dissolving: a gradient
+   mask fades the entries out before the footer, so the bottom line of the
+   screen stays clear even in a long category. */
+.console-destinations ul { list-style: none; padding: 0; margin: 0; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 13%, #000 80%, transparent 95%); mask-image: linear-gradient(to bottom, transparent 0, #000 13%, #000 80%, transparent 95%); }
 /* Size and opacity ride on --item-scale, set per row from the distance to
    the selection: the hardware interpolates continuously, not in two sizes. */
 .console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
@@ -127,21 +130,25 @@
 .console-selection-light::before, .console-selection-light::after { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, #ecfaff16 18%, #ecfaff07 60%, transparent); }
 .console-selection-light::before { top: 0; }
 .console-selection-light::after { bottom: 0; }
-/* The selected row carries its own description, beside the label: the block can
-   never land on the next destination, however long the text grows. */
-/* A fixed width and a dark veil keep the second sentence readable even when
-   it lands on the bright crest of a wave. */
-.console-description { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; max-width: 380px; pointer-events: none; animation: consoleDescriptionIn 420ms 100ms both; font-size: clamp(13px, min(1.18vw, 2vh), 24px); line-height: 1.5; padding: 8px 18px 8px 12px; border-radius: 3px; background: linear-gradient(90deg, #04142ae6 0%, #04142aa6 58%, #04142a00 100%); }
-.console-description-lead { color: #fff; text-shadow: 0 1px 2px #000a; }
-.console-description-detail { color: #d3e4f4; font-size: 0.92em; text-shadow: 0 1px 2px #000b; }
+/* The destination stands in a column: the label, with the description
+   beneath it — smaller, the same white, and the same shadow as the menu's
+   own text. No box, no veil: white on the darkest of the twelve monthly
+   palettes still clears 4.5:1, and the shadow carries the crossings of a
+   bright ribbon. The block stays on one line, capped at 380px. */
+.console-destination-body { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; max-width: 380px; }
+.console-description { pointer-events: none; color: #fff; font-size: clamp(12px, min(1.08vw, 1.85vh), 21px); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px #00112ce0, 0 0 7px #00112c99, 0 2px 12px #00112ccc; animation: consoleDescriptionIn 420ms 100ms both; }
 .from-right { animation: consoleItemsRight 300ms ease both; }
 .from-left { animation: consoleItemsLeft 300ms ease both; }
 @keyframes consoleDescriptionIn { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
 @keyframes consoleItemsRight { from { opacity: 0; margin-left: 18px; } to { opacity: 1; margin-left: 0; } }
 @keyframes consoleItemsLeft { from { opacity: 0; margin-left: -18px; } to { opacity: 1; margin-left: 0; } }
 
-/* Original-style date strip, without a conventional site header. */
-.console-clock { position: absolute; z-index: 60; right: var(--rail-right); top: 60px; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; width: 300px; height: 48px; padding-right: 1.2em; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 26px); font-weight: 400; font-variant-numeric: tabular-nums; border: 1px solid #d5eff529; box-shadow: 0 1px 0 #d9f4ff06, inset 0 1px 2px #ecffff05; text-shadow: 0 1px 3px #0006; }
+/* The console's clock: a bar open toward the right edge — no box, the date
+   simply ends at the rail, as on the hardware. The fixed width and the
+   position (top 60px, right 48px) are identical on every screen. The
+   previous closed 300×48 box is kept behind --clock-box for comparison. */
+.console-clock { --clock-box: 0; position: absolute; z-index: 60; right: var(--rail-right); top: 60px; display: flex; align-items: center; justify-content: flex-end; gap: 0.6em; min-width: calc(300px * var(--clock-box)); min-height: calc(48px * var(--clock-box)); padding: calc(8px * var(--clock-box)) calc(1.2em * var(--clock-box)) calc(8px * var(--clock-box)) 0; color: #f0f5f9dc; font-size: clamp(14px, min(1.6vw, 2.6vh), 26px); font-weight: 400; font-variant-numeric: tabular-nums; border: calc(1px * var(--clock-box)) solid #d5eff529; text-shadow: 0 1px 3px #0006; }
+.console-clock::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #ecffff05, transparent); box-shadow: inset 0 1px 2px #ecffff05, 0 1px 0 #d9f4ff06; opacity: var(--clock-box); }
 .console-clock svg { width: 0.95em; height: 0.95em; }
 /* The notification list: the hardware keeps a circular information button
    in the top right corner, and pressing it opens the pending items as a
@@ -166,52 +173,100 @@
 .console-notice-rail-icon { display: block; width: var(--item-size); height: var(--item-size); filter: drop-shadow(0 3px 2px #0006) drop-shadow(0 0 7px #daeaff29); }
 .console-notice-rail-icon svg { display: block; width: 100%; height: 100%; }
 /* The list owns the whole column of the screen, and a gradient mask keeps
-   its edges clear: entries dissolve before the top of the screen and long
-   before the footer, so nothing ever lands on the chrome below. */
-.console-notice-list { position: absolute; left: var(--anchor-x); top: 0; width: calc(100% - var(--anchor-x) - 5vw); height: 100%; margin: 0; padding: 0; list-style: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 76vh, transparent 87vh); mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 76vh, transparent 87vh); }
-.console-notice-item { position: absolute; left: 0; top: var(--selected-y); width: 100%; transform: translate3d(0, calc(var(--notice-offset, 0) * var(--notice-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
-.console-notice-item.is-selected { z-index: 3; }
-.console-notice-link { display: flex; align-items: flex-start; gap: clamp(14px, 1.2vw, 24px); width: 100%; color: #dbe9f6; text-decoration: none; font-size: max(calc(var(--notice-font) * var(--item-scale, 1)), 12px); line-height: 1.35; transition: color 180ms ease; }
-.console-notice-link:hover { color: #fff; }
+   its edges clear: entries dissolve before the top of the screen and are
+   fully gone well above the footer's safe area, so no row ever lands on
+   the chrome below — the footer line stays free of every entry. */
+.console-notice-list { position: absolute; left: var(--anchor-x); top: 0; width: calc(100% - var(--anchor-x) - 5vw); height: 100%; margin: 0; padding: 0; list-style: none; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 72vh, transparent 84vh); mask-image: linear-gradient(to bottom, transparent 0, #000 8vh, #000 72vh, transparent 84vh); }
+/* The console's list, shared by the information board and the Settings
+   screens. Full mode: the rows hang on the list's centre line, the selected
+   entry enlarged and fully opaque, the others stepping away and fading —
+   exactly the geometry the board always used. Compact mode: the same rows
+   in document flow, for pages that scroll. */
+.xmb-list { margin: 0; padding: 0; list-style: none; }
+.xmb-list-row { position: absolute; left: 0; top: var(--selected-y); width: 100%; z-index: 1; transform: translate3d(0, calc(var(--row-offset, 0) * var(--notice-step, 72px)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
+.xmb-list-row.is-selected { z-index: 3; }
+.xmb-list-link { display: flex; align-items: flex-start; gap: clamp(14px, 1.2vw, 24px); width: 100%; padding: 0; border: 0; background: transparent; color: #dbe9f6; font-family: inherit; font-size: max(calc(var(--notice-font, 24px) * var(--item-scale, 1)), 12px); line-height: 1.35; text-align: left; text-decoration: none; cursor: pointer; transition: color 180ms ease; }
+.xmb-list-link:hover, .xmb-list-row.is-selected .xmb-list-link { color: #fff; }
 /* The enlarged, brightened row is the cursor: the hardware draws no ring
    around its selection, so neither do we. */
-.console-notice-link:focus-visible { outline: none; }
-/* The entry's kind icon, where the hardware parks its little picture. */
-.console-notice-icon { flex: none; width: 1.25em; height: 1.25em; margin-top: 0.12em; filter: drop-shadow(0 2px 2px #0006); }
-.console-notice-icon svg { display: block; width: 100%; height: 100%; }
+.xmb-list-link:focus-visible { outline: none; }
+.xmb-list-icon { flex: none; width: 1.25em; height: 1.25em; margin-top: 0.12em; filter: drop-shadow(0 2px 2px #0006); }
+.xmb-list-icon svg { display: block; width: 100%; height: 100%; }
+.xmb-list-swatch { display: block; width: 1.7em; height: 1.15em; border-radius: 3px; border: 1px solid #d5eff552; box-shadow: 0 1px 3px #0007; }
 /* Unread entries carry one small bright dot; it disappears once the
    cursor selects the entry, as the hardware marks the new. */
-.console-notice-new { flex: none; width: 0.3em; height: 0.3em; margin-top: 0.62em; border-radius: 50%; background: #cfe9ff; box-shadow: 0 0 6px #9fd8ff99; }
-.console-notice-item:not(.is-selected) .console-notice-new { opacity: 0.55; }
-.console-notice-body { display: flex; flex: 1; flex-direction: column; gap: 0.22em; min-width: 0; }
-.console-notice-top { display: flex; align-items: baseline; gap: 20px; width: 100%; min-width: 0; }
-/* Every title runs one line, cut with an ellipsis at the list's edge. */
-.console-notice-subject { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 3px #00112c88; }
-.console-notice-subtitle { display: block; margin-top: 1px; font-size: 0.6em; opacity: 0.66; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.console-notice-item.is-selected .console-notice-subject { font-weight: 600; color: #fff; text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
-/* The commit's date and time in the console's clock format, right aligned
-   in a fixed tabular column at the edge of the screen. */
-.console-notice-time { flex: none; margin-left: auto; width: 13ch; text-align: right; font-size: 0.68em; letter-spacing: 0.04em; color: #cfe4f4cc; font-variant-numeric: tabular-nums; }
-.console-notice-item:not(.is-selected) .console-notice-time { font-size: 0.78em; opacity: 0.8; }
+.xmb-list-new { flex: none; width: 0.3em; height: 0.3em; margin-top: 0.62em; border-radius: 50%; background: #cfe9ff; box-shadow: 0 0 6px #9fd8ff99; }
+.xmb-list-row:not(.is-selected) .xmb-list-new { opacity: 0.55; }
+.xmb-list-body { display: flex; flex: 1; flex-direction: column; gap: 0.22em; min-width: 0; }
+.xmb-list-top { display: flex; align-items: baseline; gap: 20px; width: 100%; min-width: 0; }
+/* Every title runs one line, cut with an ellipsis at the list's edge; the
+   small sub (a merge's branch) drops to a second line inside the title. */
+.xmb-list-title { display: flex; flex-wrap: wrap; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 3px #00112c88; }
+.xmb-list-row.is-selected .xmb-list-title { text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
+.xmb-list-sub { display: block; width: 100%; margin-top: 1px; font-size: 0.6em; opacity: 0.66; }
+/* Fixed right column, tabular: dates, states, the console's own numbers. */
+.xmb-list-meta { flex: none; margin-left: auto; width: 13ch; text-align: right; font-size: 0.68em; letter-spacing: 0.04em; color: #cfe4f4cc; font-variant-numeric: tabular-nums; }
+.xmb-list-row:not(.is-selected) .xmb-list-meta { opacity: 0.8; }
+/* A Settings screen's key/value row: the key at the left, the value at the
+   right, wrapping, the selected row standing larger. */
+.xmb-list-value { flex: 1 1 auto; margin-left: auto; min-width: 0; text-align: right; font-size: 0.82em; line-height: 1.45; color: #dfeaf4; font-variant-numeric: tabular-nums; }
 /* The selected entry's description, underneath its subject. */
-.console-notice-detail { max-width: min(46vw, 640px); font-size: 0.62em; line-height: 1.5; color: #cfe2f2; text-shadow: 0 1px 3px #000a; animation: consoleDescriptionIn 420ms 100ms both; }
+.xmb-list-detail { max-width: min(46vw, 640px); font-size: 0.62em; line-height: 1.5; color: #cfe2f2; text-shadow: 0 1px 3px #000a; animation: consoleDescriptionIn 420ms 100ms both; }
 .console-notice-sha { font-family: var(--font-mono); color: #a8cbe2b8; }
+
+/* Compact mode: the same rows in document flow, for the Settings screens.
+   The cursor row stands a size larger, as on the hardware. */
+.xmb-list--compact { position: static; }
+.xmb-list--compact .xmb-list-row { position: static; top: auto; width: auto; z-index: auto; transform: none; opacity: 1; transition: none; }
+.xmb-list--compact .xmb-list-link { font-size: var(--xmb-list-font, 15px); padding: 9px 4px; transition: color 180ms ease, font-size 200ms ease; }
+.xmb-list--compact .xmb-list-row.is-selected .xmb-list-link { font-size: calc(var(--xmb-list-font, 15px) * 1.16); }
+.xmb-list--compact .xmb-list-detail { max-width: none; font-size: 0.92em; animation: none; }
+.xmb-list--compact .xmb-list-value { font-size: 0.85em; }
+
+/* The Settings screens: a lede, the console's list, a small note. Nothing
+   else — no cards, no pills, no header panel. The wave shows through. */
+.settings-screen { display: flex; flex-direction: column; gap: 16px; }
+.settings-lede { margin: 0; max-width: 660px; font-family: var(--font-xmb); font-size: 16px; line-height: 1.55; color: #dbe9f5; text-shadow: 0 1px 2px #0008; }
+.settings-list { --xmb-list-font: 15.5px; padding: 12px 0; }
+.settings-note { margin: 0; font-family: var(--font-xmb); font-size: 12.5px; line-height: 1.6; color: #9fb9cf; text-shadow: 0 1px 2px #0008; }
+.settings-note a, .xmb-code-link { color: #c6e3f2; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #b8d9ee4d; }
+.settings-note a:hover, .xmb-code-link:hover { color: #fff; text-decoration-color: #b8d9ee; }
+.xmb-code-link { font-family: var(--font-mono); font-size: 11px; }
+.xmb-config-detail { display: grid; gap: 8px; justify-items: start; }
+.xmb-config-warn { color: #9fb9cf; font-size: 0.85em; }
+.theme-settings-list { --xmb-list-font: 16px; padding: 12px 0; }
 /* The list takes the screen: behind it the waves stand alone, the way the
    reference screen shows nothing but the list and its rail. The menu, the
    wordmark and the key hints sink into the background; the clock stays up
    top, as the hardware keeps its clock on that corner. */
 .console-environment[data-notices="open"] .console-menu { opacity: 0; pointer-events: none; }
 .console-environment[data-notices="open"] :is(.console-identity, .console-help) { opacity: 0.2; }
-/* New-commit toasts: a dark rounded bar on the top-right rail, queued and
-   played one at a time. It never takes focus and never moves the cursor. */
+.console-environment[data-notices="open"] .console-options { opacity: 0; visibility: hidden; pointer-events: none; }
+/* New-commit toasts: an icon and one line of text, the menu's own shadow,
+   no box — the way the hardware announces things on the waves. They are
+   queued and played one at a time and never take focus or move the cursor.
+   --toast-bar restores the previous dark rounded bar for side-by-side
+   comparison (0 = frameless, the default; 1 = the bar). */
 .console-toast-region { position: absolute; z-index: 64; top: 118px; right: var(--rail-right); width: min(420px, 60vw); pointer-events: none; }
-.console-toast { display: flex; align-items: center; gap: 12px; padding: 9px 16px 9px 11px; color: #eef6fd; background: rgba(6, 22, 40, 0.78); border: 1px solid #d5eff530; border-radius: 10px; box-shadow: 0 10px 30px #0007; backdrop-filter: blur(6px); animation: consoleToastIn 340ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.console-toast { --toast-bar: 0; display: flex; align-items: center; gap: 12px; padding: 9px 2px 9px 0; color: #eef6fd; background: rgba(6, 22, 40, calc(0.78 * var(--toast-bar))); border: 1px solid rgba(213, 239, 245, calc(0.19 * var(--toast-bar))); border-radius: calc(10px * var(--toast-bar)); box-shadow: 0 10px 30px rgba(0, 0, 0, calc(0.44 * var(--toast-bar))); backdrop-filter: blur(calc(6px * var(--toast-bar))); animation: consoleToastIn 340ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .console-toast[data-leaving="true"] { animation: consoleToastOut 300ms ease both; }
-.console-toast-icon { flex: none; width: 26px; height: 26px; }
+.console-toast-icon { flex: none; width: 26px; height: 26px; filter: drop-shadow(0 1px 2px #000a); }
 .console-toast-icon svg { display: block; width: 100%; height: 100%; }
-.console-toast-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: 0.02em; }
+.console-toast-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: 0.02em; text-shadow: 0 1px 2px #00112ce0, 0 0 7px #00112c99, 0 2px 12px #00112ccc; }
 @keyframes consoleToastIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 @keyframes consoleToastOut { to { opacity: 0; transform: translateY(-6px); } }
+
+/* The △ options panel: a small list anchored at the right edge, on the
+   selected destination only. It slides in from the edge and slides back
+   when ○/Esc closes it; the selected row steps forward and brightens. */
+.console-options { --options-font: clamp(14px, min(1.25vw, 2.1vh), 24px); position: absolute; z-index: 61; top: 50%; right: var(--rail-right); width: min(380px, 62vw); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(105%, -50%); transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease, visibility 0s 300ms; }
+.console-options[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(0, -50%); transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease; }
+.console-options ul { list-style: none; margin: 0; padding: 4px 0; }
+.console-option { display: flex; width: 100%; align-items: center; gap: 14px; padding: 10px 18px; border: 0; background: transparent; color: #cfe3f2; font-size: var(--options-font); text-align: left; cursor: pointer; opacity: 0.72; text-shadow: 0 1px 3px #00112c99; transition: color 160ms ease, opacity 160ms ease, transform 200ms ease; }
+.console-option.is-selected { color: #fff; opacity: 1; transform: translateX(-6px); text-shadow: 0 1px 4px #f3faff50, 0 2px 5px #0006; }
+.console-option-icon { width: 1.1em; height: 1.1em; flex: none; filter: drop-shadow(0 1px 2px #0008); }
+.console-option-icon svg { display: block; width: 100%; height: 100%; }
+.console-options-detail { margin: 8px 18px 4px; padding: 0; max-width: 360px; font-size: calc(var(--options-font) * 0.66); line-height: 1.5; color: #d3e4f4; text-shadow: 0 1px 3px #000a; }
 
 .console-identity { position: absolute; z-index: 20; left: var(--rail-right); bottom: 5.6vh; display: flex; align-items: center; gap: 1em; color: #d5e4f1c0; transition: opacity 220ms; }
 .console-identity[data-hidden="true"] { opacity: 0; pointer-events: none; }
@@ -232,6 +287,10 @@
 /* Applications take over the entire screen, rather than opening beside a sidebar.
    The backdrop is a veil, not a lid: the blurred waves still read through it. */
 .console-application { position: absolute; z-index: 30; inset: 0; display: flex; flex-direction: column; padding: 3.7vh 5.7vw 0; background: linear-gradient(180deg, rgba(3, 19, 44, 0.36), rgba(4, 20, 44, 0.14) 38%, rgba(3, 19, 44, 0.26)); animation: consoleAppIn 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+/* Application content wears the console's own face, one weight; monospace
+   appears only where code does. */
+.console-application-content { font-family: "SCE-PS3 Rodin LATIN", "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif; font-synthesis: none; }
+.console-application-content pre, .console-application-content code { font-family: var(--font-mono); }
 .console-application.is-leaving { animation: consoleAppOut 240ms ease both; pointer-events: none; }
 .console-application-header { display: flex; flex-shrink: 0; align-items: center; gap: 18px; height: clamp(74px, 10.5vh, 160px); padding-right: 28vw; margin-bottom: 1vh; color: #edf4fa; }
 .console-back { display: flex; align-items: center; gap: 9px; border: 0; margin-right: 20px; padding: 8px 0; background: transparent; color: #c7d9e6; font-size: 14px; }
@@ -251,7 +310,7 @@
 @keyframes consoleContentIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 
 /* The XMB uses one regular font weight. Application content keeps its own fonts. */
-:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-toggle, .console-notice-panel) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-toggle, .console-notice-panel, .console-options) {
   font-family: "SCE-PS3 Rodin LATIN", "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   font-synthesis: none;
   font-style: normal;
@@ -259,7 +318,7 @@
   -webkit-font-smoothing: antialiased;
   text-shadow: 0 1px 3px #0008;
 }
-:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel, .console-notice-panel, .console-notice-toggle) :is(button, a, span, p, time, input) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel, .console-notice-panel, .console-notice-toggle, .console-options) :is(button, a, span, p, time, input) {
   font-family: inherit;
   font-synthesis: none;
   font-style: normal;
@@ -296,10 +355,10 @@
 }
 @keyframes bootMenuIn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: scale(1); } }
 @keyframes bootChromeIn { from { opacity: 0; } to { opacity: 1; } }
-.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application, .console-notice-toggle, .console-notice-panel) { opacity: 0 !important; visibility: hidden !important; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application, .console-notice-toggle, .console-notice-panel, .console-options) { opacity: 0 !important; visibility: hidden !important; }
 .console-environment[data-boot="handoff"] .console-menu[data-hidden="false"] { animation: bootMenuIn 1.4s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
-.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application, .console-notice-toggle) { animation: bootChromeIn 1.4s ease both; }
-.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application, .console-notice-toggle) { animation-duration: 0.35s; }
+.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application, .console-notice-toggle, .console-options) { animation: bootChromeIn 1.4s ease both; }
+.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application, .console-notice-toggle, .console-options) { animation-duration: 0.35s; }
 
 /* Separate music/effects controls; the trigger also supports a long press to replay. */
 .console-audio { position: relative; }
@@ -312,8 +371,10 @@
 
 /* Reusable technical tools remain inside the full-screen applications. */
 @layer components {
-  .label { font-family: var(--font-mono); font-size: 10px; line-height: 1.5; letter-spacing: 0.12em; text-transform: uppercase; }
-  .display { font-family: var(--font-sans); font-weight: 300; line-height: 1.2; letter-spacing: -0.025em; }
+  /* Page text wears the console's own face: Rodin, one weight, no decorative
+     uppercase. Monospace is reserved for code blocks. */
+  .label { font-family: var(--font-xmb); font-size: 12px; line-height: 1.5; letter-spacing: 0.04em; color: #9fc0d8; }
+  .display { font-family: var(--font-xmb); font-weight: 400; line-height: 1.25; letter-spacing: 0.01em; }
   h1 em, h2 em, .display em { font-style: normal; font-weight: 400; color: #c6e3f2; }
   .schematic-grid { background-image: radial-gradient(#b3d6ed14 0.6px, transparent 0.8px); background-size: 28px 28px; }
   .micro-grid { background-image: radial-gradient(#b3d6ed10 0.6px, transparent 0.8px); background-size: 14px 14px; }
@@ -342,41 +403,39 @@
   .signal-flow { stroke-dasharray: 10 110; animation: signalDash 2.8s linear infinite; }
   .signal-flow-slow { stroke-dasharray: 8 132; animation: signalDash 4.2s linear infinite; }
   @keyframes signalDash { from { stroke-dashoffset: 120; } to { stroke-dashoffset: 0; } }
-  .xmb-glass { background: #08223cf5; border: 1px solid #d8eafb36; box-shadow: 0 20px 60px #0005; }
-
-  /* XMB PAGE FURNITURE. The console's own vocabulary, reused inside the
-     documents: square glass panels, a translucent column head and rows that
-     read like crossbar entries — glyph, small-caps key, value. */
-  .xmb-surface { container-type: inline-size; container-name: xmbcol; background: linear-gradient(180deg, #0d2b4bec, #08223cf7 46%, #061a30f7); border: 1px solid #d8eafb2b; box-shadow: 0 22px 60px #0006, inset 0 1px 0 #d8eafb1c; }
-  .xmb-column-head { display: flex; align-items: center; gap: 12px; padding: 11px 16px; background: linear-gradient(90deg, #1c5e9cb0 0%, #12406f66 46%, #0a264000 100%); border-bottom: 1px solid #d8eafb24; }
-  .xmb-column-head svg { width: 20px; height: 20px; flex: none; color: #cfe6f8; }
-  .xmb-column-title { font-family: var(--font-xmb); font-size: 13.5px; font-weight: 400; letter-spacing: .09em; text-transform: uppercase; color: #eaf4fc; }
-  .xmb-column-note { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: #8fb6d6; }
+  /* XMB PAGE FURNITURE. The documents are Settings screens, not pages of
+     cards: nothing carries a border, a box or a pill. Columns, rows, tiles
+     and notes are laid straight on the blurred wave, in the console's own
+     face, with a row cursor that brightens — the only feedback. */
+  .xmb-glass { background: transparent; border: 0; box-shadow: none; }
+  .xmb-surface { container-type: inline-size; container-name: xmbcol; }
+  .xmb-column-head { display: flex; align-items: center; gap: 12px; padding: 11px 16px; }
+  .xmb-column-head svg { width: 20px; height: 20px; flex: none; color: #cfe6f8; filter: drop-shadow(0 1px 2px #0007); }
+  .xmb-column-title { font-family: var(--font-xmb); font-size: 16px; font-weight: 400; letter-spacing: .015em; color: #eaf4fc; text-shadow: 0 1px 2px #0009; }
+  .xmb-column-note { margin-left: auto; font-family: var(--font-xmb); font-size: 12px; letter-spacing: .03em; color: #8fb6d6; text-shadow: 0 1px 2px #0009; }
   .xmb-column-lede { padding: 13px 16px 0; font-family: var(--font-xmb); font-size: 17px; line-height: 1.35; letter-spacing: .012em; color: #eef5fb; text-shadow: 0 1px 2px #0006; }
-  .xmb-row { display: grid; grid-template-columns: 20px 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 9px 16px; border-top: 1px solid #d5eff51a; transition: background 160ms ease; }
-  .xmb-row:first-child { border-top: 0; }
-  .xmb-row:hover { background: linear-gradient(90deg, #a4d1e816 0%, #a4d1e804 40%, #a4d1e800 74%); }
-  .xmb-row-icon { width: 20px; height: 20px; color: #a8cbe6; transition: color 160ms ease; }
+  .xmb-row { display: grid; grid-template-columns: 20px 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 16px; transition: background 160ms ease; }
+  .xmb-row:hover { background: linear-gradient(90deg, #a4d1e814 0%, #a4d1e805 45%, #a4d1e800 80%); }
+  .xmb-row-icon { width: 20px; height: 20px; color: #a8cbe6; filter: drop-shadow(0 1px 2px #0007); transition: color 160ms ease; }
   .xmb-row:hover .xmb-row-icon { color: #eaf4fb; }
-  .xmb-row-key { font-family: var(--font-mono); font-size: 10px; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; color: #8da5bb; }
-  .xmb-row-value { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; color: #dfeaf4; }
+  .xmb-row-key { font-family: var(--font-xmb); font-size: 14px; line-height: 1.5; letter-spacing: .02em; color: #b9d2e5; text-shadow: 0 1px 2px #0008; }
+  .xmb-row-value { font-family: var(--font-xmb); font-size: 14.5px; line-height: 1.55; color: #e8f1f9; text-shadow: 0 1px 2px #0008; }
   .xmb-row-value a { color: #cfe6f8; text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #b8d9ee4d; }
   .xmb-row-value a:hover { color: #fff; text-decoration-color: #b8d9ee; }
-  .xmb-avatar { display: grid; place-items: center; width: 76px; height: 76px; flex: none; background: linear-gradient(180deg, #16456f, #0a2542); border: 1px solid #d8eafb33; box-shadow: inset 0 1px 0 #d8eafb26, 0 12px 28px #0007; }
+  .xmb-avatar { display: grid; place-items: center; width: 76px; height: 76px; flex: none; }
   .xmb-avatar svg { width: 44px; height: 44px; color: #dbeeff; filter: drop-shadow(0 2px 3px #0007); }
-  .xmb-quote { border-left: 2px solid #b8d9ee4d; padding-left: 14px; font-family: var(--font-xmb); font-size: 14px; line-height: 1.7; color: #d5e6f4; }
-  .xmb-tile { display: flex; gap: 13px; padding: 13px 15px; background: #0b264373; border: 1px solid #d8eafb21; transition: border-color 180ms ease, background 180ms ease; }
-  .xmb-tile:hover { border-color: #b8d9ee70; background: #a4d1e80f; }
-  .xmb-tile svg { width: 22px; height: 22px; flex: none; color: #a8cbe6; transition: color 180ms ease; }
+  .xmb-quote { border-left: 2px solid #b8d9ee4d; padding-left: 14px; font-family: var(--font-xmb); font-size: 14px; line-height: 1.7; color: #d5e6f4; text-shadow: 0 1px 2px #0008; }
+  .xmb-tile { display: flex; gap: 13px; padding: 13px 15px; transition: background 180ms ease; }
+  .xmb-tile:hover { background: #a4d1e80a; }
+  .xmb-tile svg { width: 22px; height: 22px; flex: none; color: #a8cbe6; filter: drop-shadow(0 1px 2px #0007); transition: color 180ms ease; }
   .xmb-tile:hover svg { color: #eaf4fb; }
-  .xmb-tile-title { font-family: var(--font-xmb); font-size: 14px; letter-spacing: .04em; color: #edf4fa; }
-  .xmb-tile-sub { margin-top: 4px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55; color: #93aec4; }
-  .xmb-note { display: flex; gap: 11px; padding: 10px 16px; border-top: 1px solid #d5eff51a; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; color: #b6cadd; }
-  .xmb-note:first-child { border-top: 0; }
+  .xmb-tile-title { font-family: var(--font-xmb); font-size: 14.5px; letter-spacing: .02em; color: #edf4fa; text-shadow: 0 1px 2px #0008; }
+  .xmb-tile-sub { margin-top: 4px; font-family: var(--font-xmb); font-size: 12.5px; line-height: 1.55; color: #9fb9cf; text-shadow: 0 1px 2px #0008; }
+  .xmb-note { display: flex; gap: 11px; padding: 10px 16px; font-family: var(--font-xmb); font-size: 13px; line-height: 1.6; color: #b6cadd; text-shadow: 0 1px 2px #0008; }
   .xmb-note::before { content: ""; width: 5px; height: 5px; margin-top: 7px; flex: none; background: #c6e3f2b3; transform: rotate(45deg); }
-  .xmb-masthead::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 130% at 18% 130%, #4d8fd022 0%, transparent 56%), radial-gradient(90% 110% at 76% 140%, #9fd4ff14 0%, transparent 62%); }
+  .xmb-masthead { position: relative; }
   .xmb-masthead .display { font-family: var(--font-xmb); font-weight: 400; letter-spacing: .012em; }
-  .xmb-masthead li { border-radius: 2px; border-color: #d8eafb2b; background: #0b26435c; }
+  .xmb-masthead li { border-radius: 0; }
 }
 
 /* Page-level split: one column of panels until the document is wide enough
@@ -411,18 +470,23 @@
 @media (max-width: 760px) {
   .console-environment { --anchor-x: 23vw; --category-y: 25vh; --selected-y: 45vh; --category-gap: 23vw; --category-size: 54px; --item-size: 52px; --item-step-base: 13.7vh; --rail-right: 16px; --label-gap: 22px; --menu-font: 21px; }
   .console-category-label { font-size: 13px; top: 36px; }
-  .console-clock { top: 48px; right: var(--rail-right); width: 176px; height: 30px; font-size: 13px; }
+  .console-clock { top: 44px; font-size: 13px; }
   .console-destination-position { width: calc(100vw - var(--anchor-x) - 4vw + var(--item-size) / 2); }
-  .console-item-label { white-space: normal; max-width: calc(100vw - var(--anchor-x) - 62px); }
-  .console-description { position: absolute; top: calc(100% + 6px); left: calc(var(--item-size) + var(--label-gap)); width: min(380px, calc(100vw - var(--anchor-x) - var(--label-gap) - var(--item-size) - 12px)); max-width: none; font-size: 12px; line-height: 1.5; }
-  .console-description-detail { display: none; }
+  .console-destination-body { max-width: calc(100vw - var(--anchor-x) - var(--item-size) - var(--label-gap) - 10px); }
+  .console-item-label { white-space: normal; }
+  .console-description { font-size: 11.5px; }
   .console-selection-light { width: 66vw; left: 24px; }
-  .console-identity { left: var(--rail-right); bottom: 5vh; gap: 9px; }
+  /* The footer is one clear line: the wordmark and audio sit on the left,
+     the command icons on the right, both on the same baseline. The menu's
+     rows are capped above 84vh by their step, so nothing reaches this line
+     and the audio can never crowd the item column. */
+  .console-identity { left: var(--rail-right); bottom: 4.6vh; gap: 8px; }
   .console-wordmark { font-size: 20px; }
-  .console-identity-caption { font-size: 9px; }
-  .console-sound { margin-left: 5px; font-size: 11px; }
+  .console-identity-meta { flex-direction: row; align-items: center; gap: 4px; }
+  .console-identity-caption { display: none; }
+  .console-sound { margin-left: 0; font-size: 11px; }
   .console-sound > span { display: none; }
-  .console-help { right: var(--rail-right); bottom: 11vh; font-size: 11px; gap: 1.1em; }
+  .console-help { right: var(--rail-right); bottom: 4.6vh; font-size: 11px; gap: 1.1em; }
   /* On a phone the command bar keeps only its icons. */
   .console-help-arrows, .console-help-label { display: none; }
   .console-toast-region { top: 96px; width: calc(100vw - 2 * var(--rail-right)); }
@@ -431,8 +495,7 @@
   .console-notice-rail { left: 3vw; gap: 6px; }
   .console-notice-back { width: 24px; height: 24px; font-size: 24px; }
   .console-notice-list { width: calc(100% - var(--anchor-x) - 4vw); }
-  .console-notice-detail { max-width: calc(100vw - var(--anchor-x) - 52px); }
-  .console-notice-top { gap: 14px; }
+  .xmb-list-detail { max-width: calc(100vw - var(--anchor-x) - 52px); }
   .console-application { padding: 3vh 4vw 0; }
   .console-application-header { height: 95px; padding-right: 0; padding-top: 30px; gap: 12px; }
   .console-application-header h2 { font-size: 15px; }
@@ -455,7 +518,6 @@
 @media (max-height: 480px) and (orientation: landscape) {
   .console-environment { --category-y: 23vh; --selected-y: 47vh; --item-step-base: 18vh; --category-size: 42px; --item-size: 38px; --menu-font: 16px; }
   .console-description { font-size: 12px; }
-  .console-description-detail { display: none; }
   .console-help { bottom: 5vh; }
   .console-identity { bottom: 5vh; }
 }
