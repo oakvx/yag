@@ -220,7 +220,9 @@ function renderModels() {
     name.title = model.id
     const label = document.createElement('small')
     label.textContent = model.yag_remote_https ? 'External HTTPS · may incur charges' :
-      (model.yag_dedicated ? 'Dedicated LAN provider' : 'Remote inference')
+      (model.yag_dedicated ? 'Dedicated provider · verify costs' :
+        (model.yag_loopback_only ? 'Loopback upstream · local proxy' :
+          'Unverified destination · review egress'))
     meta.append(name, label)
     button.append(icon, meta)
     button.addEventListener('click', () => selectModel(model.id))
@@ -368,10 +370,11 @@ async function sendMessage(event) {
   // A managed external HTTPS model can send prompts and tool content outside
   // the LAN. Confirm once per server/model in volatile session memory.
   const currentModel = state.models.find(item => item.id === state.model)
-  if (currentModel?.yag_remote_https) {
+  if (currentModel && (!currentModel.yag_loopback_only ||
+      currentModel.yag_remote_https || currentModel.yag_dedicated)) {
     const consentId = state.url + '|' + state.model
     if (!state.cloudConsent.has(consentId)) {
-      if (!window.confirm('This model uses an external HTTPS provider. Your messages can leave the LAN and may incur provider charges. Continue?')) return
+      if (!window.confirm('YAG cannot confirm this model stays on the local Host. The route may use an external provider and incur charges. Continue for this session?')) return
       state.cloudConsent.add(consentId)
     }
   }
