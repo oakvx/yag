@@ -7,6 +7,7 @@ const invoke = tauri.core.invoke
 const Channel = tauri.core.Channel
 const Workspace = window.YagWorkspace
 const Models = window.YagModels
+const Setup = window.YagSetup
 const Markdown = window.YagMarkdown
 
 const el = (id) => document.getElementById(id)
@@ -29,7 +30,9 @@ const state = {
   cloudConsent: new Set(), // In-memory only; no implicit cross-session consent.
   updateInfo: null,
   updateDismissed: null,
-  updateChecking: false
+  updateChecking: false,
+  setupStep: 'closed',
+  setupStarted: false
 }
 
 
@@ -142,15 +145,37 @@ function connectionError(message) {
   el('connectionError').textContent = message
   el('connectionError').hidden = !message
 }
+function renderSetup() {
+  const step = state.setupStep
+  el('setupWelcome').hidden = step !== 'welcome'
+  el('setupFinish').hidden = step !== 'done'
+  el('connectionCopy').hidden = step === 'welcome' || step === 'done'
+  el('connectForm').hidden = step === 'welcome' || step === 'done'
+  el('dialogTitle').textContent = step === 'welcome' ? 'Welcome to YAG' :
+    (step === 'done' ? 'Setup complete' : 'Connect to YAG')
+}
 function openDialog() {
+  state.setupStep = 'connect'
+  state.setupStarted = false
+  renderSetup()
   el('serverUrl').value = state.url || localStorage.getItem('yag.desktop.url') || ''
   el('apiKey').value = state.apiKey
   connectionError('')
   el('connectionDialog').hidden = false
   el('serverUrl').focus()
 }
+function openFirstRun() {
+  state.setupStarted = true
+  state.setupStep = 'welcome'
+  renderSetup()
+  el('connectionDialog').hidden = false
+  el('setupBegin').focus()
+}
 function closeDialog() {
   el('connectionDialog').hidden = true
+  state.setupStep = 'closed'
+  state.setupStarted = false
+  renderSetup()
 }
 function setStatus(online) {
   state.online = online
@@ -332,9 +357,18 @@ async function connect(event) {
     el('modelSearch').value = ''
     renderModels()
     setStatus(true)
-    closeDialog()
+    if (state.setupStep === 'connect' && state.setupStarted) {
+      state.setupStep = Setup.transition('connect', 'authenticated')
+      el('setupHostName').textContent = new URL(state.url).host
+      el('setupModelName').textContent = state.model || 'No models installed yet'
+      Setup.markComplete(localStorage)
+      renderSetup()
+      el('setupDone').focus()
+    } else {
+      closeDialog()
+      el('prompt').focus()
+    }
     showError('')
-    el('prompt').focus()
   } catch (error) {
     connectionError(String(error))
   } finally {
@@ -612,6 +646,19 @@ el('downloadUpdate').addEventListener('click', async () => {
     button.disabled = false
   }
 })
+el('setupBegin').addEventListener('click', () => {
+  state.setupStep = Setup.transition(state.setupStep, 'begin')
+  renderSetup()
+  el('serverUrl').value = state.url || localStorage.getItem('yag.desktop.url') || ''
+  el('serverUrl').focus()
+  // LAN discovery is user-triggered, never a hidden background scan.
+  discoverHosts()
+})
+el('setupSkip').addEventListener('click', closeDialog)
+el('setupDone').addEventListener('click', () => {
+  closeDialog()
+  el('prompt').focus()
+})
 el('settingsButton').addEventListener('click', openSettings)
 el('closeSettingsButton').addEventListener('click', closeSettings)
 el('settingsDialog').addEventListener('click', event => {
@@ -707,5 +754,6 @@ renderModels()
 renderMessages()
 setStatus(false)
 renderConversations()
-openDialog()
+if (Setup.shouldWelcome(localStorage)) openFirstRun()
+else openDialog()
 if (el('autoCheckUpdates').checked) checkForUpdates()
