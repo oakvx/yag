@@ -10,10 +10,9 @@ reviewed commit.
 - **macOS Desktop:** unsigned `.dmg` disk image built on `macos-latest`
   (currently an ARM64 runner).
 
-The `Package and release YAG` workflow also runs weekly on Monday and can
-be started manually from GitHub Actions. These runs upload downloadable
-**workflow artifacts**, retained for 14 days. They do **not** create tags or
-publish releases automatically.
+**Automatic weekly downloads:** `Publish weekly YAG prerelease` runs every Monday at **06:17 UTC** (GitHub may delay it) and can also be started manually from `main`. It creates at most one immutable tag per UTC week, such as `v0.1.0-weekly.20261116`, using the Monday date. The action requires passing CI and security checks for the precise `main` commit before creating a tag. The tagged `Package and release YAG` workflow checks that evidence again, builds Host plus all three Desktop formats, verifies SHA-256 checksums, produces Sigstore provenance, and publishes a **public GitHub prerelease**.
+
+The weekly release is intended for **experimental testing only**, not deployment certification. It does not bypass the independent Colibri GPU/model acceptance, key-storage requirements, or stable-release approval. It never automatically creates a stable version and will not overwrite a published weekly tag. If the week's tag already points to another commit, the run fails instead of moving it. Manually rerunning the schedule workflow in the same week does not create another release. Other manual builds can still generate 14-day GitHub Actions artifacts without publishing.
 
 ## Create a candidate from GitHub Actions
 
