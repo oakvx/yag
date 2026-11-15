@@ -6,6 +6,7 @@ const tauri = window.__TAURI__
 const invoke = tauri.core.invoke
 const Channel = tauri.core.Channel
 const Workspace = window.YagWorkspace
+const Models = window.YagModels
 const Markdown = window.YagMarkdown
 
 const el = (id) => document.getElementById(id)
@@ -172,6 +173,14 @@ function setStatus(online) {
   el('disconnectButton').disabled = state.running
   updateRelayDisplay()
 }
+function selectModel(id) {
+  if (state.running || !state.models.some(model => model.id === id)) return
+  if (state.model !== id) clearConversation()
+  state.model = id
+  renderModels()
+  setStatus(true)
+  el('prompt').focus()
+}
 function renderModels() {
   const root = el('models')
   root.replaceChildren()
@@ -182,7 +191,19 @@ function renderModels() {
     root.append(p)
     return
   }
-  state.models.forEach((model) => {
+  const pinned = Models.favorites(state.url)
+  const visible = Models.filter(state.models, el('modelSearch').value, pinned)
+  if (!visible.length) {
+    const p = document.createElement('p')
+    p.className = 'muted model-placeholder'
+    p.textContent = 'No matching models. Clear the search to view all models.'
+    root.append(p)
+    return
+  }
+  visible.forEach((model) => {
+    const row = document.createElement('div')
+    row.className = 'model-row'
+
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'model-item' + (model.id === state.model ? ' active' : '')
@@ -202,14 +223,24 @@ function renderModels() {
       (model.yag_dedicated ? 'Dedicated LAN provider' : 'Remote inference')
     meta.append(name, label)
     button.append(icon, meta)
-    button.addEventListener('click', () => {
-      if (state.model !== model.id) clearConversation()
-      state.model = model.id
+    button.addEventListener('click', () => selectModel(model.id))
+    const star = document.createElement('button')
+    star.type = 'button'
+    star.className = 'model-favorite' + (pinned.includes(model.id) ? ' pinned' : '')
+    star.textContent = pinned.includes(model.id) ? '★' : '☆'
+    star.title = pinned.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'
+    star.setAttribute('aria-label', star.title + ': ' + model.id)
+    star.setAttribute('aria-pressed', String(pinned.includes(model.id)))
+    star.addEventListener('click', () => {
+      if (!Models.toggle(state.url, model.id)) {
+        showError('Could not save model favorites on this device.')
+        return
+      }
       renderModels()
-      setStatus(true)
-      el('prompt').focus()
+      el('modelSearch').focus()
     })
-    root.append(button)
+    row.append(button, star)
+    root.append(row)
   })
 }
 function renderMessages() {
@@ -296,6 +327,7 @@ async function connect(event) {
     renderConversations()
     // Only the non-secret server address is remembered.
     localStorage.setItem('yag.desktop.url', url)
+    el('modelSearch').value = ''
     renderModels()
     setStatus(true)
     closeDialog()
@@ -321,6 +353,7 @@ async function disconnect() {
   state.model = ''
   state.models = []
   state.cloudConsent.clear()
+  el('modelSearch').value = ''
   el('apiKey').value = ''
   clearConversation()
   renderModels()
@@ -610,6 +643,18 @@ el('copyRelayKey').addEventListener('click', () => {
   })
 })
 
+el('modelSearch').addEventListener('input', renderModels)
+el('modelSearch').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    const matched = Models.filter(state.models, el('modelSearch').value, Models.favorites(state.url))
+    if (matched.length) selectModel(matched[0].id)
+  } else if (event.key === 'Escape') {
+    el('modelSearch').value = ''
+    renderModels()
+    el('modelSearch').blur()
+  }
+})
 el('chatSearch').addEventListener('input', renderConversations)
 el('newSidebarChat').addEventListener('click', clearConversation)
 el('serverButton').addEventListener('click', openDialog)
@@ -628,6 +673,13 @@ el('prompt').addEventListener('keydown', (event) => {
   }
 })
 document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' &&
+      el('connectionDialog').hidden && el('settingsDialog').hidden) {
+    event.preventDefault()
+    el('modelSearch').focus()
+    el('modelSearch').select()
+    return
+  }
   if (event.key === 'Escape' && !el('connectionDialog').hidden) closeDialog()
   if (event.key === 'Escape' && !el('settingsDialog').hidden) closeSettings()
 })
