@@ -14,6 +14,7 @@ inference model supports an agent protocol. Those checks run only on a
 | `security.yml` | PR + main + Wednesday + manual | actionlint, CodeQL C/C++ and JS/TS scans, Console and Desktop npm vulnerability audits |
 | `release.yml` | Monday + manual + `v*` tags | Host Linux package and all three Desktop installers. Attaches each to workflow artifacts. A reviewed tag also publishes a GitHub Release with SHA-256 checksums |
 | `live-model.yml` | Explicit manual dispatch on `main` only | Qualifies a **real** model with an isolated gateway on a self-hosted Linux runner |
+| `prepare-rc.yml` | Manual dispatch from reviewed `main` | Checks exact-commit CI/security runs, creates a new `-rc.N` tag without overwriting and explicitly dispatches tagged packaging |
 
 Workflow checks do not issue credentials or add secrets to repository files.
 The GitHub Dependency Review API is not enabled on this repository; the
@@ -25,6 +26,13 @@ job for every verified Host/Desktop artifact. If Sigstore or GitHub
 attestation storage is unavailable, the release-publishing job remains
 blocked. No long-lived publisher certificate is used for provenance;
 Windows/macOS installers remain **unsigned by their operating systems**.
+
+**One-click prerelease:** the default `GITHUB_TOKEN` does not start
+ordinary tag-push workflows when it creates a tag. `prepare-rc.yml`
+therefore explicitly uses `workflow_dispatch` on the new tag reference
+to start `release.yml`. Manual dispatch against `main` only builds
+artifacts; tag dispatch publishes a prerelease after checks and attestations.
+Use protected `release-candidate` / `production-release` Environments.
 
 The automated weekly packaging run **does not create tags or publish stable
 releases**. Build artifacts expire after 14 days. The Desktop packages are
