@@ -3,7 +3,9 @@
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, fs::OpenOptions, io::Write, time::Duration};
+use std::{collections::BTreeMap, fs::{self, OpenOptions}, io::{self, Write}, path::PathBuf, time::Duration};
+use futures_util::StreamExt;
+use uuid::Uuid;
 use tauri::Manager;
 
 const API: &str = "https://api.github.com/repos/oakvx/yag/releases?per_page=30";
@@ -48,6 +50,22 @@ fn component(raw: &str) -> Option<u64> {
     raw.parse().ok()
 }
 
+fn valid_weekly_monday(year: u64, month: u64, day: u64) -> bool {
+    if !(2020..=2099).contains(&year) || !(1..=12).contains(&month) { return false; }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if day == 0 || day > days[(month - 1) as usize] { return false; }
+    // Sakamoto's Gregorian day-of-week algorithm: Sunday = 0, Monday = 1.
+    let offsets = [0u64, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    let y = if month < 3 { year - 1 } else { year };
+    (y + y / 4 - y / 100 + y / 400 + offsets[(month - 1) as usize] + day) % 7 == 1
+}
+
+fn tagged_release_build() -> bool {
+    let expected = format!("v{}", env!("CARGO_PKG_VERSION"));
+    option_env!("YAG_DESKTOP_RELEASE_TAG") == Some(expected.as_str())
+}
+
 fn version(raw: &str) -> Option<Version> {
     let raw = raw.strip_prefix('v').unwrap_or(raw);
     if raw.len() > 56 { return None; }
@@ -71,10 +89,7 @@ fn version(raw: &str) -> Option<Version> {
             let year = component(&date[..4])?;
             let month = component(&date[4..6])?;
             let day = component(&date[6..8])?;
-            if !(2020..=2099).contains(&year)
-                || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
-                return None;
-            }
+            if !valid_weekly_monday(year, month, day) { return None; }
             (1, component(date)?)
         }
         _ => return None,
@@ -167,19 +182,25 @@ async fn all_releases(client: &reqwest::Client) -> Result<Vec<GithubRelease>, St
     serde_json::from_slice(&bytes).map_err(|_| "Invalid GitHub Releases response".into())
 }
 
-fn status_from(releases: &[GithubRelease], current: &str) -> Result<VersionInfo, String> {
+fn status_from(releases: &[GithubRelease], current: &str, tagged: bool) -> Result<VersionInfo, String> {
     let installed = version(current).ok_or("Invalid installed application version")?;
     let release = preferred(releases).ok_or("No complete YAG releases published yet")?;
     let latest_version = version(&release.tag_name).ok_or("Invalid release version")?;
     let asset = installer_name(&release.tag_name);
+    // Development artifacts are not signed/tagged releases. A 0.1.0 local
+    // build can upgrade to 0.1.0-rc.N or 0.1.0-weekly.YYYYMMDD, while an
+    // actual stable 0.1.0 install never downgrades to those prereleases.
+    let dev_same_core = !tagged && installed.3 == 2 && latest_version.3 != 2
+        && (installed.0, installed.1, installed.2)
+            == (latest_version.0, latest_version.1, latest_version.2);
     Ok(VersionInfo {
-        current: current.to_string(),
+        current: if tagged { current.into() } else { format!("{current} (local build)") },
         latest: release.tag_name.clone(),
         url: format!("{RELEASE_PAGE}/{}", release.tag_name),
         channel: if latest_version.3 == 1 { "weekly" } else if latest_version.3 == 0 {
             "candidate"
         } else { "stable" }.into(),
-        update_available: latest_version > installed,
+        update_available: latest_version > installed || dev_same_core,
         download_supported: asset.is_some(),
         asset_name: asset,
     })
@@ -188,7 +209,7 @@ fn status_from(releases: &[GithubRelease], current: &str) -> Result<VersionInfo,
 pub(crate) async fn check() -> Result<VersionInfo, String> {
     let client = restricted_client()?;
     let releases = all_releases(&client).await?;
-    status_from(&releases, env!("CARGO_PKG_VERSION"))
+    status_from(&releases, env!("CARGO_PKG_VERSION"), tagged_release_build())
 }
 
 fn checksums(input: &[u8], tag: &str) -> Result<BTreeMap<String, String>, String> {
@@ -214,7 +235,7 @@ pub(crate) async fn download(app: tauri::AppHandle, requested: String) -> Result
     let client = restricted_client()?;
     let releases = all_releases(&client).await?;
     let candidate = preferred(&releases).ok_or("No complete YAG releases published yet")?;
-    let available = status_from(&releases, env!("CARGO_PKG_VERSION"))?;
+    let available = status_from(&releases, env!("CARGO_PKG_VERSION"), tagged_release_build())?;
     if !available.update_available || requested != candidate.tag_name {
         return Err("Update is no longer current. Check releases again.".into());
     }
@@ -265,6 +286,7 @@ mod tests {
         }
         for tag in ["v00.1.0", "v0.1.0/../../evil", "v0.1.0-rc.0",
             "v0.1.0-weekly.2026111", "v0.1.0-weekly.20261332",
+            "v0.1.0-weekly.20261115", "v0.1.0-weekly.20260230",
             "v0.1.0-rc.1;touch", "v0.1.0-dev", "v1.2.3.4"] {
             assert!(version(tag).is_none(), "{tag}");
         }
@@ -284,11 +306,13 @@ mod tests {
         incomplete.assets.retain(|item| item.name != "SHA256SUMS.txt");
         let candidates = [example("v0.1.0-rc.2"), example("v0.1.0-weekly.20261116"),
             draft, incomplete];
-        let status = status_from(&candidates, "0.1.0-rc.2").unwrap();
+        let status = status_from(&candidates, "0.1.0-rc.2", true).unwrap();
         assert_eq!(status.latest, "v0.1.0-weekly.20261116");
         assert!(status.update_available);
         assert_eq!(status.channel, "weekly");
-        assert!(!status_from(&candidates, "0.1.0").unwrap().update_available);
+        assert!(!status_from(&candidates, "0.1.0", true).unwrap().update_available);
+        assert!(status_from(&candidates, "0.1.0", false).unwrap().update_available);
+        assert!(!status_from(&candidates, "0.2.0", false).unwrap().update_available);
     }
 
     #[test]
