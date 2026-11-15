@@ -1,5 +1,7 @@
 # YAG operator controls and telemetry
 
+Optional encrypted-at-rest native-only provider alias management: [Native BYOK vault](native-byok-vault.md).
+
 Use the gateway key via an environment variable. Never place API keys in
 public command examples, logs, issue reports or CI workflow inputs.
 
