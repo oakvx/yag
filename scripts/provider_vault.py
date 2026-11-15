@@ -176,6 +176,8 @@ def main(argv=None):
                 if not ALIAS.fullmatch(args.alias):
                     raise ValueError('Allowed aliases: YAG_POOL_KEY_1 through YAG_POOL_KEY_8')
                 if args.operation == 'set':
+                    if not sys.stdin.isatty():
+                        raise ValueError('Hidden provider key input requires a TTY')
                     key = getpass.getpass('Provider key (hidden): ')
                     if not KEY.fullmatch(key):
                         raise ValueError('Provider key must have 8..4096 safe ASCII characters')
