@@ -145,7 +145,7 @@ mod tests {
         let routes = Router::new()
             .route("/v1/models", get(|| async {
                 ([(header::CONTENT_TYPE, "application/json")],
-                r#"{"data":[{"id":"unit-model"}],"object":"list"}"#)
+                r#"{"data":[{"id":"unit-model"},{"id":"paid-cloud"}],"object":"list"}"#)
             }))
             .route("/v1/chat/completions", post(|| async {
                 ([(header::CONTENT_TYPE, "text/event-stream")],
@@ -164,7 +164,9 @@ mod tests {
         let models = client.get(format!("{}/v1/models", info.url))
             .bearer_auth(&info.token).send().await.unwrap();
         assert_eq!(models.status(), StatusCode::OK);
-        assert!(models.text().await.unwrap().contains("unit-model"));
+        let visible = models.text().await.unwrap();
+        assert!(visible.contains("unit-model"));
+        assert!(!visible.contains("paid-cloud"));
         let chat = client.post(format!("{}/v1/chat/completions", info.url))
             .bearer_auth(&info.token)
             .json(&serde_json::json!({"model":"unit-model","messages":[{"role":"user","content":"hi"}],"stream":true}))
@@ -181,6 +183,12 @@ mod tests {
         assert_eq!(wrong_route.status(), StatusCode::NOT_FOUND);
         handle.cancel.cancel();
         server.abort();
+    }
+
+    #[tokio::test]
+    async fn cannot_start_relay_with_empty_authorized_inventory() {
+        assert!(start("http://127.0.0.1:11434".into(), "not-a-real-key".into(), vec![])
+            .await.is_err());
     }
 
     #[test]
