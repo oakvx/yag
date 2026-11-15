@@ -10,7 +10,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 use serde::Serialize;
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -31,6 +31,7 @@ struct RelayContext {
     port: u16,
     cancel: CancellationToken,
     client: reqwest::Client,
+    allowed_models: BTreeSet<String>,
 }
 
 fn authenticate(headers: &HeaderMap, local_token: &str, port: u16) -> bool {
@@ -47,35 +48,33 @@ fn authenticate(headers: &HeaderMap, local_token: &str, port: u16) -> bool {
     token == local_token
 }
 
-async fn forward(
-    ctx: Arc<RelayContext>,
-    headers: HeaderMap,
-    body: Option<Bytes>,
-    target: &'static str,
-) -> Response {
+async fn forward_chat(ctx: Arc<RelayContext>, headers: HeaderMap, bytes: Bytes) -> Response {
     if ctx.cancel.is_cancelled() { return StatusCode::SERVICE_UNAVAILABLE.into_response(); }
     if !authenticate(&headers, &ctx.local_token, ctx.port) {
         return StatusCode::UNAUTHORIZED.into_response();
     }
-    let mut request = if target == "models" {
-        ctx.client.get(format!("{}/v1/models", ctx.upstream))
-    } else {
-        let Some(bytes) = body else { return StatusCode::BAD_REQUEST.into_response() };
-        if bytes.is_empty() || bytes.len() > 1_048_576 {
-            return StatusCode::PAYLOAD_TOO_LARGE.into_response();
-        }
-        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-            return StatusCode::BAD_REQUEST.into_response();
-        };
-        if !json.get("model").and_then(|v| v.as_str()).is_some_and(|v| !v.is_empty())
-            || !json.get("messages").is_some_and(|v| v.is_array()) {
-            return StatusCode::BAD_REQUEST.into_response();
-        }
-        ctx.client.post(format!("{}/v1/chat/completions", ctx.upstream))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(bytes)
+    if bytes.is_empty() || bytes.len() > 1_048_576 {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return StatusCode::BAD_REQUEST.into_response();
     };
-    request = request.bearer_auth(&ctx.upstream_key).timeout(Duration::from_secs(3600));
+    let Some(model) = json.get("model").and_then(|v| v.as_str()) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if model.is_empty() || !json.get("messages").is_some_and(|v| v.is_array()) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    // Only the models explicitly allowed when starting the relay can be used.
+    // This is a second, local safety gate; Host authentication/scopes still apply.
+    if !ctx.allowed_models.contains(model) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let request = ctx.client.post(format!("{}/v1/chat/completions", ctx.upstream))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(bytes)
+        .bearer_auth(&ctx.upstream_key)
+        .timeout(Duration::from_secs(3600));
     let response = match tokio::select! {
         _ = ctx.cancel.cancelled() => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
         value = request.send() => value,
@@ -86,7 +85,6 @@ async fn forward(
     let status = response.status();
     let content_type = response.headers().get(header::CONTENT_TYPE).cloned();
     let retry_after = response.headers().get(header::RETRY_AFTER).cloned();
-    // Backpressure is preserved; cancellation immediately stops ongoing SSE.
     let stream = response.bytes_stream().take_until(ctx.cancel.clone().cancelled_owned());
     let mut reply = Response::new(Body::from_stream(stream));
     *reply.status_mut() = status;
@@ -95,13 +93,25 @@ async fn forward(
     reply
 }
 async fn models(State(ctx): State<Arc<RelayContext>>, headers: HeaderMap) -> Response {
-    forward(ctx, headers, None, "models").await
+    if ctx.cancel.is_cancelled() { return StatusCode::SERVICE_UNAVAILABLE.into_response(); }
+    if !authenticate(&headers, &ctx.local_token, ctx.port) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    // Expose only the initial explicitly authorized model snapshot, never the
+    // entire upstream inventory (which may include paid external providers).
+    let data: Vec<_> = ctx.allowed_models.iter()
+        .map(|id| serde_json::json!({"id": id, "object": "model"})).collect();
+    axum::Json(serde_json::json!({"object":"list", "data":data})).into_response()
 }
 async fn chat(State(ctx): State<Arc<RelayContext>>, headers: HeaderMap, bytes: Bytes) -> Response {
-    forward(ctx, headers, Some(bytes), "chat").await
+    forward_chat(ctx, headers, bytes).await
 }
 
-pub(crate) async fn start(upstream: String, upstream_key: String) -> Result<(RelayInfo, RelayHandle), String> {
+pub(crate) async fn start(upstream: String, upstream_key: String, models: Vec<String>) -> Result<(RelayInfo, RelayHandle), String> {
+    let allowed_models = models.into_iter().collect::<BTreeSet<_>>();
+    if allowed_models.is_empty() || allowed_models.len() > 512 {
+        return Err("Relay requires 1–512 explicitly authorized model IDs".into());
+    }
     let listener = TcpListener::bind(("127.0.0.1", 0)).await
         .map_err(|_| "Could not open an available localhost port".to_string())?;
     let port = listener.local_addr().map_err(|_| "Could not read localhost port")?.port();
@@ -109,7 +119,7 @@ pub(crate) async fn start(upstream: String, upstream_key: String) -> Result<(Rel
     let cancel = CancellationToken::new();
     let context = Arc::new(RelayContext {
         upstream, upstream_key, local_token: token.clone(), port,
-        cancel: cancel.clone(), client: super::client()?,
+        cancel: cancel.clone(), client: super::client()?, allowed_models,
     });
     let app = Router::new()
         .route("/v1/models", get(models))
@@ -142,7 +152,7 @@ mod tests {
                 "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
             }));
         let server = tokio::spawn(async move { axum::serve(backend, routes).await.unwrap(); });
-        let (info, handle) = start(upstream, "host-private-key".into()).await.unwrap();
+        let (info, handle) = start(upstream, "host-private-key".into(), vec!["unit-model".into()]).await.unwrap();
         let client = reqwest::Client::builder().no_proxy().build().unwrap();
         let unauthorized = client.get(format!("{}/v1/models", info.url))
             .bearer_auth("wrong").send().await.unwrap();
@@ -161,6 +171,11 @@ mod tests {
             .send().await.unwrap();
         assert_eq!(chat.status(), StatusCode::OK);
         assert!(chat.text().await.unwrap().contains("[DONE]"));
+        let paid = client.post(format!("{}/v1/chat/completions", info.url))
+            .bearer_auth(&info.token)
+            .json(&serde_json::json!({"model":"paid-cloud","messages":[{"role":"user","content":"hi"}]}))
+            .send().await.unwrap();
+        assert_eq!(paid.status(), StatusCode::FORBIDDEN);
         let wrong_route = client.get(format!("{}/v1/something-else", info.url))
             .bearer_auth(&info.token).send().await.unwrap();
         assert_eq!(wrong_route.status(), StatusCode::NOT_FOUND);
