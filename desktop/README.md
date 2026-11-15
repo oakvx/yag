@@ -180,6 +180,29 @@ The **Copy chat** button exports the active conversation as Markdown to the
 system clipboard only when explicitly pressed. Clipboard managers and other
 local applications may retain that copy.
 
+## First-run assistant and Windows installation
+
+The Windows NSIS setup uses original YAG-branded welcome/header artwork,
+an Italian or English translation selected by Windows, and a **YAG** Start
+Menu folder. It installs per-user (without requiring administrator rights
+in normal conditions), supports Windows' native wizard/uninstall behavior
+and preserves explicit, manual installation for unsigned packages.
+Windows may warn about an unsigned publisher until Authenticode signing
+is configured; do not bypass enterprise security policies.
+
+On the first launch with no previously saved Host origin, YAG Desktop
+opens a three-step onboarding assistant:
+
+1. Introduction and consent to begin discovery;
+2. User-triggered local discovery, Host URL, TLS trust and client API key;
+3. Success screen after the authenticated model listing succeeds.
+
+The user may skip the assistant and connect later. A previously configured
+installation retains its connection dialog, avoiding destructive resets.
+Only the non-secret Host origin and a completion flag are persisted; the
+API key remains in memory. Failed authentication does **not** mark setup
+complete, and TLS verification is never relaxed.
+
 ## Release checks and installer authenticity
 
 **Preferences → Check for updates** queries the public `oakvx/yag` GitHub

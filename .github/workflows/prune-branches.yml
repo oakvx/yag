@@ -1,0 +1,36 @@
+name: Prune obsolete YAG branches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/prune-branches.yml
+      - scripts/prune_branches.py
+      - tests/prune_branches_test.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: yag-branch-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    if: github.repository == 'oakvx/yag' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify safe pruning rules
+        run: python3 -m unittest discover -s tests -p prune_branches_test.py -v
+      - name: Inspect branch cleanup plan (read-only)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/prune_branches.py
+      - name: Remove only closed, unchanged and unprotected branch refs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/prune_branches.py --execute

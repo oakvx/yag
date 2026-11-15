@@ -51,6 +51,36 @@ Dedicated model IDs require explicitly scoped workstation access.
    **existing tag reference** after fixing the failure. Configure the
    `release-candidate` GitHub Environment with required reviewers.
 
+## Checklist for the first Monday experimental build
+
+The first scheduled weekly run is **Monday 16 November 2026, 06:17 UTC**
+(07:17 CET), subject to the GitHub scheduler, workflow permissions and
+successful same-commit CI/security checks. It publishes an explicitly
+experimental GitHub **prerelease**, never a stable version.
+
+Before announcing that it exists, confirm on
+[GitHub Releases](https://github.com/oakvx/yag/releases) that the
+`v0.1.0-weekly.20261116` tag was actually published with exactly the
+Linux Host, Windows NSIS, Linux DEB and macOS DMG packages, plus
+`SHA256SUMS.txt`. Review each package's Sigstore attestations and the
+tagged build's CI/security run identity. Do not infer publication from a
+scheduled trigger or an in-progress job.
+
+The Windows installer is NSIS-based, localized for Italian/English and
+branded. YAG Desktop shows an optional first-run guided LAN setup that
+does not persist client keys. The binary remains **unsigned at the OS
+level**. The weekly prerelease makes no claim about GPU/model validation
+on physical Colibri hardware. Issue #48 remains open for that evidence,
+signing/notarization and independent production acceptance.
+
+Repository housekeeping is separate from these safety checks. The
+one-time `Prune obsolete YAG branches` GitHub Action, triggered by the
+merge of its own workflow into `main`, reviews closed PR branches,
+rechecks their exact SHA and leaves open-PR heads, protected branches and
+`main` untouched. It also clears obsolete `rc.1`/`rc.2` trigger
+branches. Review its Actions log rather than assuming all references
+were deleted.
+
 ## Mandatory production acceptance — cannot be simulated
 
 Only on **Colibri**, using a trusted `yag-colibri` self-hosted Linux runner:
