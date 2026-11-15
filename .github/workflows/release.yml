@@ -169,6 +169,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      # Required: the tagged rollback rehearsal calls scripts/release_verify.py
+      # from the repository. Artifact-only runners do not have source files.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run offline release verification regression tests
+        run: python3 tests/release_verify_test.py
       - uses: actions/download-artifact@v8
         with:
           pattern: yag-*
