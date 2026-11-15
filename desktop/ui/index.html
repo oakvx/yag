@@ -106,7 +106,9 @@
       <button id="clearHistory" class="secondary-button" type="button">Delete all locally saved conversations</button>
       <div class="settings-divider"></div>
       <h3>Local API relay</h3>
-      <p class="field-note">Expose the connected YAG models as a local OpenAI-compatible API on 127.0.0.1 only. A separate temporary token is required, including for local programs.</p>
+      <p class="field-note">Expose selected YAG models as a local OpenAI-compatible API on 127.0.0.1 only. A separate temporary token is required, including for local programs.</p>
+      <label class="switch-line"><input id="relayCloudAccess" type="checkbox"> Also expose dedicated/external provider models</label>
+      <p class="field-note">Off by default. Enabling this allows applications using the local relay token to send requests to potentially paid third-party providers. Host key scopes and limits still apply. Legacy Hosts may not identify all cloud models.</p>
       <div class="modal-actions"><button id="startRelay" class="secondary-button" type="button">Start local relay</button><button id="stopRelay" class="secondary-button" type="button" disabled>Stop relay</button></div>
       <div id="relayDetails" class="relay-details" hidden><strong>Local endpoint</strong><code id="relayUrl"></code><strong>Temporary API key</strong><code id="relayKey"></code><button id="copyRelayKey" class="secondary-button" type="button">Copy token</button></div>
       <p id="relayError" class="dialog-error" role="alert" hidden></p>
