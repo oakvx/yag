@@ -14,6 +14,21 @@ reviewed commit.
 
 The weekly release is intended for **experimental testing only**, not deployment certification. It does not bypass the independent Colibri GPU/model acceptance, key-storage requirements, or stable-release approval. It never automatically creates a stable version and will not overwrite a published weekly tag. If the week's tag already points to another commit, the run fails instead of moving it. Manually rerunning the schedule workflow in the same week does not create another release. Other manual builds can still generate 14-day GitHub Actions artifacts without publishing.
 
+## Windows NSIS wizard and source hygiene
+
+The Windows `.exe` is an NSIS per-user installer with YAG-branded
+welcome/header assets, Italian/English languages and a **YAG** Start
+Menu folder. Tauri produces Windows' native installation/uninstall
+wizard. The desktop application adds its separate three-step first-run
+Host discovery/authentication assistant. Neither component grants
+publisher trust or bypasses Windows SmartScreen.
+
+Generated Vite `dist/` output and Playwright logs/screenshots are
+reproducible and deliberately absent from Git; CI builds the Pages
+artifact anew from versioned source. The repo branch cleanup action
+removes only obsolete, unchanged closed-PR heads (plus two explicitly
+listed old release-candidate triggers), not unmerged active work.
+
 ## Desktop update discovery
 
 YAG Desktop Preferences now includes optional startup checks for weekly,
