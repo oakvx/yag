@@ -150,6 +150,21 @@ final authority. **Older Hosts or unrestricted default routes may fail
 to label cloud models**, so operators must configure routing carefully
 and enforce provider billing limits independently.
 
+## Model quick switch and favorites
+
+Use the **Find model** field in the sidebar to filter the Host model catalog
+without making another network request. Press **Ctrl+K** (or **Cmd+K** on
+macOS) to focus it; type a model name and press **Enter** to select the first
+matching model. Press **Escape** to clear the search. Favorites appear
+first in the list and can be pinned or unpinned with the adjacent star.
+
+Favorites are saved only after the user explicitly clicks the star, and
+are stored locally in the WebView profile as bounded model IDs grouped by
+canonical Host origin (up to eight origins and 20 models per origin).
+They never store client keys, prompts or model responses. Favorites are
+not sent to a remote service and selecting a cloud model still requires
+the separate per-session cloud egress confirmation.
+
 ## Conversation settings
 
 Preferences allow a system prompt (up to 4000 characters), a temperature

@@ -7,6 +7,7 @@
   <title>YAG Desktop</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./workspace.js" defer></script>
+  <script src="./models.js" defer></script>
   <script src="./markdown.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
@@ -22,6 +23,8 @@
         <span class="chevron">›</span>
       </button>
       <div class="section-heading model-heading"><span>AVAILABLE MODELS</span><button id="refreshButton" class="icon-button" title="Refresh models" aria-label="Refresh models" type="button">↻</button></div>
+      <label class="sr-only" for="modelSearch">Find a model</label>
+      <input id="modelSearch" class="model-search" type="search" placeholder="Find model…  Ctrl+K" maxlength="120" autocomplete="off" spellcheck="false" aria-label="Find a model">
       <div id="models" class="models" role="listbox" aria-label="Available AI models"><p class="muted model-placeholder">Connect to a YAG server to discover its models.</p></div>
       <div class="section-heading chats-heading"><span>CONVERSATIONS</span><button id="newSidebarChat" class="icon-button" type="button" title="New conversation" aria-label="New conversation">＋</button></div>
       <label class="sr-only" for="chatSearch">Search conversations</label>
