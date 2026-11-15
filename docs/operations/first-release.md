@@ -18,7 +18,11 @@ GitHub-hosted build proves compilation and mock integration, not real inference.
   until OS-specific publisher identities and notarization exist.
 - A manually triggered real-model qualification workflow on trusted Colibri.
 
-There is **no** native encrypted-at-rest live BYOK vault, guaranteed financial
+An optional **native POSIX-only** encrypted-at-rest provider alias vault is
+available via [`provider_vault.py`](native-byok-vault.md); the LAN Docker
+Compose live provider environment is **not** encrypted at rest by that tool.
+
+There is **no** complete containerized encrypted-at-rest live BYOK vault, guaranteed financial
 spend limit, independently audited public admin API or full automatic model
 capability discovery. Cloud inference sends content to the selected third party.
 Dedicated model IDs require explicitly scoped workstation access.
