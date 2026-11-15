@@ -15,6 +15,17 @@ be started manually from GitHub Actions. These runs upload downloadable
 **workflow artifacts**, retained for 14 days. They do **not** create tags or
 publish releases automatically.
 
+## Create a candidate from GitHub Actions
+
+With green CI/security checks on reviewed `main`, open **Actions →
+Prepare first YAG release candidate → Run workflow**, select `main` and
+enter an unused `vMAJOR.MINOR.PATCH-rc.N` tag. The workflow validates
+the precise main commit and latest successful CI/security runs, refuses
+unsafe or existing tags, and explicitly triggers the tagged release
+packaging workflow. No GitHub prerelease is claimed until all builds,
+checksums and signed provenance pass. See
+[first release requirements](../operations/first-release.md).
+
 ## Release candidates versus stable publication
 
 For the first public release, use a reviewed prerelease tag such as

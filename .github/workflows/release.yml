@@ -33,7 +33,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Stamp native Host version from release tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -108,7 +108,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Stamp Desktop version from release tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -201,7 +201,7 @@ jobs:
             sha256sum --check SHA256SUMS.txt
           )
       - name: Rehearse offline verified Host staging for a tagged release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -222,7 +222,7 @@ jobs:
 
   attest:
     name: Attest reviewed tag package provenance
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [verify-assets]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -242,7 +242,7 @@ jobs:
 
   release:
     name: Publish reviewed tag
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [verify-assets, attest]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
