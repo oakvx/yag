@@ -52,7 +52,7 @@ class VaultTests(unittest.TestCase):
                                          '--recipient',RECIPIENT]),0)
             self.assertEqual(stat.S_IMODE(self.path.stat().st_mode),0o600)
             self.assertEqual(vault._read(self.path,self.identity),{})
-            with mock.patch.object(vault.sys.stdin,'isatty',return_value=True):
+            with mock.patch.object(vault.sys,'stdin',mock.Mock(isatty=lambda: True)):
                 with mock.patch.object(vault.getpass,'getpass',return_value=SECRET):
                     self.assertEqual(vault.main(['set','--vault',str(self.path),
                       '--identity',str(self.identity),'--recipient',RECIPIENT,
@@ -111,7 +111,7 @@ class VaultTests(unittest.TestCase):
     def test_non_tty_set_does_not_call_getpass(self):
         with self.mock_age():
             vault._write_new(self.path,vault._encrypt({},RECIPIENT))
-            with mock.patch.object(vault.sys.stdin,'isatty',return_value=False):
+            with mock.patch.object(vault.sys,'stdin',mock.Mock(isatty=lambda: False)):
                 with mock.patch.object(vault.getpass,'getpass') as prompt:
                     with contextlib.redirect_stderr(io.StringIO()):
                         self.assertEqual(vault.main(['set','--vault',str(self.path),
