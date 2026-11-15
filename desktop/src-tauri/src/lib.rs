@@ -328,14 +328,22 @@ async fn cancel_chat(request_id: String, state: State<'_, AppState>) -> Result<(
 
 
 #[tauri::command]
-async fn start_relay(url: String, api_key: String, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
+async fn start_relay(url: String, api_key: String, allow_external: bool, state: State<'_, AppState>) -> Result<relay::RelayInfo, String> {
     let origin = endpoint(&url)?;
     key_valid(&api_key)?;
-    // Validate the key against the actual gateway before making it available locally.
-    list_models(url, api_key.clone()).await?;
+    // Snapshot the authenticated inventory. External/dedicated IDs are denied
+    // unless the user explicitly opted into exposing them to localhost apps.
+    let models = list_models(url, api_key.clone()).await?;
+    let allowed = models.into_iter()
+        .filter(|model| allow_external || (!model.yag_remote_https && !model.yag_dedicated))
+        .map(|model| model.id)
+        .collect::<Vec<_>>();
+    if allowed.is_empty() {
+        return Err("No relay-eligible models. Enable external provider access explicitly if intended.".into());
+    }
     let mut active = state.relay.lock().await;
     if active.is_some() { return Err("A local relay is already running".into()); }
-    let (info, handle) = relay::start(origin, api_key).await?;
+    let (info, handle) = relay::start(origin, api_key, allowed).await?;
     *active = Some(handle);
     Ok(info)
 }
