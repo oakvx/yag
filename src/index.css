@@ -84,7 +84,11 @@
    the blur never pulls the empty edge of the surface into the picture. */
 .console-environment[data-surface="app"] .console-wallpaper { filter: blur(clamp(16px, 1.9vw, 34px)) saturate(1.04) brightness(1.25); }
 .console-environment[data-surface="app"] .wallpaper-canvas { transform: scale(1.09); }
-.console-menu { position: absolute; inset: 0; z-index: 10; outline: none; transform-origin: 38% 43%; transition: opacity 360ms ease, transform 480ms ease, visibility 0s; }
+/* The menu owns the whole screen, so the fade belongs to it: the rows
+   dissolve toward the footer, while the crossbar and every category stay in
+   the fully opaque top. A zero-height <ul> would clip them instead — the
+   mask must live on a box that really covers the column. */
+.console-menu { position: absolute; inset: 0; z-index: 10; outline: none; transform-origin: 38% 43%; transition: opacity 360ms ease, transform 480ms ease, visibility 0s; -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 78vh, transparent 92vh); mask-image: linear-gradient(to bottom, #000 0, #000 78vh, transparent 92vh); }
 .console-menu[data-hidden="true"] { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.13) translateX(-3vw); transition: opacity 280ms, transform 500ms, visibility 0s 400ms; }
 /* Opening: the menu clears away while the selected icon grows and fades; Back plays it in reverse. */
 .console-menu[data-opening="true"] { transform: scale(1.04) translateX(-0.6vw); }
@@ -111,10 +115,11 @@
 .console-category.is-selected .console-category-label { opacity: 0.96; }
 
 .console-destinations { position: absolute; top: var(--selected-y); left: var(--anchor-x); width: calc(100% - var(--anchor-x)); height: calc(100% - var(--selected-y)); }
-/* The list may grow past the visible column only by dissolving: a gradient
-   mask fades the entries out before the footer, so the bottom line of the
-   screen stays clear even in a long category. */
-.console-destinations ul { list-style: none; padding: 0; margin: 0; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 13%, #000 80%, transparent 95%); mask-image: linear-gradient(to bottom, transparent 0, #000 13%, #000 80%, transparent 95%); }
+/* The rows are absolutely positioned, so this <ul> has zero height: a
+   mask-image on it would be measured against an empty box and clip the whole
+   column (that was the regression). The fade lives on .console-menu, which
+   really covers the screen, and keeps the footer line clear. */
+.console-destinations ul { list-style: none; padding: 0; margin: 0; }
 /* Size and opacity ride on --item-scale, set per row from the distance to
    the selection: the hardware interpolates continuously, not in two sizes. */
 .console-destination-position { position: absolute; left: calc(var(--item-size) / -2); top: calc(var(--item-size) / -2); height: var(--item-size); width: calc(100vw - var(--anchor-x) - 4vw); transform: translate3d(0, calc(var(--item-offset) * var(--item-step)), 0); transition: transform 350ms cubic-bezier(0.22, 0.75, 0.25, 1), opacity 280ms ease; }
