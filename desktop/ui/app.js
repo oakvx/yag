@@ -417,6 +417,7 @@ function updateRelayDisplay() {
   el('relayDetails').hidden = !state.relay
   el('startRelay').disabled = !state.online || !state.apiKey || !!state.relay
   el('stopRelay').disabled = !state.relay
+  el('relayCloudAccess').disabled = !!state.relay
   if (state.relay) {
     el('relayUrl').textContent = state.relay.url + '/v1'
     el('relayKey').textContent = state.relay.token
@@ -426,16 +427,29 @@ function updateRelayDisplay() {
   }
 }
 async function stopRelay() {
-  try { await invoke('stop_relay') }
-  catch (error) { el('relayError').hidden = false; el('relayError').textContent = String(error) }
-  finally { state.relay = null; updateRelayDisplay() }
+  try {
+    await invoke('stop_relay')
+    state.relay = null
+    // Reconsent is required each time a relay is started.
+    el('relayCloudAccess').checked = false
+  } catch (error) {
+    el('relayError').hidden = false
+    el('relayError').textContent = String(error)
+  } finally { updateRelayDisplay() }
 }
 async function startRelay() {
   if (!state.online || !state.apiKey || state.relay) return
+  const allowExternal = el('relayCloudAccess').checked
+  if (allowExternal && !window.confirm(
+    'Allow local programs holding the relay token to access dedicated or paid external AI providers? These requests may incur charges and leave your LAN.'
+  )) {
+    el('relayCloudAccess').checked = false
+    return
+  }
   el('relayError').hidden = true
   el('startRelay').disabled = true
   try {
-    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey})
+    state.relay = await invoke('start_relay', {url: state.url, apiKey: state.apiKey, allowExternal})
   } catch (error) {
     el('relayError').textContent = String(error)
     el('relayError').hidden = false
