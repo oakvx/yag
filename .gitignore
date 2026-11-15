@@ -18,3 +18,9 @@ desktop/node_modules/
 desktop/src-tauri/target/
 desktop/src-tauri/icons/
 desktop/src-tauri/gen/
+
+# Native encrypted provider aliases and recovery identities
+*.age
+age-identity*
+yag-identity*
+provider-vault/
