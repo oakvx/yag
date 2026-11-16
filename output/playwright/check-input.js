@@ -28,6 +28,8 @@ async(page)=>{
   await page.getByRole('dialog',{name:'Options for Trophies'}).waitFor();
   await page.locator('.console-options-dismiss').click({position:{x:20,y:300}});
   await page.locator('.console-options[data-open=false]').waitFor({state:'attached'});
+  await page.keyboard.press('t');
+  await page.locator('.console-options[data-open=true]').waitFor();
   await page.getByRole('button',{name:'Search all destinations',exact:true}).click();
   const input=page.getByRole('textbox',{name:'Search destinations'});
   await input.fill('Protocol');await input.press('Enter');

@@ -7,7 +7,7 @@ import { blip } from "./audio";
 interface Entry {
   id: string;
   kind: string;
-  code: string;
+  code?: string;
   title: string;
   sub: string;
   to?: string;
@@ -15,7 +15,7 @@ interface Entry {
 }
 
 /** ⌘K / "/" palette: jump to any destination or source excerpt. */
-export function QuickJump() {
+export function QuickJump({ workspace = false }: { workspace?: boolean }) {
   const { setPaletteOpen, navigate } = useRouter();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
@@ -36,13 +36,24 @@ export function QuickJump() {
       c.items.map((it) => ({
         id: `${c.id}-${it.id}`,
         kind: c.label,
-        code: it.code,
         title: it.label,
         sub: it.sub,
         to: itemTarget(it) ?? undefined,
         href: it.href,
       })),
     );
+    if (workspace) {
+      const priorities = ["network-overview", "network-architecture", "game-lifecycle", "game-protocols", "game-routing", "network-source", "settings-quickstart", "settings-deploy", "settings-configuration", "network-security", "network-status", "settings-theme"];
+      dest.forEach((entry) => {
+        if (entry.id === "settings-theme") {
+          entry.title = "Display settings";
+          entry.sub = "Workspace colors, interface motion, and the classic console.";
+        }
+        entry.kind = entry.kind === "Game" ? "Explore" : entry.kind === "Network" ? "Workspace" : entry.kind === "Users" ? "Project" : entry.kind;
+      });
+      const rank = (entry: Entry) => priorities.includes(entry.id) ? priorities.indexOf(entry.id) : priorities.length;
+      dest.sort((a, b) => rank(a) - rank(b));
+    }
     const src: Entry[] = SOURCE_EXCERPTS.map((s) => ({
       id: `src-${s.id}`,
       kind: "Source",
@@ -52,7 +63,7 @@ export function QuickJump() {
       to: `/source?file=${s.id}`,
     }));
     return [...dest, ...src];
-  }, []);
+  }, [workspace]);
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -137,9 +148,9 @@ export function QuickJump() {
                 onClick={() => go(e)}
                 className="console-quick-result flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left"
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-[10px] text-muted">
+                {e.code && <span className="flex h-8 w-8 shrink-0 items-center justify-center font-mono text-[10px] text-muted">
                   {e.code}
-                </span>
+                </span>}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13.5px] text-paper">{e.title}</span>
                   <span className="block truncate font-mono text-[10.5px] text-faint">{e.sub}</span>

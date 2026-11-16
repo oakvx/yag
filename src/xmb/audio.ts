@@ -9,13 +9,13 @@ export const AUDIO_STORAGE_KEY = STORAGE_KEY;
 
 const DEFAULTS: AudioPreferences = { music: true, effects: true, master: 0.6 };
 const SLOTS: Record<"boot" | "home" | SoundEffect, string[]> = {
-  boot: ["audio/yag-boot.mp3"],
+  boot: ["audio/start.mp3"],
   home: ["audio/yag-home.mp3", "audio/yag-home.ogg"],
-  move: ["audio/yag-cursor.mp3"],
-  select: ["audio/yag-select.mp3"],
-  back: ["audio/yag-cancel.mp3"],
-  category: ["audio/yag-cursor.mp3"],
-  trophy: ["audio/yag-trophy.mp3"],
+  move: ["audio/cursor.mp3"],
+  select: ["audio/select.mp3"],
+  back: ["audio/cancel.mp3"],
+  category: ["audio/cursor.mp3"],
+  trophy: ["audio/trophy.mp3"],
 };
 
 function readPreferences(): AudioPreferences {

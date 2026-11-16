@@ -1,27 +1,16 @@
 import { useEffect, useState } from "react";
 import { blip } from "./audio";
-import { EXTRA_ICON_PATHS } from "./extraIcons";
+import { publicAsset } from "./assets";
+import { TROPHY_ART } from "./trophyArtwork";
 import { subscribeUnlocks, type TrophyDef, type TrophyGrade } from "./trophies";
-
-const GRADE_COLORS: Record<TrophyGrade, string> = {
-  bronze: "#efb07f",
-  silver: "#f4f8fb",
-  gold: "#ffe58f",
-  platinum: "#eaf8ff",
-};
 
 export const GRADE_LABEL: Record<TrophyGrade, string> = {
   bronze: "Bronze", silver: "Silver", gold: "Gold", platinum: "Platinum",
 };
 
-/** The cup, tinted by grade. Drawn for this project; no console artwork. */
+/** The supplied trophy artwork for this grade. */
 export function TrophyCup({ grade, className }: { grade: TrophyGrade; className?: string }) {
-  const color = GRADE_COLORS[grade];
-  return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <path d={EXTRA_ICON_PATHS.trophy} fill={color} fillRule="evenodd" />
-    </svg>
-  );
+  return <img src={publicAsset(TROPHY_ART[grade])} alt="" className={className} />;
 }
 
 /** One notification at a time, top right, the way the console announces a trophy. */

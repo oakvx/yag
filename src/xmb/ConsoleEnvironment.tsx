@@ -368,6 +368,12 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
       run: () => { void copyLink(selected); },
     },
     {
+      id: "search",
+      label: "Search all destinations",
+      icon: "explore" as const,
+      run: () => setPaletteOpen(true),
+    },
+    {
       id: "info",
       label: "Information",
       icon: "information" as const,
@@ -602,8 +608,8 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
   return (
     <div className="console-environment" data-surface={surface} data-phase={phase} data-journey={journey} data-boot={boot.stage} data-shutdown={shutdown.phase === "fading" ? "active" : shutdown.phase === "closing" ? "closing" : undefined} data-skipping={boot.skipping} data-notices={noticesOpen ? "open" : "closed"} data-hints-idle={chrome.idle} data-input-mode={chrome.keyboardMode ? "keyboard" : "pointer"}>
       <RibbonWallpaper clock={boot.clock} dimmed={isApp && !noticesOpen} />
-      <XmbStatusBar unreadCount={unreadCount} noticesOpen={noticesOpen} infoDisabled={paletteOpen || optionsOpen || dialog !== null || !bootReady} searchDisabled={noticesOpen || optionsOpen || paletteOpen || !bootReady || dialog !== null}
-        onInfo={() => { blip(noticesOpen ? "back" : "select"); setNoticesOpen(!noticesOpen); }} onSearch={() => setPaletteOpen(true)} />
+      <XmbStatusBar unreadCount={unreadCount} noticesOpen={noticesOpen} infoDisabled={paletteOpen || optionsOpen || dialog !== null || !bootReady}
+        onInfo={() => { blip(noticesOpen ? "back" : "select"); setNoticesOpen(!noticesOpen); }} />
       <CommitNotifications ref={noticeControls} onUnreadCountChange={setUnreadCount} active={!isApp} open={noticesOpen} booted={bootReady} cursor={noticeCursor} onCursorChange={setNoticeCursor} onOpenChange={setNoticesOpen} onBack={handleNoticesBack} />
       <BootScreen stage={boot.stage} paused={boot.paused} skipping={boot.skipping} clock={boot.clock} onStart={boot.start} onSkip={boot.skip} />
 
@@ -712,7 +718,6 @@ export function ConsoleEnvironment({ children }: { children: ReactNode }) {
                         description beneath it, smaller and without a box. */}
                     <span className="console-destination-body">
                       <span className="console-item-label">{item.label}{item.href && <span className="console-external">↗</span>}</span>
-                      <span className="console-item-subtitle">{item.code}</span>
                       {on && <span className="console-description">{item.sub}</span>}
                     </span>
                   </a>

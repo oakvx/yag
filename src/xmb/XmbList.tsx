@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { cn } from "@/utils/cn";
 import { blip } from "./audio";
+import { publicAsset } from "./assets";
 import { ConsoleIcon } from "./ConsoleIcons";
 import type { GlyphName, ItemIcon } from "./categories";
 
@@ -10,6 +11,7 @@ export type XmbGlyph = GlyphName | ItemIcon;
 export interface XmbListEntry {
   key: string;
   icon?: XmbGlyph;
+  image?: string;
   /** Two palette colors (top, bottom): drawn as a small swatch in the icon slot. */
   swatch?: readonly [string, string];
   /** Main line, cut with an ellipsis at the list's edge. */
@@ -25,6 +27,8 @@ export interface XmbListEntry {
   detail?: ReactNode;
   /** The small bright "new" marker. */
   fresh?: boolean;
+  /** Optional semantic color for the entry icon. */
+  tone?: "bronze" | "silver" | "gold" | "platinum";
   /** When set, the entry is a link that opens in a new tab. */
   href?: string;
   to?: string;
@@ -160,10 +164,17 @@ export function XmbList({
         </span>
       );
     }
+    if (entry.image) {
+      return (
+        <span className="xmb-list-icon xmb-list-image" aria-hidden="true">
+          <img src={publicAsset(entry.image)} alt="" />
+        </span>
+      );
+    }
     if (entry.icon) {
       return (
         <span className="xmb-list-icon" aria-hidden="true">
-          <ConsoleIcon name={entry.icon} />
+          <ConsoleIcon name={entry.icon} tone={entry.tone ? "current" : "white"} />
         </span>
       );
     }
@@ -225,6 +236,7 @@ export function XmbList({
             data-anchor-selected={index === selected}
             data-kind={entry.href ? "external" : entry.to ? "navigation" : entry.opensScreen ? "screen" : "action"}
             data-route={entry.to}
+            data-tone={entry.tone}
             className={cn("xmb-list-row", on && "is-selected")}
             style={{ "--row-offset": offset, "--item-scale": scale, opacity } as CSSProperties}
           >

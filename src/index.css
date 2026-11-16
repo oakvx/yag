@@ -53,8 +53,8 @@
      margin, so the corner reads identically on every screen. */
   --rail-right: 48px;
   --status-top: clamp(24px, 8vh, 72px);
-  --status-width: clamp(340px, 33vw, 560px);
-  --status-height: 76px;
+  --status-width: clamp(320px, 30vw, 480px);
+  --status-height: 64px;
   /* The console's own proportions: a selected category mark at ~5.3% of the
      width, a destination mark at ~5.7%, and its label at ~2.1%. Both axes
      count, so a short window keeps the same relationships. */
@@ -166,6 +166,7 @@
 .console-clock::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, #ecffff05, transparent); box-shadow: inset 0 1px 2px #ecffff05, 0 1px 0 #d9f4ff06; opacity: var(--clock-box); }
 .console-clock svg { width: 0.95em; height: 0.95em; }
 
+/* PS3 information panel: compact, regular-weight type and two quiet rows. */
 .console-status {
   position: absolute;
   z-index: 63;
@@ -175,257 +176,52 @@
   height: var(--status-height);
   display: flex;
   flex-direction: column;
-  padding: 5px 12px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-radius: 2px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 42%, rgba(0, 0, 0, 0.22) 100%);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(10px);
+  padding: 2px 10px 6px;
+  border: 1px solid #ffffff48;
+  border-top-color: #ffffff9c;
+  border-radius: 0;
+  background: linear-gradient(180deg, #ffffff0d, #00000018);
   color: #fff;
   font-family: var(--font-xmb);
   font-weight: 400;
   font-synthesis: none;
-  transition: border-color 220ms ease, box-shadow 220ms ease;
-  overflow: hidden;
+  text-shadow: 0 1px 2px #0008;
 }
-.console-status:hover {
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35), 0 0 16px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+.console-status-row { display: flex; align-items: center; gap: 10px; min-height: 34px; flex: 1; }
+.console-status-user-btn, .console-status-commits {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  min-height: 32px; padding: 0; border: 0; background: transparent;
+  color: inherit; font: inherit; font-size: 14px; cursor: pointer;
 }
-.console-status-gloss {
-  position: absolute;
-  inset: 0 0 52% 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.01) 100%);
-  pointer-events: none;
+.console-status-user-btn { width: 28px; }
+.console-status-user-btn > svg { width: 23px; height: 23px; }
+.console-status-friends, .console-status-commits {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 14px; font-variant-numeric: tabular-nums;
 }
-.console-status-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  flex: none;
-}
-.console-status-user-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px;
-  border: 0;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: transform 180ms ease, color 180ms ease;
-}
-.console-status-user-btn:hover {
-  transform: scale(1.08);
-}
-.console-user-avatar-wrap {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-}
-.console-user-avatar-wrap svg {
-  width: 22px;
-  height: 22px;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
-}
-.console-online-dot {
-  position: absolute;
-  bottom: -1px;
-  right: -2px;
-  width: 6.5px;
-  height: 6.5px;
-  border-radius: 50%;
-  background: #4ade80;
-  box-shadow: 0 0 6px #22c55e, 0 0 10px #16a34a;
-  border: 1px solid rgba(0, 0, 0, 0.6);
-  animation: onlinePulse 2.8s ease-in-out infinite;
-}
-@keyframes onlinePulse {
-  0%, 100% { opacity: 0.9; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.2); box-shadow: 0 0 8px #4ade80, 0 0 14px #22c55e; }
-}
-.console-unread-badge {
-  position: absolute;
-  top: -4px;
-  right: -7px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: #38bdf8;
-  color: #03132c;
-  font-size: 9.5px;
-  font-weight: 700;
-  line-height: 14px;
-  text-align: center;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.7);
-  animation: badgePop 300ms cubic-bezier(0.18, 0.89, 0.32, 1.25) both;
-}
-@keyframes badgePop {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
-}
-
-.console-status-controller {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 4px;
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 11px;
-  transition: color 220ms ease;
-}
-.console-status-controller[data-connected="true"] {
-  color: #ffffff;
-}
-.console-controller-glyph {
-  width: 17px;
-  height: 17px;
-  opacity: 0.85;
-}
-.console-controller-num {
-  font-size: 10px;
-  font-weight: 600;
-  margin-right: 2px;
-  color: #38bdf8;
-}
-.console-status-controller:not([data-connected="true"]) .console-controller-num {
-  color: rgba(255, 255, 255, 0.35);
-}
-.console-battery {
-  display: inline-flex;
-  align-items: center;
-  gap: 1.5px;
-  height: 9px;
-  padding: 1px 1.5px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 2px;
-  position: relative;
-}
-.console-battery::after {
-  content: "";
-  position: absolute;
-  right: -2.5px;
-  top: 2px;
-  width: 1.5px;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.35);
-  border-radius: 0 1px 1px 0;
-}
-.console-battery span {
-  display: block;
-  width: 2px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 0.5px;
-}
-.console-battery span.is-filled {
-  background: #4ade80;
-  box-shadow: 0 0 3px rgba(74, 222, 128, 0.6);
-}
-
-.console-status-wifi {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 12px;
-  padding: 0 2px;
-  color: rgba(255, 255, 255, 0.85);
-}
-.wifi-bar {
-  width: 2.5px;
-  background: currentColor;
-  border-radius: 0.5px;
-}
-.wifi-1 { height: 4px; }
-.wifi-2 { height: 8px; }
-.wifi-3 { height: 12px; animation: wifiPulse 3.5s ease-in-out infinite; }
-@keyframes wifiPulse {
-  0%, 80%, 100% { opacity: 0.9; }
-  90% { opacity: 0.35; }
-}
-
+.console-status-friends > svg { width: 20px; height: 20px; }
+.console-status-commits > svg { width: 19px; height: 16px; opacity: .7; }
+.console-status-commits[data-unread="true"] > svg { opacity: 1; }
 .console-status .console-clock {
-  position: static;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  font-size: clamp(13px, 1.15vw, 19px);
-  line-height: 1.2;
-  text-align: right;
-  white-space: nowrap;
-  color: #fff;
-  text-shadow: none;
+  position: static; flex: 1; min-width: 0; min-height: 0; padding: 0; border: 0;
+  display: inline-flex; align-items: center; justify-content: flex-end; gap: 9px;
+  color: inherit; font-size: 15px; line-height: 1.2; white-space: nowrap;
 }
 .console-status .console-clock::after { display: none; }
-.console-clock-date {
-  margin-right: 7px;
-  opacity: 0.82;
-}
-.console-clock-time {
-  font-variant-numeric: tabular-nums;
-  display: inline-flex;
-  align-items: center;
-}
-.console-clock-colon {
-  display: inline-block;
-  margin: 0 1px;
-  animation: colonPulse 1s ease-in-out infinite;
-}
-@keyframes colonPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.2; }
-}
-
+.console-clock-time { font-variant-numeric: tabular-nums; }
+.console-status-busy { display: grid; place-items: center; flex: none; width: 17px; visibility: hidden; }
+.console-status-busy[data-active="true"] { visibility: visible; }
+.console-status-busy svg { width: 17px; height: 17px; animation: statusBusy 1s linear infinite; }
+@keyframes statusBusy { to { transform: rotate(360deg); } }
 .console-status-ticker {
-  position: relative;
-  min-width: 0;
-  height: 22px;
-  line-height: 22px;
-  font-size: clamp(11.5px, 0.92vw, 15px);
-  overflow: hidden;
-  mask-image: linear-gradient(90deg, #000 0%, #000 95%, transparent 100%);
+  display: block; flex: none; width: 100%; min-width: 0; height: 22px;
+  border: 0; padding: 0; background: transparent; color: inherit; font: inherit;
+  font-size: 13px; line-height: 22px; text-align: left; text-shadow: inherit; cursor: pointer;
 }
-.console-ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  animation: tickerSlideUp 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-@keyframes tickerSlideUp {
-  from { opacity: 0; transform: translateY(12px); filter: blur(2px); }
-  to { opacity: 1; transform: translateY(0); filter: none; }
-}
-.console-ticker-tag {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 2px;
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  background: rgba(255, 255, 255, 0.14);
-  color: #bae6fd;
-  line-height: 1.2;
-  flex-shrink: 0;
-}
-.console-ticker-content {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-}
+.console-ticker-content { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.console-status button:hover { color: #fff; text-shadow: 0 0 5px #ffffff70; }
+.console-status button:focus-visible { outline: 1px solid #fff; outline-offset: 2px; }
+.console-status button:disabled { opacity: .5; cursor: default; }
 
 .console-environment:is([data-boot="gate"], [data-boot="playing"]) .console-status { opacity: 0; visibility: hidden; }
 .console-environment[data-boot="handoff"] .console-status { animation: bootChromeIn 1.4s ease both; }
@@ -436,12 +232,6 @@
    with its value to the right of the subject and its description underneath;
    the entries around it step away and fade, as on the hardware. Here the
    pending items are the repository's own commits. */
-.console-notice-toggle { position: absolute; z-index: 63; right: var(--rail-right); top: 12px; width: 3.9vh; height: 3.9vh; min-width: 26px; min-height: 26px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: #dcecf8c4; opacity: 0.82; cursor: pointer; transition: color 200ms ease, opacity 200ms ease, transform 240ms ease; }
-.console-notice-toggle svg { width: 100%; height: 100%; }
-.console-notice-toggle:hover { color: #fff; opacity: 1; }
-.console-notice-toggle[data-open="true"] { color: #fff; opacity: 1; }
-.console-notice-dot { position: absolute; top: 2%; right: 2%; width: 20%; height: 20%; border-radius: 50%; background: #c6e9ff; box-shadow: 0 0 7px #9fd8ff9e; transition: opacity 200ms ease; }
-.console-notice-dot[data-on="false"] { opacity: 0; }
 .console-notice-panel { --notice-font: clamp(14px, min(1.4vw, 2.3vh), 30px); --notice-step: clamp(44px, 6.8vh, 84px); position: absolute; z-index: 62; inset: 0; overflow: hidden; opacity: 0; visibility: hidden; pointer-events: none; transform: scale(1.03) translateX(-0.8vw); transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease, visibility 0s 420ms; }
 .console-notice-panel[data-open="true"] { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms ease; }
 /* The section mark: back chevron and large icon, level with the selected
@@ -471,6 +261,7 @@
 .xmb-list-link:focus-visible { outline: none; }
 .xmb-list-icon { flex: none; width: 1.25em; height: 1.25em; margin-top: 0.12em; filter: drop-shadow(0 2px 2px #0006); }
 .xmb-list-icon svg { display: block; width: 100%; height: 100%; }
+.xmb-list-image img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px #0008); }
 .xmb-list-swatch { display: block; width: 1.7em; height: 1.15em; border-radius: 3px; border: 1px solid #d5eff552; box-shadow: 0 1px 3px #0007; }
 /* Unread entries carry one small bright dot; it disappears once the
    cursor selects the entry, as the hardware marks the new. */
@@ -598,9 +389,9 @@
 @keyframes consoleContentIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 
 /* System screens share one row field, one text panel and the console controls. */
-.console-environment[data-surface="app"] { --status-top: clamp(24px, 3.7vh, 40px); --status-width: clamp(300px, 26vw, 420px); --status-height: 72px; }
-.console-environment[data-surface="app"] .console-status { border-color: #ffffffbf; }
-.console-environment[data-surface="app"] .console-status-ticker { line-height: 18px; font-size: clamp(11px, 0.9vw, 15px); }
+.console-environment[data-surface="app"] { --status-top: clamp(24px, 3.7vh, 40px); --status-width: clamp(300px, 26vw, 420px); --status-height: 64px; }
+
+
 .console-application { padding-bottom: max(12px, env(safe-area-inset-bottom)); background: none; animation: xmbApplicationIn 320ms ease-out both; }
 .console-application.is-leaving { animation: xmbApplicationOut 240ms ease-out both; }
 .console-application-header { height: clamp(72px, 9vh, 100px); padding-right: calc(var(--status-width) + 12px); margin-bottom: 12px; gap: 16px; }
@@ -631,7 +422,7 @@
 @keyframes xmbApplicationIn { from { opacity: 0; transform: translate(20px, 12px); } to { opacity: 1; transform: none; } }
 @keyframes xmbApplicationOut { to { opacity: 0; transform: translate(20px, 12px); } }
 @media (max-width: 759px) {
-  .console-environment[data-surface="app"] { --status-top: max(12px, env(safe-area-inset-top)); --status-width: calc(100vw - var(--rail-right) * 2); --status-height: 76px; }
+  .console-environment[data-surface="app"] { --status-top: max(12px, env(safe-area-inset-top)); --status-width: calc(100vw - var(--rail-right) * 2); --status-height: 64px; }
   .console-application { padding-left: 5vw; padding-right: 5vw; padding-top: calc(var(--status-top) + var(--status-height) + 12px); }
   .console-application-header { height: 68px; padding: 0; gap: 12px; margin-bottom: 8px; }
   .console-application-header h1 { font-size: 21px; }
@@ -651,7 +442,7 @@
 }
 
 /* The XMB uses one regular font weight. Application content keeps its own fonts. */
-:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-toggle, .console-notice-panel, .console-options) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .console-back, .console-app-back-hint, .console-app-category, .console-application-header h2, .boot-screen, .console-audio-panel, .console-notice-panel, .console-options) {
   font-family: "XMB Noto Adjusted", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   font-synthesis: none;
   font-style: normal;
@@ -659,7 +450,7 @@
   -webkit-font-smoothing: antialiased;
   text-shadow: 0 1px 3px #0008;
 }
-:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel, .console-notice-panel, .console-notice-toggle, .console-options) :is(button, a, span, p, time, input) {
+:is(.console-menu, .console-clock, .console-identity, .console-help, .boot-screen, .console-audio-panel, .console-notice-panel, .console-options) :is(button, a, span, p, time, input) {
   font-family: inherit;
   font-synthesis: none;
   font-style: normal;
@@ -695,10 +486,10 @@
 }
 @keyframes bootMenuIn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: scale(1); } }
 @keyframes bootChromeIn { from { opacity: 0; } to { opacity: 1; } }
-.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application, .console-notice-toggle, .console-notice-panel, .console-options) { opacity: 0 !important; visibility: hidden !important; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"]) :is(.console-menu, .console-clock, .console-identity, .console-help, .console-application, .console-notice-panel, .console-options) { opacity: 0 !important; visibility: hidden !important; }
 .console-environment[data-boot="handoff"] .console-menu[data-hidden="false"] { animation: bootMenuIn 1.4s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
-.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application, .console-notice-toggle, .console-options) { animation: bootChromeIn 1.4s ease both; }
-.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application, .console-notice-toggle, .console-options) { animation-duration: 0.35s; }
+.console-environment[data-boot="handoff"] :is(.console-clock, .console-help, .console-identity[data-hidden="false"], .console-application, .console-options) { animation: bootChromeIn 1.4s ease both; }
+.console-environment[data-skipping="true"] :is(.console-menu, .console-clock, .console-help, .console-identity, .console-application, .console-options) { animation-duration: 0.35s; }
 
 /* Shutdown & CRT collapse animation */
 .console-environment[data-shutdown="active"] .console-wallpaper {
@@ -960,7 +751,6 @@
   /* On a phone the command bar keeps only its icons. */
   .console-help-arrows, .console-help-label { display: none; }
   .console-toast-region { top: 96px; width: calc(100vw - 2 * var(--rail-right)); }
-  .console-notice-toggle { right: var(--rail-right); top: 8px; width: 32px; height: 32px; }
   .console-notice-panel { --notice-step: 6.4vh; --notice-font: 15px; }
   .console-notice-rail { left: 3vw; gap: 6px; }
   .console-notice-back { width: 24px; height: 24px; font-size: 24px; }
@@ -1023,11 +813,6 @@
 .console-options-dismiss { position: absolute; inset: 0; z-index: 60; border: 0; padding: 0; background: transparent; cursor: default; }
 .console-options { max-height: 70dvh; overflow-y: auto; overscroll-behavior: contain; }
 .console-option { min-height: 44px; }
-.console-search-toggle { position: absolute; z-index: 63; top: 6px; right: calc(var(--rail-right) + 50px); display: grid; place-items: center; width: 44px; height: 44px; padding: 8px; border: 0; background: transparent; color: #dcecf8c4; }
-.console-search-toggle svg { width: 24px; height: 24px; }
-.console-search-toggle:hover { color: #fff; }
-.console-status :is(.console-search-toggle, .console-notice-toggle) { position: relative; top: auto; right: auto; width: 44px; height: 44px; padding: 0; flex: none; color: #fff; }
-.console-status :is(.console-search-toggle, .console-notice-toggle) svg { width: 24px; height: 24px; }
 .console-status :is(button:disabled, button[inert]) { opacity: 0.35; }
 .console-application-header { padding-right: calc(var(--status-width) + 12px); }
 .console-toast-region { top: calc(var(--status-top) + var(--status-height) + 12px); }
@@ -1035,16 +820,13 @@
 .console-help:hover, .console-help:has(:focus-visible), .console-mobile-nav:hover, .console-mobile-nav:has(:focus-visible) { opacity: 1; }
 .console-environment[data-hints-idle="true"] :is(.console-help, .console-mobile-nav) { opacity: 0; pointer-events: none; }
 .console-environment[data-hints-idle="true"][data-input-mode="keyboard"] :is(.console-help, .console-mobile-nav):has(:focus-visible) { opacity: 1; pointer-events: auto; }
-.console-notice-toggle { width: 44px; height: 44px; top: 6px; }
-.console-notice-toggle svg { width: 28px; height: 28px; }
-.console-notice-dot { top: 7px; right: 7px; width: 6px; height: 6px; }
 .xmb-list-link:focus-visible, .console-destination:focus-visible, .console-option:focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 4px; }
 .console-destination { outline-offset: 5px; }
 .console-audio-panel button, .xmb-list--compact .xmb-list-link { min-height: 44px; }
 .console-audio-panel input[type="range"] { min-height: 32px; }
 .console-mobile-nav { display: none; }
-.console-environment:is([data-boot="gate"], [data-boot="playing"], [data-boot="handoff"]) :is(.console-search-toggle, .console-mobile-nav),
-.console-environment[data-notices="open"] :is(.console-search-toggle, .console-mobile-nav) { visibility: hidden; }
+.console-environment:is([data-boot="gate"], [data-boot="playing"], [data-boot="handoff"]) :is(.console-mobile-nav),
+.console-environment[data-notices="open"] :is(.console-mobile-nav) { visibility: hidden; }
 .console-quick-jump { padding-top: min(12dvh, 90px); padding-bottom: env(safe-area-inset-bottom); }
 .console-quick-jump ul { max-height: min(50dvh, calc(100dvh - 160px)); overscroll-behavior: contain; }
 .console-quick-jump input { font-size: 16px; }
@@ -1059,7 +841,7 @@
 .console-notice-back, .console-back, .console-app-back-hint { min-height: 44px; }
 .console-notice-back { min-width: 44px; }
 .console-help button { min-height: 32px; }
-.console-search-toggle:focus-visible, .console-mobile-nav button:focus-visible, .console-notice-controls button:focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 2px; }
+.console-mobile-nav button:focus-visible, .console-notice-controls button:focus-visible { outline: 1.5px solid #dfedf9; outline-offset: 2px; }
 @media (max-width: 760px), (pointer: coarse) {
   .console-environment { --status-top: max(12px, env(safe-area-inset-top)); --status-width: calc(100vw - var(--rail-right) * 2); }
   .console-status { padding-inline: 8px; }
@@ -1119,12 +901,30 @@
 .console-environment[data-surface="app"]::after { content: ""; position: absolute; inset: 0; z-index: 13; background: rgba(0, 0, 0, .64); pointer-events: none; }
 .console-environment[data-surface="app"] .console-toast-region { display: none; }
 .console-app-body:has(.xmb-screen) { width: min(59.375vw, 1140px); }
+@media (min-width: 760px) {
+  .console-app-body:has(.xmb-screen[data-testid="trophies"]),
+  .console-app-body:has(.xmb-screen[data-testid="theme-settings"]) { width: min(78vw, 1440px); }
+}
 .console-application-content:has(.xmb-screen) { overflow: hidden; padding: 0 24px 0 0; mask-image: none; -webkit-mask-image: none; }
 .console-app-body:has(.xmb-screen) > .xmb-scroll-indicators { display: none; }
 .console-application-header { flex-shrink: 0; height: auto; min-height: 72px; }
 .console-application-header > div { min-width: 0; }
 .console-application-header h1 { overflow-wrap: anywhere; color: white; }
 .xmb-screen { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; height: 100%; min-width: 0; color: white; }
+.xmb-screen[data-has-header="true"] { grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
+.xmb-screen-header { min-width: 0; }
+.xmb-trophy-progress { display: grid; gap: 7px; margin: 0 8px; padding: 8px 12px 10px; border-bottom: 1px solid #ffffff24; background: linear-gradient(90deg, #ffffff0c, transparent 78%); }
+.xmb-trophy-progress-copy { display: flex; align-items: baseline; gap: 8px; min-width: 0; color: #ffffffeb; }
+.xmb-trophy-progress-count { font-size: 19px; font-variant-numeric: tabular-nums; }
+.xmb-trophy-progress-count > span { color: #ffffffa8; font-size: 0.72em; }
+.xmb-trophy-progress-label { color: #ffffffb8; font-size: 13px; }
+.xmb-trophy-progress-percent { margin-left: auto; color: #ffffffc9; font-size: 12px; font-variant-numeric: tabular-nums; }
+.xmb-trophy-progress-track { height: 3px; overflow: hidden; background: #ffffff24; }
+.xmb-trophy-progress-track > span { display: block; height: 100%; background: linear-gradient(90deg, #9dc9ed, #e5f4ff); transition: width 350ms ease; }
+.xmb-list-row[data-tone="bronze"] .xmb-list-icon { color: #e8ad72; }
+.xmb-list-row[data-tone="silver"] .xmb-list-icon { color: #d3e2ef; }
+.xmb-list-row[data-tone="gold"] .xmb-list-icon { color: #f0cb70; }
+.xmb-list-row[data-tone="platinum"] .xmb-list-icon { color: #c9e6ff; }
 .xmb-screen[data-view="preview"] { grid-template-rows: minmax(160px, 1fr) minmax(120px, 42%) auto; }
 .xmb-screen-list-region { position: relative; min-height: 0; }
 .xmb-list--screen { position: relative; height: 100%; overflow: auto; overflow-anchor: none; overscroll-behavior: contain; padding: 0 8px 60px; scrollbar-width: none; }
@@ -1135,11 +935,52 @@
 .xmb-list--screen .xmb-list-row.is-selected .xmb-list-link { font-size: 23px; text-shadow: 0 0 2px #ffffffc0, 0 0 6px #ffffff80, 0 0 13px #ffffff45; }
 .xmb-list--screen .xmb-list-row.is-selected::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #ffffff66; pointer-events: none; }
 .xmb-list--screen .xmb-list-icon { width: 24px; height: 24px; margin: 0; filter: none; }
+.xmb-screen[data-testid="trophies"] .xmb-list-icon { width: 34px; height: 34px; }
 .xmb-list--screen .xmb-list-title { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-shadow: inherit; }
 .xmb-list--screen .xmb-list-top { align-items: center; gap: 16px; }
 .xmb-list--screen .xmb-list-sub { display: none; }
 .xmb-list--screen :is(.xmb-list-value, .xmb-list-meta) { flex: 0 1 44%; width: auto; font-size: .8em; color: white; letter-spacing: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-shadow: none; }
 .xmb-list--screen .xmb-list-swatch { border-radius: 2px; box-shadow: none; width: 24px; height: 18px; }
+.xmb-screen[data-testid="theme-settings"] .xmb-list-icon { width: 36px; height: 26px; }
+.xmb-screen[data-testid="theme-settings"] .xmb-list-swatch { width: 34px; height: 24px; border-color: #ffffff70; box-shadow: 0 2px 8px #0007; }
+.xmb-theme-settings-layout, .xmb-trophy-layout { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); align-items: center; gap: clamp(24px, 3.8vw, 56px); width: 100%; height: 100%; min-width: 0; min-height: 0; }
+.xmb-trophy-layout { grid-template-columns: minmax(0, 1.55fr) minmax(0, .85fr); gap: clamp(22px, 3vw, 42px); }
+.xmb-theme-settings-layout > .xmb-screen, .xmb-trophy-layout > .xmb-screen { width: 100%; min-width: 0; min-height: 0; }
+.xmb-trophy-layout .xmb-list--screen :is(.xmb-list-value, .xmb-list-meta) { flex-basis: 38%; }
+.xmb-theme-preview { display: grid; align-content: center; gap: 18px; min-width: 0; padding: 8px 0; color: #fff; }
+.xmb-theme-preview-art { position: relative; display: flex; align-items: flex-end; min-height: 210px; aspect-ratio: 1.65; overflow: hidden; border: 1px solid #ffffff50; background-color: #091525; background-position: center; box-shadow: 0 18px 50px #0005, inset 0 0 48px #ffffff12; transition: background-image 280ms ease; }
+.xmb-theme-preview-art::before { position: absolute; inset: 52% -18% -42%; border: 1px solid #ffffff66; border-radius: 50%; box-shadow: 0 -9px 0 -8px #ffffff48, 0 -19px 0 -18px #ffffff35, 0 -31px 0 -30px #ffffff25; content: ""; transform: rotate(-11deg); }
+.xmb-theme-preview-art-copy { position: relative; z-index: 1; display: grid; gap: 6px; padding: 22px 24px; text-shadow: 0 2px 12px #0009; }
+.xmb-theme-preview-art-copy > span, .xmb-theme-preview-kicker { color: #ffffffb8; font-size: 10px; letter-spacing: .12em; }
+.xmb-theme-preview-art-copy > strong { font-size: clamp(26px, 3vw, 40px); font-weight: 400; }
+.xmb-theme-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.xmb-theme-preview-heading h2 { margin: 3px 0 0; font-size: 22px; font-weight: 400; }
+.xmb-theme-preview[data-state="preview"] .xmb-theme-preview-kicker { color: #c9e6ff; }
+.xmb-theme-preview-index { color: #ffffff70; font-size: 42px; font-variant-numeric: tabular-nums; }
+.xmb-theme-preview-description { margin: -10px 0 0; color: #ffffffbd; font-size: 13px; }
+.xmb-theme-palette { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; padding-top: 6px; border-top: 1px solid #ffffff2b; }
+.xmb-theme-color { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; color: #ffffffc9; font-size: 11px; }
+.xmb-theme-color-chip { width: 22px; height: 22px; border: 1px solid #ffffff55; box-shadow: 0 2px 5px #0005; }
+.xmb-theme-color code { color: #ffffff80; font-size: 10px; }
+.xmb-theme-preview-hint { margin: 0; color: #ffffff80; font-size: 11px; }
+.xmb-trophy-details { display: grid; gap: 18px; min-width: 0; padding: clamp(20px, 2.4vw, 34px); border: 1px solid #ffffff30; background: linear-gradient(145deg, #ffffff10, #ffffff03 64%); box-shadow: inset 0 1px #ffffff13, 0 18px 50px #0003; backdrop-filter: blur(7px); }
+.xmb-trophy-details-heading { display: flex; align-items: center; gap: 8px; color: #ffffffb8; font-size: 11px; }
+.xmb-trophy-details-icon { flex: none; width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 6px 12px #0007); }
+.xmb-trophy-details-status { flex: none; margin-left: auto; padding: 4px 6px; border: 1px solid #ffffff38; color: #ffffffde; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.xmb-trophy-details h2 { margin: 0; font-size: clamp(25px, 3vw, 38px); line-height: 1.15; font-weight: 400; }
+.xmb-trophy-details > p { max-width: 48ch; margin: -8px 0 0; color: #ffffffc4; font-size: 14px; line-height: 1.55; }
+.xmb-trophy-details > .xmb-trophy-earned-date { color: #ffffff80; font-size: 12px; }
+.xmb-trophy-tier { display: grid; gap: 9px; margin-top: 4px; padding-block: 14px; border-top: 1px solid #ffffff28; border-bottom: 1px solid #ffffff28; color: #ffffffc4; font-size: 12px; }
+.xmb-trophy-tier > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.xmb-trophy-tier-track { height: 3px; overflow: hidden; background: #ffffff25; }
+.xmb-trophy-tier-track > span { display: block; height: 100%; background: #d8eaff; transition: width 300ms ease; }
+.xmb-trophy-grade-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; }
+.xmb-trophy-grade-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: #ffffffbd; font-size: 11px; }
+.xmb-trophy-grade-row > span:last-child { color: #ffffffed; font-variant-numeric: tabular-nums; }
+.xmb-trophy-grade-row[data-grade="bronze"] { color: #e8ad72; }
+.xmb-trophy-grade-row[data-grade="silver"] { color: #d3e2ef; }
+.xmb-trophy-grade-row[data-grade="gold"] { color: #f0cb70; }
+.xmb-trophy-grade-row[data-grade="platinum"] { color: #c9e6ff; }
 .xmb-text-screen { position: relative; min-height: 0; max-height: 100%; align-self: start; width: min(100%, 74ch); height: 100%; }
 .xmb-text-panel { min-width: 0; width: 100%; max-height: 100%; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 18px; border: 1px solid #ffffff2e; border-radius: 2px; background: rgba(2,10,24,.66); backdrop-filter: blur(6px); color: #fffffff2; font-size: 16px; line-height: 1.5; font-weight: 400; overflow-wrap: anywhere; scrollbar-width: none; text-shadow: none; scroll-padding-block: 60px; }
 .xmb-text-panel[data-scrollable="true"]::after { content: ""; display: block; height: 60px; }
@@ -1185,6 +1026,18 @@
   .console-app-body:has(.xmb-screen) { width: 100%; margin-left: 0; }
   .console-application-content:has(.xmb-screen) { padding-right: 0; }
   .console-application-header { min-height: 68px; }
+  .xmb-theme-settings-layout, .xmb-trophy-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(280px, 1fr) auto; align-items: stretch; gap: 18px; overflow: auto; }
+  .xmb-theme-settings-layout > .xmb-screen, .xmb-trophy-layout > .xmb-screen { height: 100%; }
+  .xmb-theme-preview-art { min-height: 130px; aspect-ratio: 2.4; }
+  .xmb-theme-preview { gap: 12px; }
+  .xmb-theme-preview-art-copy { padding: 16px; }
+  .xmb-trophy-details { gap: 12px; padding: 18px; }
+  .xmb-theme-settings-layout, .xmb-trophy-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(280px, 1fr) auto; align-items: stretch; gap: 18px; overflow: auto; }
+  .xmb-theme-settings-layout > .xmb-screen, .xmb-trophy-layout > .xmb-screen { height: 100%; }
+  .xmb-theme-preview-art { min-height: 130px; aspect-ratio: 2.4; }
+  .xmb-theme-preview { gap: 12px; }
+  .xmb-theme-preview-art-copy { padding: 16px; }
+  .xmb-trophy-details { gap: 12px; padding: 18px; }
   .xmb-list--screen .xmb-list-link { font-size: 15px; gap: 10px; }
   .xmb-list--screen .xmb-list-row.is-selected .xmb-list-link { font-size: 20px; }
   .xmb-list--screen .xmb-list-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -1194,9 +1047,9 @@
   .xmb-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 @media (max-width: 600px) {
-  .console-environment, .console-environment[data-surface="app"] { --status-height: 52px; }
-  .console-status { height: 52px; padding-block: 3px; }
-  .console-status-ticker { display: none; }
+  .console-environment, .console-environment[data-surface="app"] { --status-height: 64px; }
+  .console-status { padding-block: 2px 5px; }
+  .console-status-ticker { font-size: 12px; }
   .trophy-toast { top: auto; bottom: calc(68px + env(safe-area-inset-bottom)); left: 12px; right: 12px; max-width: none; }
   .console-application:has(~ .trophy-toast) .console-app-body { padding-bottom: 72px; }
 }

@@ -66,6 +66,7 @@ function shortInfo(value: string) {
 /** Root → section rows → text. Each level retains its cursor on return. */
 interface XmbScreenProps {
   subtitle: string;
+  header?: ReactNode;
   sections: XmbScreenSection[];
   rootEntries?: XmbScreenEntry[];
   selected?: number;
@@ -83,7 +84,7 @@ export function XmbScreen(props: XmbScreenProps) {
   return <XmbListScreen {...props} />;
 }
 
-function XmbListScreen({ subtitle, sections, rootEntries, selected, onSelect, onHighlight, onActivate, initialSelected = 0, initialSection, testId }: XmbScreenProps) {
+function XmbListScreen({ subtitle, header, sections, rootEntries, selected, onSelect, onHighlight, onActivate, initialSelected = 0, initialSection, testId }: XmbScreenProps) {
   const { navigate } = useRouter();
   const hasRoot = !!rootEntries || sections.length > 1;
   const [sectionIndex, setSectionIndex] = useState<number | null>(initialSection ?? (hasRoot ? null : 0));
@@ -191,9 +192,11 @@ function XmbListScreen({ subtitle, sections, rootEntries, selected, onSelect, on
 
   const rows = entries.map((entry) => ({ ...entry, opensScreen: !!(entry.sectionId || entry.to || (!entry.activate && !onActivate && !entry.href)) }));
   return <div ref={rootRef} className="xmb-screen" data-view={textEntry ? "text" : section?.preview ? "preview" : "list"}
+    data-has-header={header != null && !textEntry}
     data-level={level} data-testid={testId} data-selectable="true"
     onFocusCapture={(event) => setFocusInfo((event.target as HTMLElement).closest<HTMLElement>("[data-info]")?.dataset.info ?? null)}>
     {textEntry ? <XmbTextScreen key={textEntry.key}>{detail(textEntry)}</XmbTextScreen> : <>
+      {header != null && <div className="xmb-screen-header">{header}</div>}
       <div className="xmb-screen-list-region">
         <XmbList key={level} entries={rows} selected={cursor} ariaLabel={section?.label ?? "Destinations"} screen viewportRef={viewport}
           onSelect={select} onHighlight={(index) => { setHoverIndex(index); if (section && index < section.entries.length) onHighlight?.(index); }} onActivate={activate} />

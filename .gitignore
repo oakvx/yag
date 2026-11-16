@@ -32,3 +32,5 @@ provider-vault/
 /output/playwright/*.txt
 /output/playwright/*.yml
 /output/playwright/*.log
+/test-results/
+/playwright-report/
