@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify safe pruning rules
         run: python3 -m unittest discover -s tests -p prune_branches_test.py -v
       - name: Inspect branch cleanup plan (read-only)
