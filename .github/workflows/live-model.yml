@@ -54,7 +54,7 @@ jobs:
       YAG_QUALIFICATION_STREAM: ${{ inputs.stream }}
       YAG_QUALIFICATION_TOOLS: ${{ inputs.tools }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Verify runner setup without printing private configuration
